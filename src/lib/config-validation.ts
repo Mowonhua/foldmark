@@ -3,6 +3,7 @@
  * 定义范围：配置边界验证；不写入磁盘，不以默认配置覆盖无法读取的原数据。
  */
 import type { AppConfig } from './contracts';
+import { builtInThemes, validateTheme } from './themes';
 
 /**
  * 函数职责：拒绝会使界面崩溃或同文件形成双会话的配置。
@@ -22,10 +23,22 @@ export function validateAppConfig(value: unknown): AppConfig | null {
     identities.add(project.id); paths.add(path);
   }
   if (value.activeProjectId !== null && value.activeProjectId !== undefined && typeof value.activeProjectId !== 'string') return fail();
+  const themeIds = new Set(builtInThemes.map(theme => theme.id));
+  if (value.customThemes !== undefined) {
+    if (!Array.isArray(value.customThemes)) return fail();
+    for (const source of value.customThemes) {
+      try {
+        const theme = validateTheme(source);
+        if (themeIds.has(theme.id)) return fail();
+        themeIds.add(theme.id);
+      } catch { return fail(); }
+    }
+  }
   if (value.preferences !== undefined) {
     if (!record(value.preferences)) return fail();
     const p = value.preferences;
-    if (p.theme !== undefined && !['light', 'dark', 'system'].includes(String(p.theme))) return fail();
+    if (p.theme !== undefined && (typeof p.theme !== 'string' || !['light', 'dark', 'system'].includes(p.theme))) return fail();
+    if (p.themeId !== undefined && (typeof p.themeId !== 'string' || !themeIds.has(p.themeId))) return fail();
     if (p.fontFamily !== undefined && typeof p.fontFamily !== 'string') return fail();
     for (const number of [p.fontSize, p.contentWidth]) if (number !== undefined && (typeof number !== 'number' || !Number.isFinite(number) || number <= 0)) return fail();
   }

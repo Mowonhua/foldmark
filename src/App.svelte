@@ -12,6 +12,7 @@
   import type { DocumentModel, ListItem } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
+  import { applyTheme, builtInThemes, parseTheme } from './lib/themes';
 
   const desktop = isTauri();
   let files: FilePort;
@@ -58,6 +59,12 @@
   let projectPath = $state('');
   let createFile = $state(false);
   let dialogError = $state('');
+  let systemDark = $state(false);
+  let themeImportBusy = $state(false);
+  let themeExportBusy = $state(false);
+  let themeInput = $state<HTMLInputElement>();
+  const themes = $derived([...builtInThemes, ...(config.customThemes ?? [])]);
+  const selectedTheme = $derived(themes.find(theme => theme.id === config.preferences.themeId) ?? builtInThemes[0]);
   let recovery = $state<{ project: Project; disk: FileSnapshot; text: string } | null>(null);
   const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
   const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
@@ -74,7 +81,7 @@
 
   $effect(() => {
     const p = config.preferences;
-    document.documentElement.dataset.theme = p.theme;
+    applyTheme(document.documentElement, selectedTheme, p.theme, systemDark);
     document.documentElement.style.setProperty('--document-font', p.fontFamily);
     document.documentElement.style.setProperty('--document-size', `${p.fontSize}px`);
     document.documentElement.style.setProperty('--document-width', `${p.contentWidth}px`);
@@ -84,6 +91,54 @@
 
   function notify(message: string, undoable = false): void {
     toast = message; toastUndo = undoable; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast = ''; }, 6000);
+  }
+
+  /** 校验完整成功后才更新主题列表；重复 ID 必须先移除，避免无提示覆盖用户的配色。 */
+  async function importTheme(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || themeImportBusy) return;
+    themeImportBusy = true; dialogError = '';
+    try {
+      if (file.size > 65536) throw new Error('THEME_INVALID: 主题文件不能超过 64 KiB。');
+      const theme = parseTheme(await file.text());
+      if (themes.some(existing => existing.id === theme.id)) throw new Error('THEME_DUPLICATE: 此主题 ID 已存在，请修改文件中的 id 或先移除已有主题。');
+      config.customThemes = [...(config.customThemes ?? []), theme];
+      config.preferences.themeId = theme.id;
+      await persistConfig();
+    } catch (error) { dialogError = errorMessage(error); }
+    finally { input.value = ''; themeImportBusy = false; }
+  }
+
+  /** 移除只作用于应用保存的主题副本，并回退到内置主题；原始 JSON 文件不变。 */
+  function removeTheme(): void {
+    config.customThemes = (config.customThemes ?? []).filter(theme => theme.id !== selectedTheme.id);
+    config.preferences.themeId = 'paper'; dialogError = '';
+  }
+
+  /** 桌面 WebView 不依赖浏览器下载行为，必须经系统对话框与文件端口保存；取消不写入，失败保留错误反馈。 */
+  async function exportThemeTemplate(): Promise<void> {
+    if (themeExportBusy) return;
+    themeExportBusy = true; dialogError = '';
+    // 内置 ID 改为可导入的自定义 ID，完整保留两个模式供用户编辑。
+    const template = { ...selectedTheme, id: `custom-${selectedTheme.id}`.slice(0, 64), name: `${selectedTheme.name}（自制）`.slice(0, 80) };
+    try {
+      const text = JSON.stringify(template, null, 2);
+      if (desktop) {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const path = await save({ title: '保存主题模板', defaultPath: `${template.id}.json`, filters: [{ name: 'JSON 主题', extensions: ['json'] }] });
+        if (!path) return;
+        await files.create(path, text);
+        notify('主题模板已保存');
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json;charset=utf-8' }));
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${template.id}.json`;
+      document.body.append(anchor);
+      try { anchor.click(); }
+      finally { anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch (error) { dialogError = `主题模板保存失败：${errorMessage(error)}`; }
+    finally { themeExportBusy = false; }
   }
 
   /** 配置保存独立排队，保证较旧的界面快照不能覆盖新配置。 */
@@ -380,6 +435,9 @@
   }
 
   onMount(() => {
+    const colorPreference = window.matchMedia('(prefers-color-scheme: dark)');
+    const updateSystemTheme = () => { systemDark = colorPreference.matches; };
+    updateSystemTheme(); colorPreference.addEventListener('change', updateSystemTheme);
     let unlistenClose = () => {};
     let disposed = false;
     const initialize = async () => {
@@ -412,6 +470,7 @@
     const focus = () => { for (const session of sessions.values()) void session.saver.checkExternal(); };
     window.addEventListener('beforeunload', beforeUnload); window.addEventListener('focus', focus);
     return () => {
+      colorPreference.removeEventListener('change', updateSystemTheme);
       disposed = true; unlistenClose(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
       clearTimeout(searchTimer); clearTimeout(configTimer); clearTimeout(toastTimer);
       for (const session of sessions.values()) { session.stopWatch(); session.saver.dispose(); } editor?.destroy();
@@ -515,7 +574,10 @@
         <h2 id="dialog-title">移除「{active?.project.name}」的关联？</h2><p>Markdown 文件会保留在原位置。你可以随时重新关联。</p><div class="modal-actions"><button onclick={() => dialog = null}>取消</button><button class="primary" onclick={removeProject}>移除关联</button></div>
       {:else if dialog === 'settings'}
         <p class="eyebrow">阅读与外观</p><h2 id="dialog-title">让文字读起来更舒适</h2>
-        <label>主题<select bind:value={config.preferences.theme}><option value="system">跟随系统</option><option value="light">浅色 · 暖白纸面</option><option value="dark">深色 · 炭灰</option></select></label>
+        <label>主题<select bind:value={config.preferences.themeId}>{#each themes as theme (theme.id)}<option value={theme.id}>{theme.name}</option>{/each}</select></label>
+        <label>明暗模式<select bind:value={config.preferences.theme}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+        <input class="offscreen" type="file" accept=".json,application/json" aria-label="导入主题文件" bind:this={themeInput} onchange={importTheme}/>
+        <div class="file-buttons"><button disabled={themeImportBusy || !configReady} onclick={() => themeInput?.click()}>{themeImportBusy ? '正在导入…' : '导入主题'}</button><button disabled={themeExportBusy || !configReady} onclick={exportThemeTemplate}>下载主题模板</button>{#if config.customThemes?.some(theme => theme.id === selectedTheme.id)}<button onclick={removeTheme}>移除主题</button>{/if}</div>
         <label>正文字体<input bind:value={config.preferences.fontFamily}/></label>
         <label>字号 <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
         <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>

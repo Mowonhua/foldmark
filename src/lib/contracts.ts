@@ -7,10 +7,11 @@
 export interface Project { id: string; name: string; path: string }
 /** 结构职责：表示文档投影视图；源码始终保留完整文本。 */
 export type ViewMode = 'todo' | 'archive' | 'source';
-/** 结构职责：保存可配置的阅读参数；字号以像素表示。 */
-export interface Preferences { theme: 'light' | 'dark' | 'system'; fontFamily: string; fontSize: number; contentWidth: number }
+import type { ThemeDefinition, ThemeMode } from './themes';
+/** 结构职责：保存阅读参数；theme 保留旧版明暗模式语义，themeId 缺省时使用纸面主题。 */
+export interface Preferences { theme: ThemeMode; themeId?: string; fontFamily: string; fontSize: number; contentWidth: number }
 /** 结构职责：保存独立于 Markdown 的配置；正文及编辑历史不属于配置。 */
-export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView> }
+export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[] }
 /** 结构职责：保存可可靠恢复的界面定位；折叠键失配时默认展开。 */
 export interface ProjectView { mode: ViewMode; cursor: number; scrollTop: number; folded: string[] }
 /** 结构职责：承载读取时的文本与磁盘基线；revision 是不透明的内容指纹。 */

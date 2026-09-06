@@ -1,5 +1,5 @@
 /** 文件职责：保留 CodeMirror 的选区几何，并将代码区域的高亮限制在各行边框内。 */
-import { Direction, EditorView, RectangleMarker, layer } from '@codemirror/view';
+import { Decoration, Direction, EditorView, RectangleMarker, layer } from '@codemirror/view';
 
 interface CodeRowBounds { left: number; right: number; top: number; bottom: number }
 
@@ -25,6 +25,10 @@ function clipToCodeRows(marker: RectangleMarker, rows: CodeRowBounds[]): Rectang
 }
 
 export const codeSelection = [
+  // 背景层无法改变文字颜色；标记跟随选区更新，使实色主题也能提供可读的反色选区。
+  EditorView.decorations.compute(['selection'], state => Decoration.set(
+    state.selection.ranges.filter(range => !range.empty).map(range => Decoration.mark({ class: 'fm-selected' }).range(range.from, range.to)),
+  )),
   layer({
     above: false,
     class: 'fm-selectionLayer',

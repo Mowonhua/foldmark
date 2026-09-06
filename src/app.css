@@ -1,11 +1,6 @@
-/* 文件职责：定义暖白纸面与炭灰主题、应用布局及可访问的交互状态。 */
+/* 文件职责：定义主题语义变量、应用布局及可访问的交互状态。 */
 /* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调，同时保持字重使用字体原生字形。 */
-:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#343b35;background:#faf9f6;font-synthesis:style;--canvas:#faf9f6;--sidebar:#f1f0eb;--surface:#fffefa;--ink:#343b35;--muted:#666e62;--line:#e6e6df;--accent:#4f6b54;--accent-soft:#e4eadd;--hover:#ebeee4;--danger:#9a4b35;--code:#eeeee7;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
-
-:root[data-theme=dark]{color-scheme:dark;--canvas:#252925;--sidebar:#20241f;--surface:#2b302a;--ink:#e0e3d9;--muted:#a1aa9b;--line:#3b4338;--accent:#b0c5a0;--accent-soft:#3b4b35;--hover:#333c2f;--danger:#f0ad96;--code:#30382d}
-
-@media(prefers-color-scheme:dark){:root[data-theme=system]{color-scheme:dark;--canvas:#252925;--sidebar:#20241f;--surface:#2b302a;--ink:#e0e3d9;--muted:#a1aa9b;--line:#3b4338;--accent:#b0c5a0;--accent-soft:#3b4b35;--hover:#333c2f;--danger:#f0ad96;--code:#30382d}
-}
+:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:style;--canvas:#faf9f6;--sidebar:#f1f0eb;--surface:#fffefa;--ink:#343b35;--muted:#666e62;--line:#e6e6df;--accent:#4f6b54;--accent-soft:#e4eadd;--hover:#ebeee4;--danger:#9a4b35;--code:#eeeee7;--selection:#dde3d6;--selection-ink:#343b35;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
 
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);background:var(--canvas)}
@@ -18,7 +13,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):focus-visible,sel
 button:hover:not(:disabled){background:var(--hover)}
 input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:10px 12px;min-width:0}
 button,input{touch-action:manipulation}
-::selection{background:#b8c9a866}
+::selection{background:var(--selection);color:var(--selection-ink)}
 h1,h2,p{margin-top:0}
 h1{font-size:30px;line-height:1.55;font-weight:550;letter-spacing:-.6px}
 h2{font-size:21px;line-height:1.5;font-weight:550}
@@ -82,11 +77,11 @@ button svg{flex-shrink:0}
 .text-button{display:block;margin:18px auto;font-size:12px;color:var(--muted)}
 .muted{color:var(--muted)}
 .small{font-size:11px}
-.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:7px;width:222px;box-shadow:0 8px 28px #0000000a}
+.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:7px;width:222px;box-shadow:0 8px 28px var(--shadow-color)}
 .dropdown button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:12px;text-align:left;padding:9px 11px;border-radius:4px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
-.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:0 8px 28px #0000000a}
+.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:0 8px 28px var(--shadow-color)}
 .search-row{display:flex;align-items:center;gap:8px}
 .search-row input{flex:1;font-size:13px}
 .check-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);padding:10px 0}
@@ -110,11 +105,11 @@ button svg{flex-shrink:0}
 .all-clear{padding-top:60px;color:var(--muted);font-size:14px}
 .toast{position:fixed;z-index:60;left:50%;bottom:47px;transform:translateX(-50%);background:var(--ink);color:var(--canvas);display:flex;gap:15px;align-items:center;padding:12px 17px;border-radius:6px;font-size:12px;max-width:90vw}
 .toast button{color:var(--canvas);white-space:nowrap;font-size:12px}
-.toast button:hover{background:#ffffff16}
+.toast button:hover{background:var(--canvas);color:var(--ink)}
 .error-banner,.conflict-banner{padding:11px 25px;font-size:12px;line-height:1.7;background:var(--accent-soft);color:var(--accent)}
 .error-banner{color:var(--danger)}
 .error-banner button,.conflict-banner button{margin-left:16px;text-decoration:underline;font-size:12px}
-.modal-backdrop{position:fixed;inset:0;background:#11180f40;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
 .modal{background:var(--surface);border:1px solid var(--line);border-radius:9px;width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
 .modal.wide{width:min(850px,100%)}
 .modal-close{position:absolute;right:14px;top:12px}
@@ -146,7 +141,7 @@ button svg{flex-shrink:0}
 }
 
 @media(max-width:720px){.app-shell{grid-template-columns:minmax(0,1fr)}
-.sidebar{position:fixed;z-index:35;width:232px;height:100dvh;box-shadow:20px 0 60px #00000020}
+.sidebar{position:fixed;z-index:35;width:232px;height:100dvh;box-shadow:20px 0 60px var(--shadow-color)}
 .topbar{height:54px;min-height:54px;padding:0 14px}
 .crumb-label,.crumb-divider{display:none}
 .top-actions{gap:5px}
@@ -166,3 +161,25 @@ button svg{flex-shrink:0}
 }
 
 :root{--editor-font:var(--document-font);--editor-font-size:var(--document-size);--editor-width:var(--document-width);--text:var(--ink);--surface-alt:var(--code);--border:var(--line)}
+
+/* 派生效果随主题颜色变化；双色主题禁用混色和渐变过程，保证界面只使用声明的两种实色。 */
+:root{--shadow-color:color-mix(in srgb,var(--ink) 10%,transparent);--backdrop:color-mix(in srgb,var(--ink) 25%,transparent);--checkbox-border:var(--muted);scrollbar-color:var(--muted) var(--canvas)}
+/* 双色遮罩只拦截背景交互，不绘制底色；实色会遮没页面，半透明色会引入混色。 */
+:root[data-monochrome=true]{--shadow-color:transparent;--backdrop:transparent}
+:root[data-monochrome=true] *, :root[data-monochrome=true] *::before, :root[data-monochrome=true] *::after{transition:none!important;animation:none!important;box-shadow:none!important;filter:none!important}
+:root[data-monochrome=true] button:disabled{opacity:1;text-decoration:line-through;border-style:dashed}
+:root[data-monochrome=true] .tabs button span{opacity:1}
+:root[data-monochrome=true] .brand svg [opacity]{opacity:1}
+:root[data-monochrome=true] .primary:hover:not(:disabled){outline:1px solid var(--accent);outline-offset:3px}
+:root[data-monochrome=true] .nav-active,:root[data-monochrome=true] .tab-active{outline:1px solid var(--accent);outline-offset:-1px}
+:root[data-monochrome=true] input,:root[data-monochrome=true] select{appearance:none}
+:root[data-monochrome=true] .modal label:has(select){position:relative}
+:root[data-monochrome=true] .modal label:has(select)::after{content:'';position:absolute;right:15px;bottom:17px;width:6px;height:6px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);transform:rotate(45deg);pointer-events:none}
+:root[data-monochrome=true] select{padding-right:32px}
+:root[data-monochrome=true] input[type=checkbox]{width:15px;height:15px;padding:0;border-color:var(--ink);display:inline-grid;place-content:center;flex-shrink:0}
+:root[data-monochrome=true] input[type=checkbox]:checked{background:var(--ink);color:var(--canvas)}
+:root[data-monochrome=true] input[type=checkbox]:checked::after{content:'✓';font-size:12px;line-height:1}
+:root[data-monochrome=true] input[type=range]{height:4px;background:var(--canvas);border:1px solid var(--ink);margin:8px 0}
+:root[data-monochrome=true] input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:50%}
+:root[data-monochrome=true] input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:50%}
+:root[data-monochrome=true] input::placeholder,:root[data-monochrome=true] textarea::placeholder{color:var(--muted);opacity:1}

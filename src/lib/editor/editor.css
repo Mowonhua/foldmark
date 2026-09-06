@@ -1,31 +1,31 @@
-.cm-editor { height: 100%; color: var(--text, #343b36); font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); font-size: var(--editor-font-size, 16px); background: transparent; }
+.cm-editor { height: 100%; color: var(--text); font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); font-size: var(--editor-font-size, 16px); background: transparent; }
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-scroller { overflow: auto; font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); line-height: 1.8; }
-.cm-editor .cm-content { width: min(100%, var(--editor-width, 820px)); max-width: var(--editor-width, 820px); margin: 0 auto; padding: 36px 38px 160px; box-sizing: border-box; flex-shrink: 1; caret-color: var(--accent, #4d725a); }
+.cm-editor .cm-content { width: min(100%, var(--editor-width, 820px)); max-width: var(--editor-width, 820px); margin: 0 auto; padding: 36px 38px 160px; box-sizing: border-box; flex-shrink: 1; caret-color: var(--accent); }
 .cm-line { padding: 0 2px; }
-.cm-cursor { border-left-color: var(--accent, #4d725a); }
-.cm-selectionBackground, .cm-editor.cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent, #4d725a) 22%, transparent) !important; }
-.cm-placeholder { color: var(--muted, #878c84); }
+.cm-cursor { border-left-color: var(--accent); }
+.cm-selectionBackground, .cm-editor.cm-focused .cm-selectionBackground { background: var(--selection) !important; }
+.cm-placeholder { color: var(--muted); }
 /* CodeMirror 按行边框盒计算鼠标命中高度；标题间距必须计入盒内，外边距会使后续行的左键定位偏移。 */
-.cm-editor .fm-heading { color: var(--text, #343b36); font-weight: 650; letter-spacing: -.025em; padding-top: 1.3em; padding-bottom: .55em; line-height: 1.45; }
+.cm-editor .fm-heading { color: var(--text); font-weight: 650; letter-spacing: -.025em; padding-top: 1.3em; padding-bottom: .55em; line-height: 1.45; }
 .cm-editor .fm-heading span { text-decoration: none; }
 .fm-h1 { font-size: 1.8em; }.fm-h2 { font-size: 1.45em; }.fm-h3 { font-size: 1.18em; }
 .fm-em { font-style: italic; }.fm-strong { font-weight: 650; }.fm-strike { text-decoration: line-through; }
-.fm-code { font-family: ui-monospace, Consolas, monospace; font-size: .88em; background: var(--surface-alt, #eeeee6); border-radius: 4px; padding: 2px 3px; }
-.cm-editor .fm-code-line { position: relative; background: transparent; font-family: ui-monospace, Consolas, monospace; font-size: .88em; padding: 0 14px; border-left: 1px solid var(--muted, #798077); border-right: 1px solid var(--muted, #798077); }
+.fm-code { font-family: ui-monospace, Consolas, monospace; font-size: .88em; background: var(--surface-alt); border-radius: 4px; padding: 2px 3px; }
+.cm-editor .fm-code-line { position: relative; background: transparent; font-family: ui-monospace, Consolas, monospace; font-size: .88em; padding: 0 14px; border-left: 1px solid var(--muted); border-right: 1px solid var(--muted); }
 /* drawSelection 的选区层位于正文下方（当前 z-index 为 -2）。代码底色单独放到更低层，
    行本身不能建立堆叠上下文，否则底色仍会整体盖住选区；伪元素不参与鼠标命中。 */
-.cm-editor .fm-code-line::before { content: ''; position: absolute; inset: 0; z-index: -3; background: var(--surface-alt, #eeeee6); pointer-events: none; }
-.cm-editor .fm-code-start { border-top: 1px solid var(--muted, #798077); padding-top: 10px; }
-.cm-editor .fm-code-end { border-bottom: 1px solid var(--muted, #798077); padding-bottom: 10px; }
+.cm-editor .fm-code-line::before { content: ''; position: absolute; inset: 0; z-index: -3; background: var(--surface-alt); pointer-events: none; }
+.cm-editor .fm-code-start { border-top: 1px solid var(--muted); padding-top: 10px; }
+.cm-editor .fm-code-end { border-bottom: 1px solid var(--muted); padding-bottom: 10px; }
 .cm-editor .fm-code-fence { height: 0; min-height: 0; padding: 0; line-height: 0; overflow: hidden; }
 .cm-editor .fm-empty-code { min-height: calc(1.8em + 20px); cursor: text; }
 .fm-code-language { display: flex; justify-content: flex-end; padding: 8px 0 12px; line-height: 1.4; }
 .fm-code-language input { width: 150px; max-width: 100%; padding: 5px 10px; border: 1px solid transparent; border-radius: 0; font: 12px/1.4 ui-monospace, Consolas, monospace; text-align: center; }
-.fm-code-language input { border-bottom-color: var(--border, #cdd6ca); background: var(--surface, #fffefa); color: var(--text, #343b36); }
-.cm-editor .fm-quote { border-left: 3px solid var(--border, #cdd6ca); color: var(--muted, #6f766e); padding-left: 16px; }
+.fm-code-language input { border-bottom-color: var(--border); background: var(--surface); color: var(--text); }
+.cm-editor .fm-quote { border-left: 3px solid var(--border); color: var(--muted); padding-left: 16px; }
 .fm-list-line { padding-top: 4px; padding-bottom: 4px; }
-.fm-completed-line { color: var(--muted, #798077); }
+.fm-completed-line { color: var(--muted); }
 .fm-completing-line { animation: fm-complete-feedback 140ms ease-out both; }
 @keyframes fm-complete-feedback { from { opacity: 1; } to { opacity: .6; } }
 .fm-item-controls { display: inline-flex; align-items: center; position: relative; vertical-align: text-bottom; line-height: 1; height: 1.35em; }
@@ -33,32 +33,39 @@
 .fm-fold-button { position: absolute; width: 20px; height: 25px; right: calc(100% + 5px); border: 0; background: transparent; font-size: 17px; opacity: 0; transition: opacity 100ms; }
 .fm-fold-button:hover, .fm-item-controls:hover .fm-fold-button, .fm-item-controls:focus-within .fm-fold-button, .fm-item-controls.is-folded .fm-fold-button { opacity: 1; }
 .fm-fold-button.is-empty { visibility: hidden; }
-.fm-task-checkbox { border: 1.5px solid var(--checkbox-border, #99a598); border-radius: 4px; width: 17px; height: 17px; background: transparent; font-size: 12px; }
-.fm-task-checkbox[aria-checked=true] { background: var(--accent, #4d725a); color: white; border-color: var(--accent, #4d725a); }
+.fm-task-checkbox { border: 1.5px solid var(--checkbox-border); border-radius: 4px; width: 17px; height: 17px; background: transparent; font-size: 12px; }
+.fm-task-checkbox[aria-checked=true] { background: var(--accent); color: var(--canvas); border-color: var(--accent); }
 .fm-list-marker { border: none; background: transparent; min-width: 15px; height: 20px; font-size: 1em; }
-.fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent, #4d725a); outline-offset: 3px; }
-.fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted, #798077); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
+.fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
 .fm-math-block { overflow-x: auto; text-align: center; padding: 10px 0; cursor: text; }
 /* 块间距由编辑器控制，避免叠加 KaTeX 默认的上下 1em 外边距。 */
 .fm-math-block .katex-display { margin: 0; }
-.fm-math-inline { cursor: text; }.fm-math-error { color: var(--danger, #a24a40); border-bottom: 1px dotted currentColor; }
+.fm-math-inline { cursor: text; }.fm-math-error { color: var(--danger); border-bottom: 1px dotted currentColor; }
 .fm-image { max-width: 100%; max-height: 400px; object-fit: contain; border-radius: 5px; cursor: text; }
-.cm-content a { color: var(--accent, #4d725a); text-decoration: underline; text-underline-offset: 3px; }
+.cm-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .aggregate-content { min-width: 0; overflow-wrap: anywhere; }
-.aggregate-title .fm-link { color: var(--accent, #4d725a); text-decoration: underline; text-underline-offset: 3px; }
+.aggregate-title .fm-link { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .fm-table-wrap { overflow-x: auto; padding: 12px 0; }.fm-table-wrap table { width: 100%; border-collapse: collapse; font-size: .92em; }
-.fm-table-wrap th, .fm-table-wrap td { border: 1px solid var(--border, #dedfd5); padding: 8px 12px; text-align: left; }
-.fm-table-wrap th { background: var(--surface-alt, #eeeee6); font-weight: 600; }
-.fm-drag-preview { position: fixed; z-index: 200; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 16px; background: var(--surface, #fffffa); color: var(--text, #343b36); border: 1px solid var(--border, #dedfd5); box-shadow: 0 6px 25px #0002; border-radius: 6px; pointer-events: none; opacity: .9; }
-.fm-drop-line { position: fixed; height: 3px; background: var(--accent, #4d725a); z-index: 199; pointer-events: none; border-radius: 2px; }
+.fm-table-wrap th, .fm-table-wrap td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+.fm-table-wrap th { background: var(--surface-alt); font-weight: 600; }
+.fm-drag-preview { position: fixed; z-index: 200; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 6px 25px var(--shadow-color); border-radius: 6px; pointer-events: none; opacity: .9; }
+.fm-drop-line { position: fixed; height: 3px; background: var(--accent); z-index: 199; pointer-events: none; border-radius: 2px; }
 .fm-dragging, .fm-dragging * { cursor: grabbing !important; user-select: none !important; }
-.fm-item-menu { position: fixed; z-index: 210; display: grid; padding: 6px; min-width: 130px; background: var(--surface, #fffffa); border: 1px solid var(--border, #dedfd5); border-radius: 8px; box-shadow: 0 8px 24px #0002; }
-.fm-item-menu button { border: 0; text-align: left; padding: 8px 12px; background: transparent; color: var(--text, #343b36); cursor: pointer; border-radius: 4px; }
-.fm-item-menu button:hover, .fm-item-menu button:focus-visible { background: var(--surface-alt, #eeeee6); }
-.fm-group-prompt { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; white-space: nowrap; background: var(--surface, #fffffa); border: 1px solid var(--border, #dedfd5); box-shadow: 0 5px 20px #0002; padding: 12px 16px; border-radius: 8px; font-size: 13px; }
-.fm-group-prompt button { color: var(--accent, #4d725a); background: transparent; border: 0; cursor: pointer; font: inherit; }
+.fm-item-menu { position: fixed; z-index: 210; display: grid; padding: 6px; min-width: 130px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow-color); }
+.fm-item-menu button { border: 0; text-align: left; padding: 8px 12px; background: transparent; color: var(--text); cursor: pointer; border-radius: 4px; }
+.fm-item-menu button:hover, .fm-item-menu button:focus-visible { background: var(--surface-alt); }
+.fm-group-prompt { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; white-space: nowrap; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 5px 20px var(--shadow-color); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
+.fm-group-prompt button { color: var(--accent); background: transparent; border: 0; cursor: pointer; font: inherit; }
 @media (max-width: 640px) { .cm-editor .cm-content { padding: 24px 25px 120px; }.fm-group-prompt { gap: 6px; padding: 10px; white-space: normal; width: 90%; } }
 @media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; }.fm-completing-line { animation: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }
+
+/* 选区背景在正文后层绘制，前景标记单独反色，确保不透明选区仍可阅读。 */
+.cm-editor .fm-selected, .cm-editor .fm-selected * { color: var(--selection-ink) !important; }
+.cm-editor .fm-selected .fm-code, .cm-editor .fm-code.fm-selected { background: var(--selection); }
+.cm-editor .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
+.cm-editor .cm-nonmatchingBracket { color: var(--danger); text-decoration: underline wavy; }
+:root[data-monochrome=true] .fm-completing-line, :root[data-monochrome=true] .fm-drag-preview { opacity: 1; }

@@ -1,18 +1,21 @@
 /**
  * 文件职责：通过公开 DOM 和浏览器文件端口验证真实 App 的编辑保存闭环。
- * 定义范围：任务完成、文本输入、重启、项目历史隔离及跨项目搜索定位。
+ * 定义范围：任务完成、文本输入、重启、项目历史隔离、跨项目搜索及主题导入持久化。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from 'svelte';
 import App from '../../App.svelte';
 import { BrowserFilePort, defaultPreferences } from '../browser-files';
+import { builtInThemes, paletteKeys, parseTheme, type ThemeDefinition } from '../themes';
 import type { AppConfig, Project, ProjectView } from '../contracts';
 
 const desktopBoundary = vi.hoisted(() => ({
   enabled: false,
   close: null as null | ((event: { preventDefault: () => void }) => Promise<void>),
   destroy: vi.fn(async () => {}),
+  save: vi.fn<() => Promise<string | null>>(async () => null),
 }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path }));
 // 仅替换桌面 IO 与窗口事件边界，退出决策仍运行生产 App 代码。
 vi.mock('../files/tauri', async () => {
@@ -36,6 +39,7 @@ let container: HTMLDivElement;
 /** jsdom 没有排版引擎；只补充几何 API，不替换真实编辑器、保存器或 App 行为。 */
 beforeEach(() => {
   desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
+  desktopBoundary.save.mockReset().mockResolvedValue(null);
   // Node 的实验性同名全局不代表浏览器存储，固定使用 jsdom 的真实 Storage。
   const browserStorage = (globalThis as unknown as { jsdom: { window: { localStorage: Storage } } }).jsdom.window.localStorage;
   vi.stubGlobal('localStorage', browserStorage);
@@ -48,7 +52,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   if (mounted) { await unmount(mounted); mounted = undefined; }
-  document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks();
+  document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
 
 /**
@@ -125,6 +129,161 @@ async function insertTask(): Promise<void> {
 async function savedText(project: Project, expected: string): Promise<void> {
   await vi.waitFor(async () => expect((await files.read(project.path)).text).toBe(expected), { timeout: 5000 });
 }
+
+/** 从关联标签定位设置控件，测试不依赖组件状态或固定 DOM 排列。 */
+function themeControl(name: string): HTMLSelectElement {
+  const label = [...document.querySelectorAll('label')].find(candidate => candidate.firstChild?.textContent?.trim() === name);
+  const select = label?.querySelector('select');
+  if (!select) throw new Error(`找不到设置：${name}`);
+  return select;
+}
+
+async function chooseThemeSetting(name: string, value: string): Promise<void> {
+  const select = themeControl(name); select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+}
+
+/** jsdom 的 File 缺少 text；只补文件读取边界，仍通过生产文件输入事件执行导入与校验。 */
+async function importThemeFile(content: string): Promise<void> {
+  const input = document.querySelector<HTMLInputElement>('[aria-label="导入主题文件"]')!;
+  const file = new File([content], 'custom-theme.json', { type: 'application/json' });
+  Object.defineProperty(file, 'text', { value: async () => content });
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+  input.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  await vi.waitFor(() => expect(button('导入主题').disabled).toBe(false));
+}
+
+describe('App 主题导入与持久化', () => {
+  const customTheme: ThemeDefinition = { ...builtInThemes[0], id: 'custom-slate', name: '自制石板', light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' } };
+
+  it('设置中选择双色深色并保存，重新挂载恢复同一主题与完整配色', async () => {
+    await start(['# 主题验收\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('主题', 'mono'); await chooseThemeSetting('明暗模式', 'dark');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences).toMatchObject({ themeId: 'mono', theme: 'dark' }));
+    await remount(); button('设置').click(); await tick();
+    expect(themeControl('主题').value).toBe('mono'); expect(themeControl('明暗模式').value).toBe('dark');
+    expect(document.documentElement.dataset.monochrome).toBe('true');
+    for (const key of paletteKeys) expect(document.documentElement.style.getPropertyValue(`--${key}`)).toBe(builtInThemes[1].dark[key]);
+  });
+
+  it('文件输入导入双模式主题后自动选择，保存并重启恢复自制配色', async () => {
+    await start(['# 导入主题\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('明暗模式', 'light'); await importThemeFile(JSON.stringify(customTheme));
+    expect(themeControl('主题').value).toBe(customTheme.id);
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#ABCDEF');
+    await vi.waitFor(async () => {
+      const config = await files.loadConfig();
+      expect(config?.preferences.themeId).toBe(customTheme.id); expect(config?.customThemes).toEqual([customTheme]);
+    });
+    await remount(); button('设置').click(); await tick();
+    expect(themeControl('主题').value).toBe(customTheme.id);
+    await chooseThemeSetting('明暗模式', 'dark');
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#123456');
+  });
+
+  it('非法文件显示错误，保留已选择的主题及持久化配置', async () => {
+    await start(['# 非法导入\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('主题', 'mono'); await chooseThemeSetting('明暗模式', 'dark');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.themeId).toBe('mono'));
+    await importThemeFile(JSON.stringify({ ...customTheme, dark: { canvas: 'url(https://example.com)' } }));
+    expect(document.querySelector('.dialog-error')?.textContent).toContain('THEME_INVALID');
+    expect(themeControl('主题').value).toBe('mono');
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#0A0A0A');
+    const saved = await files.loadConfig();
+    expect(saved?.preferences.themeId).toBe('mono'); expect(saved?.customThemes ?? []).toEqual([]);
+  });
+
+  it('移除自制主题回退纸面，重启后主题列表不再包含已移除项', async () => {
+    await start(['# 移除主题\n']); button('设置').click(); await tick();
+    await importThemeFile(JSON.stringify(customTheme)); button('移除主题').click(); await tick();
+    expect(themeControl('主题').value).toBe('paper');
+    await vi.waitFor(async () => {
+      const config = await files.loadConfig();
+      expect(config?.preferences.themeId).toBe('paper'); expect(config?.customThemes).toEqual([]);
+    });
+    await remount(); button('设置').click(); await tick();
+    expect(themeControl('主题').value).toBe('paper');
+    expect([...themeControl('主题').options].some(option => option.value === customTheme.id)).toBe(false);
+  });
+
+  it('跟随系统即时响应明暗事件，手动选择浅色后保持浅色', async () => {
+    let systemDark = false;
+    const events = new EventTarget();
+    const preference = { get matches() { return systemDark; }, media: '(prefers-color-scheme: dark)', onchange: null, addListener() {}, removeListener() {}, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), dispatchEvent: events.dispatchEvent.bind(events) } as MediaQueryList;
+    vi.spyOn(window, 'matchMedia').mockReturnValue(preference);
+    await start(['# 系统主题\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('主题', 'mono'); await chooseThemeSetting('明暗模式', 'system');
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#F8FAFC');
+    systemDark = true; events.dispatchEvent(new Event('change')); await tick();
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#0A0A0A');
+    expect(themeControl('明暗模式').value).toBe('system');
+    await chooseThemeSetting('明暗模式', 'light');
+    systemDark = false; events.dispatchEvent(new Event('change')); await tick();
+    systemDark = true; events.dispatchEvent(new Event('change')); await tick();
+    expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#F8FAFC');
+  });
+});
+
+describe('App 桌面主题模板下载', () => {
+  const exportPath = '浏览器/custom-mono.json';
+
+  beforeEach(() => {
+    desktopBoundary.enabled = true;
+    // 桌面下载必须经过保存对话框；拦截浏览器导航，避免旧实现的无关 jsdom 报错掩盖断言。
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL(): string { return 'blob:theme-template'; }
+      static revokeObjectURL(): void {}
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  });
+
+  it('选择位置后落盘完整双模式模板，并反馈保存成功', async () => {
+    desktopBoundary.save.mockResolvedValue(exportPath);
+    await start(['# 下载模板\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('主题', 'mono');
+    button('下载主题模板').click(); await tick();
+    await vi.waitFor(() => expect(desktopBoundary.save).toHaveBeenCalledWith({
+      title: '保存主题模板', defaultPath: 'custom-mono.json', filters: [{ name: 'JSON 主题', extensions: ['json'] }],
+    }));
+    await vi.waitFor(async () => {
+      const template = parseTheme((await files.read(exportPath)).text);
+      expect(template.id).toBe('custom-mono');
+      expect(template.light).toEqual(builtInThemes[1].light);
+      expect(template.dark).toEqual(builtInThemes[1].dark);
+    });
+    expect(document.body.textContent).toContain('主题模板已保存');
+  });
+
+  it('取消保存不创建文件、不报成功，并允许重新下载', async () => {
+    await start(['# 取消下载\n']); button('设置').click(); await tick();
+    const create = vi.spyOn(BrowserFilePort.prototype, 'create');
+    button('下载主题模板').click(); await tick();
+    await vi.waitFor(() => expect(desktopBoundary.save).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('下载主题模板').disabled).toBe(false));
+    expect(create).not.toHaveBeenCalled();
+    expect(document.querySelector('.dialog-error')).toBeNull();
+    expect(document.body.textContent).not.toContain('主题模板已保存');
+  });
+
+  it('保存失败在设置中显示错误并保留已有文件', async () => {
+    await files.create(exportPath, '原有内容');
+    desktopBoundary.save.mockResolvedValue(exportPath);
+    await start(['# 保存失败\n']); button('设置').click(); await tick();
+    button('下载主题模板').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.dialog-error')?.textContent).toContain('FILE_EXISTS'));
+    expect((await files.read(exportPath)).text).toBe('原有内容');
+    expect(button('下载主题模板').disabled).toBe(false);
+    expect(document.body.textContent).not.toContain('主题模板已保存');
+  });
+
+  it('系统保存对话框失败显示错误，并恢复下载按钮', async () => {
+    desktopBoundary.save.mockRejectedValue(new Error('保存对话框不可用'));
+    await start(['# 对话框失败\n']); button('设置').click(); await tick();
+    button('下载主题模板').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.dialog-error')?.textContent).toContain('保存对话框不可用'));
+    expect(button('下载主题模板').disabled).toBe(false);
+  });
+});
 
 describe('App 真实编辑与文件闭环', () => {
   it('项目搜索按需打开，搜索内部点击保留、外部点击关闭且清除隐藏筛选', async () => {

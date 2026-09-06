@@ -5,7 +5,8 @@
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory } from '@codemirror/commands';
-import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
+import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskToggleChanges, type DocumentModel } from '../markdown';
 import { actionsFacet, completionField, documentField, foldHistory, foldsField, holdCompletion, modeFacet, releaseCompletion, resourcesFacet, setFolds } from './state';
@@ -19,6 +20,19 @@ import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
 import './editor.css';
 export type { EditorOptions } from './types';
+
+/** 语法颜色必须引用主题变量，切换主题时无须重建编辑器或丢失选区与撤销历史。 */
+const themeHighlightStyle = HighlightStyle.define([
+  { tag: [tags.meta, tags.comment], color: 'var(--muted)' },
+  { tag: tags.link, color: 'var(--accent)', textDecoration: 'underline' },
+  { tag: tags.heading, color: 'var(--ink)', fontWeight: 'bold' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.strong, fontWeight: 'bold' },
+  { tag: tags.strikethrough, textDecoration: 'line-through' },
+  { tag: [tags.keyword, tags.atom, tags.bool, tags.url, tags.contentSeparator, tags.labelName, tags.literal, tags.inserted, tags.regexp, tags.escape, tags.typeName, tags.namespace, tags.className, tags.macroName], color: 'var(--accent)' },
+  { tag: [tags.variableName, tags.propertyName], color: 'var(--ink)' },
+  { tag: [tags.deleted, tags.invalid], color: 'var(--danger)' },
+]);
 
 /** 读取当前语法投影，应用统计和搜索直接复用它，不再次解析同一正文。 */
 export function getDocumentModel(state: EditorState): DocumentModel { return state.field(documentField); }
@@ -55,7 +69,7 @@ export class EditorController {
     return EditorState.create({ doc: text, extensions: [
       // Markdown 默认会以高优先级注册 Enter；键盘顺序统一由下方组合，保证围栏自动闭合先执行。
       markdown({ extensions: markdownExtensions, addKeymap: false }),
-      history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(defaultHighlightStyle),
+      history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
