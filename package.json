@@ -1,0 +1,39 @@
+{
+  "name": "foldmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-markdown": "^6.3.3",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.1",
+    "@lezer/common": "^1.2.3",
+    "@lezer/markdown": "^1.4.3",
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "katex": "^0.16.22",
+    "svelte": "^5.39.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@sveltejs/vite-plugin-svelte": "^6.2.0",
+    "@tauri-apps/cli": "^2.8.4",
+    "@types/katex": "^0.16.7",
+    "@types/node": "^22.18.0",
+    "jsdom": "^26.1.0",
+    "svelte-check": "^4.3.1",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  }
+}
