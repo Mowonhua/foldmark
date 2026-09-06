@@ -26,18 +26,26 @@ export class SaveCoordinator {
 
   constructor(private readonly options: SaveOptions) { this.baseline = options.snapshot; }
 
+  /** 用于失效路径重定位；只读比较唯一编辑状态与已加载磁盘基线。 */
+  get hasLocalChanges(): boolean { return this.options.getText() !== this.baseline.text; }
+
   /** 编辑器只通知变化；延迟执行时读取最新正文，合并连续输入。 */
   changed(): void {
     if (this.disposed) return;
-    clearTimeout(this.timer); clearTimeout(this.recoveryTimer);
+    clearTimeout(this.timer);
     if (!this.conflict) this.options.onStatus({ kind: 'dirty', message: '未保存' });
-    this.recoveryTimer = setTimeout(() => { void this.persistRecovery().catch(error => this.reportError(error)); }, 120);
+    // 恢复快照采用节流：连续输入也要定期落下最新草稿，不能无限重置等待时间。
+    if (!this.recoveryTimer) this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = undefined;
+      void this.persistRecovery().catch(error => this.reportError(error));
+    }, 120);
     this.timer = setTimeout(() => { void this.flush(); }, this.options.delay ?? 600);
   }
 
   /** 同一个文档只有一条保存链；保存期间的新输入由循环继续提交。 */
   flush(): Promise<boolean> {
     clearTimeout(this.timer); clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = undefined;
     if (this.pending) return this.pending;
     // 开始保存即使旧读取失效，避免其稍后将新基线回退到旧磁盘内容。
     this.externalGeneration += 1;
@@ -101,13 +109,15 @@ export class SaveCoordinator {
       }
       this.conflict = true;
       await this.persistRecovery();
+      if (generation !== this.externalGeneration || this.disposed) return;
       this.options.onStatus({ kind: 'conflict', message: '文件在其他应用中已更改', external });
-    } catch (error) { this.reportError(error); }
+    } catch (error) { if (generation === this.externalGeneration && !this.disposed) this.reportError(error); }
   }
 
   /** 用户选用磁盘版本时先保留本地恢复快照，再替换编辑器文本。 */
   async acceptExternal(snapshot: FileSnapshot): Promise<void> {
     clearTimeout(this.timer); clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = undefined;
     await this.persistRecovery();
     this.externalGeneration += 1;
     this.baseline = snapshot; this.conflict = false;

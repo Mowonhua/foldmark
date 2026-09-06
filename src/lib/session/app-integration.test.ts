@@ -30,7 +30,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   if (mounted) { await unmount(mounted); mounted = undefined; }
-  document.body.replaceChildren(); localStorage.clear();
+  document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks();
 });
 
 /**
@@ -169,5 +169,86 @@ describe('App 真实编辑与文件闭环', () => {
     await vi.waitFor(() => expect(document.querySelector('[role="checkbox"][aria-checked="true"]')).not.toBeNull());
     expect(documentInput().getAttribute('contenteditable')).toBe('false');
     expect(documentInput().textContent).toContain('独特归档目标');
+  });
+});
+
+
+describe('项目操作失败与聚合视图边界', () => {
+  it('恢复数据与正文无法保存时，移除关联仍保留唯一内存草稿', async () => {
+    const original = '# 甲清单\n\n- [ ] 原始任务\n';
+    await start([original]);
+    vi.spyOn(BrowserFilePort.prototype, 'saveRecovery').mockRejectedValue(new Error('FILE_PERMISSION: 恢复目录不可写'));
+    button('＋ 新任务').click(); await tick(); await paste('只能保存在内存中的草稿');
+    button('更多操作').click(); await tick(); button('移除项目关联').click(); await tick();
+    button('移除关联').click();
+    await new Promise(resolve => setTimeout(resolve, 0)); await tick();
+    expect(documentInput().textContent).toContain('只能保存在内存中的草稿');
+    expect([...document.querySelectorAll<HTMLButtonElement>('button')].some(candidate => candidate.title === firstProject.path)).toBe(true);
+    expect((await files.read(firstProject.path)).text).toBe(original);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it('全部待办的菜单不提供针对隐藏项目的编辑操作', async () => {
+    const original = '# 甲清单\n\n- [ ] 原始任务\n';
+    await start([original]);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.aggregate h1')?.textContent).toContain('全部待办'));
+    button('更多操作').click(); await tick();
+    const actions = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent?.trim());
+    expect(actions).not.toContain('新增任务');
+    expect(actions).not.toContain('完成整组任务');
+    expect(actions).not.toContain('同级上移');
+    expect(actions).not.toContain('同级下移');
+    expect((await files.read(firstProject.path)).text).toBe(original);
+  });
+
+  it('较早打开请求失败时，不覆盖后来已选中的项目', async () => {
+    await start(['# 甲清单\n\n- [ ] 当前保留任务\n', '# 乙清单\n\n- [ ] 延迟读取任务\n']);
+    const read = BrowserFilePort.prototype.read;
+    let rejectEarlier!: (reason: Error) => void;
+    vi.spyOn(BrowserFilePort.prototype, 'read').mockImplementation(function (this: BrowserFilePort, path: string) {
+      if (path === secondProject.path) return new Promise((_resolve, reject) => { rejectEarlier = reject; });
+      return read.call(this, path);
+    });
+    const pending = [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.title === secondProject.path)!;
+    pending.click(); await tick();
+    await switchProject(firstProject);
+    rejectEarlier(new Error('FILE_NOT_FOUND: 过期的项目读取失败'));
+    await new Promise(resolve => setTimeout(resolve, 0)); await tick();
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(documentInput().textContent).toContain('当前保留任务');
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe('跨项目反馈和搜索范围', () => {
+  it('旧项目的完成反馈不能撤销当前项目自己的编辑', async () => {
+    const first = '# 甲清单\n\n- [ ] 完成甲任务\n';
+    const second = '# 乙清单\n\n- [ ] 保留乙任务\n';
+    await start([first, second]);
+    await switchProject(secondProject);
+    button('＋ 新任务').click(); await tick(); await paste('乙项目必须保留的编辑');
+    await shortcut('s');
+    const savedSecond = `${second}- [ ] 乙项目必须保留的编辑`;
+    await savedText(secondProject, savedSecond);
+    await switchProject(firstProject);
+    button('完成任务').click(); await tick();
+    await switchProject(secondProject);
+    const undo = [...document.querySelectorAll<HTMLButtonElement>('.toast button')].find(candidate => candidate.textContent?.trim() === '撤销');
+    undo?.click(); await tick(); await shortcut('s');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect((await files.read(secondProject.path)).text).toBe(savedSecond);
+  });
+
+  it('在全部待办中打开全局搜索时，包含归档仍可检索已完成任务', async () => {
+    await start(['# 甲清单\n\n- [ ] 普通待办\n- [x] 聚合页归档目标\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.aggregate h1')?.textContent).toContain('全部待办'));
+    button(/^搜索/).click(); await tick();
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索所有项目"]')!;
+    search.value = '聚合页归档目标'; search.dispatchEvent(new Event('input', { bubbles: true }));
+    const include = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('包含归档'))!.querySelector<HTMLInputElement>('input')!;
+    include.click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('聚合页归档目标'), { timeout: 3000 });
   });
 });

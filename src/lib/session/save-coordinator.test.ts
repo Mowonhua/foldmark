@@ -94,3 +94,45 @@ describe('异步外部读取与保存基线', () => {
     f.saver.dispose();
   });
 });
+
+
+describe('恢复持久化时限与监听补查', () => {
+  it('连续输入不会无限推迟恢复快照，每个时间窗保存最新正文', async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    try {
+      for (let index = 0; index < 10; index++) {
+        f.setText(`continuous draft ${index}`);
+        await vi.advanceTimersByTimeAsync(60);
+      }
+      expect(vi.mocked(f.files.saveRecovery).mock.calls.length).toBeGreaterThanOrEqual(4);
+      expect(f.files.saveRecovery).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'continuous draft 9' }));
+      expect(f.files.write).not.toHaveBeenCalled();
+    } finally { f.saver.dispose(); vi.useRealTimers(); }
+  });
+
+  it('保存期间收到的外部变化在当前保存结束后自动补查', async () => {
+    const f = fixture();
+    const write = f.files.write;
+    let releaseWrite!: () => void;
+    const release = new Promise<void>(resolve => { releaseWrite = resolve; });
+    let committed = false;
+    f.files.write = vi.fn(async (path: string, text: string, revision: string) => {
+      const saved = await write(path, text, revision);
+      committed = true;
+      await release;
+      return saved;
+    });
+    f.setText('saved local');
+    const saving = f.saver.flush();
+    await vi.waitFor(() => expect(committed).toBe(true));
+    f.external('external after successful write');
+    await f.saver.checkExternal();
+    expect(f.files.read).not.toHaveBeenCalled();
+    releaseWrite();
+    expect(await saving).toBe(true);
+    await vi.waitFor(() => expect(f.getText()).toBe('external after successful write'));
+    expect(f.disk().text).toBe('external after successful write');
+    f.saver.dispose();
+  });
+});

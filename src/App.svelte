@@ -31,6 +31,7 @@
   let searchOpen = $state(false);
   let includeArchived = $state(false);
   let results = $state<TaskResult[]>([]);
+  let aggregateResults = $state<TaskResult[]>([]);
   let indexing = $state(false);
   let indexGeneration = 0;
   const indexCache = new Map<string, { text: string; model: DocumentModel }>();
@@ -104,7 +105,7 @@
   /** 异步读文件使用代次检查，快速切换时较早的读取不能抢回当前项目。 */
   async function openProject(project: Project, position?: number): Promise<void> {
     const generation = ++openGeneration;
-    captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false;
+    captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = '';
     try {
       let session = sessions.get(project.id);
       if (!session) {
@@ -149,14 +150,17 @@
       version += 1; scheduleConfig();
       if (position !== undefined) { searchOpen = false; await tick(); editor!.focusAt(position); }
       else editor!.view.focus();
-    } catch (error) { switching = false; fatal = errorMessage(error); missing = project; }
+    } catch (error) {
+      if (generation !== openGeneration) return;
+      switching = false; fatal = errorMessage(error); missing = project;
+    }
   }
 
   function setMode(next: ViewMode): void {
     if (!active || !editor) return;
     editor.setMode(next); active.ui.mode = next; active.state = editor.state; version += 1; scheduleConfig();
   }
-  async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; await updateIndex(); }
+  async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; toast = ''; await updateIndex(); }
   function scheduleIndex(): void { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void updateIndex(); }, 350); }
   /** 查询缓存只持有不可编辑语法投影；正文变化才重建，保存反馈不触发重复解析。 */
   function modelForProject(projectId: string, text: string): DocumentModel {
@@ -169,18 +173,23 @@
   async function updateIndex(): Promise<void> {
     const generation = ++indexGeneration; indexing = true;
     const found: TaskResult[] = [];
+    const allFound: TaskResult[] = [];
     for (const project of config.projects) {
       if (generation !== indexGeneration) return;
       try {
         const text = sessions.get(project.id)?.state.doc.toString() ?? (await files.read(project.path)).text;
-        for (const result of searchTasks(modelForProject(project.id, text), query, includeArchived && screen !== 'all')) {
+        const model = modelForProject(project.id, text);
+        for (const result of searchTasks(model, query, searchOpen && includeArchived)) {
           found.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: result.archived });
+        }
+        if (screen === 'all') for (const result of searchTasks(model, '', false)) {
+          allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: false });
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
       // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
       await new Promise(resolve => setTimeout(resolve, 0));
     }
-    if (generation === indexGeneration) { results = found; indexing = false; }
+    if (generation === indexGeneration) { results = found; aggregateResults = allFound; indexing = false; }
   }
   async function locate(result: TaskResult): Promise<void> {
     const project = config.projects.find(item => item.id === result.projectId);
@@ -243,11 +252,18 @@
     scheduleConfig(); scheduleIndex();
   }
   async function relocate(): Promise<void> {
-    if (!missing) return;
+    const project = missing ?? active?.project;
+    if (!project) return;
     try {
       const path = await files.chooseFile(false); if (!path) return;
-      if (config.projects.some(project => project.id !== missing!.id && project.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到另一个项目。');
-      const project = missing; project.path = path; sessions.get(project.id)?.stopWatch(); sessions.get(project.id)?.saver.dispose(); sessions.delete(project.id);
+      if (config.projects.some(item => item.id !== project.id && item.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到另一个项目。');
+      const disk = await files.read(path);
+      const session = sessions.get(project.id);
+      // 新文件与内存草稿可能不同；先持久化待恢复文本，打开后展示双方内容供选择。
+      if (session?.saver.hasLocalChanges && session.state.doc.toString() !== disk.text) {
+        await files.saveRecovery({ path, text: session.state.doc.toString(), baseRevision: disk.revision, savedAt: Date.now() });
+      }
+      session?.stopWatch(); session?.saver.dispose(); sessions.delete(project.id); project.path = path;
       await openProject(project); scheduleConfig();
     } catch (error) { fatal = errorMessage(error); }
   }
@@ -400,19 +416,19 @@
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
     {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">磁盘文件有新的修改，你的编辑已保留。<button onclick={() => openDialog('conflict')}>比较并处理</button></div>{/if}
-    {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">保存失败：{saveStatus.message}<button onclick={save}>重试保存</button><button onclick={() => exportMarkdown()}>另存副本</button></div>{/if}
+    {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">保存失败：{saveStatus.message}<button onclick={save}>重试保存</button><button onclick={() => exportMarkdown()}>另存副本</button><button onclick={relocate}>重新定位文件</button></div>{/if}
 
     <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
     {#if !active && screen === 'project' && !fatal}
       <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>了解编辑方式 →</button></section>
     {/if}
     {#if screen === 'all'}
-      <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{results.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
+      <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
         {#each config.projects as project}
-          {@const projectResults = results.filter(result => result.projectId === project.id)}
+          {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
           {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span>{result.title}<small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}</section>{/if}
         {/each}
-        {#if !results.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
+        {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
     {/if}
     <footer class="statusbar"><span>{desktop ? saveStatus?.message ?? '本地 Markdown 文件' : '浏览器预览 · 数据保存在此浏览器，可另存 Markdown'}</span><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
