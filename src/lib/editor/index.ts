@@ -13,6 +13,7 @@ import { previewField } from './preview';
 import { markerGestures } from './gestures';
 import { taskKeymap } from './commands';
 import { contentVisibility } from './visibility';
+import { codeSelection } from './selection';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
@@ -54,7 +55,7 @@ export class EditorController {
     return EditorState.create({ doc: text, extensions: [
       // Markdown 默认会以高优先级注册 Enter；键盘顺序统一由下方组合，保证围栏自动闭合先执行。
       markdown({ extensions: markdownExtensions, addKeymap: false }),
-      history(), drawSelection(), bracketMatching(), indentOnInput(), syntaxHighlighting(defaultHighlightStyle),
+      history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(defaultHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
