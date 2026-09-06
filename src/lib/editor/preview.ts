@@ -482,7 +482,7 @@ function buildPreview(state: EditorState): DecorationSet {
       // 同一引用内只有容器标记的行在预览中也是空行，不能再次补间距。
       if (parent.name === 'Blockquote' && parent.from <= previous.to && /^[ \t]*(?:>[ \t]*)+$/.test(previous.text)) return;
     }
-    // 源文空行已经提供可编辑的间隔，不再叠加。被过滤的前块也不产生额外留白。
+    // 显式段落分隔由空行投影统一处理，不叠加额外块间距；被过滤的前块也不产生留白。
     if (!previous.text.trim() || overlapsHidden(previous.from, line.from) || overlapsHidden(line.from, line.from + 1)) return;
     spacedLines.add(line.from);
     ranges.push(Decoration.widget({ widget: new BlockGapWidget(), block: true, side: -1 }).range(line.from));
@@ -580,6 +580,26 @@ function buildPreview(state: EditorState): DecorationSet {
     for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child);
   };
   visit(model.tree.topNode);
+  // 仅移除分隔空行前的换行，保留后一条换行作为可见段落边界。
+  // 每两个空行保留一个可输入空段落，使连续 Enter 仍能逐次增加可见行。
+  let firstVisibleLine = state.doc.lineAt(Math.max(0, window.from)).number;
+  // 窗口从连续空行中间开始时仍从同一对空行起点计算，避免滚动改变投影奇偶性。
+  while (firstVisibleLine > 2 && !state.doc.line(firstVisibleLine - 1).text.trim()) firstVisibleLine--;
+  const lastVisibleLine = state.doc.lineAt(Math.min(state.doc.length, window.to)).number;
+  for (let number = Math.max(2, firstVisibleLine); number < Math.min(state.doc.lines, lastVisibleLine + 1); number++) {
+    const line = state.doc.line(number);
+    if (line.text.trim()) continue;
+    let node: SyntaxNode | null = model.tree.resolveInner(line.from, 1);
+    let literal = false;
+    while (node) {
+      if (/^(FencedCode|CodeBlock|MathBlock|Table|Blockquote)$/.test(node.name)) { literal = true; break; }
+      node = node.parent;
+    }
+    const from = state.doc.line(number - 1).to;
+    if (literal || overlapsHidden(from, line.to + 1) || replacedBlocks.some(block => from >= block.from && from < block.to)) continue;
+    ranges.push(Decoration.replace({ paragraphSeparator: true }).range(from, line.to));
+    number++;
+  }
   for (const [from, entry] of layout) {
     if (overlapsHidden(from, from + 1) || replacedBlocks.some(block => from >= block.from && from < block.to)) continue;
     ranges.push(Decoration.line({ attributes: { style: `margin-left: ${entry.margin}` } }).range(from));
@@ -592,5 +612,14 @@ function buildPreview(state: EditorState): DecorationSet {
 export const previewField = StateField.define<DecorationSet>({
   create: buildPreview,
   update: (value, transaction) => transaction.docChanged || transaction.selection || transaction.effects.length || transaction.reconfigured ? buildPreview(transaction.state) : value,
-  provide: field => EditorView.decorations.from(field),
+  provide: field => [EditorView.decorations.from(field), EditorView.atomicRanges.of(view => {
+    const atoms: Range<Decoration>[] = [];
+    // 导航和删除将两个源码换行视为同一边界；绘制仍保留一个换行。
+    const cursor = view.state.field(field).iter();
+    while (cursor.value) {
+      if (cursor.value.spec.paragraphSeparator) atoms.push(Decoration.replace({}).range(cursor.from, cursor.to + 1));
+      cursor.next();
+    }
+    return Decoration.set(atoms, true);
+  })],
 });

@@ -8,6 +8,28 @@ import { indentItemChanges } from '../markdown';
 import { documentField, modeFacet } from './state';
 
 /**
+ * 函数职责：在预览正文中插入段落分隔或段内换行。
+ * 输入说明：只接管可编辑预览；列表、引用、代码及表格交回各自的输入规则。
+ * 输出说明：替换选区并将光标放在新段落起点，整个操作可一次撤销。
+ * 实现思路：用共享语法树识别容器，按文档内部换行坐标构造事务。
+ */
+export function paragraphEnter(view: EditorView, soft = false): boolean {
+  const { state } = view;
+  if (view.composing || state.readOnly || state.facet(modeFacet) !== 'todo' || state.selection.ranges.length !== 1) return false;
+  const selection = state.selection.main;
+  for (const position of [selection.from, selection.to]) {
+    let node: SyntaxNode | null = state.field(documentField).tree.resolveInner(position, -1);
+    while (node) {
+      if (/^(ListItem|Blockquote|FencedCode|CodeBlock|MathBlock|Table)$/.test(node.name)) return false;
+      node = node.parent;
+    }
+  }
+  const insert = soft ? '\n' : '\n\n';
+  view.dispatch({ changes: { from: selection.from, to: selection.to, insert }, selection: { anchor: selection.from + insert.length }, userEvent: 'input' });
+  return true;
+}
+
+/**
  * 函数职责：在未闭合的 Markdown 开围栏末尾换行，并补齐匹配的闭围栏。
  * 输入说明：仅接管 todo、source 中的单个空选区；组合输入及已有闭围栏交给默认行为。
  * 输出说明：返回是否接管 Enter；成功时以一笔可撤销事务插入空代码行和闭围栏，光标停在代码行缩进之后。
@@ -77,8 +99,8 @@ export function indentTask(view: EditorView, direction: 1 | -1): boolean {
 }
 
 export const taskKeymap: KeyBinding[] = [
-  { key: 'Enter', run: view => codeFenceEnter(view) || taskEnter(view) },
-  { key: 'Shift-Enter', run: view => taskEnter(view, true) },
+  { key: 'Enter', run: view => codeFenceEnter(view) || taskEnter(view) || paragraphEnter(view) },
+  { key: 'Shift-Enter', run: view => taskEnter(view, true) || paragraphEnter(view, true) },
   { key: 'Tab', run: view => indentTask(view, 1) },
   { key: 'Shift-Tab', run: view => indentTask(view, -1) },
 ];
