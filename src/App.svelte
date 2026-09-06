@@ -1,6 +1,7 @@
 <script lang="ts">
   /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
   import { onMount, tick } from 'svelte';
+  import WindowControls from './lib/WindowControls.svelte';
   import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { renderTaskTitle } from './lib/editor/preview';
@@ -480,10 +481,11 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissSearch} />
 
-<div class="app-shell" class:sidebar-hidden={!sidebar}>
+<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop}>
+
   {#if sidebar}
     <aside class="sidebar" aria-label="项目导航">
-      <div class="brand"><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航">‹</button></div>
+      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航">‹</button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
       <div class="sidebar-section"><span>项目</span><div class="project-actions">
         <div class="project-search" data-project-search>
@@ -502,9 +504,10 @@
   {/if}
 
   <main class="main-pane">
-    <header class="topbar">
-      <div class="breadcrumb">{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
-      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button></div>
+    <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
+    <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
+      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
+      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
       {#if menuOpen}<div class="dropdown" role="menu">
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>

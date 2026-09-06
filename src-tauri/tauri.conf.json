@@ -5,7 +5,7 @@
   "identifier": "app.foldmark.desktop",
   "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
   "app": {
-    "windows": [{ "title": "Foldmark", "width": 1200, "height": 820, "minWidth": 680, "minHeight": 480 }],
+    "windows": [{ "title": "Foldmark", "width": 1200, "height": 820, "minWidth": 680, "minHeight": 480, "decorations": false, "shadow": true }],
     "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: https: http:; font-src 'self' data:; connect-src ipc: http://ipc.localhost", "assetProtocol": { "enable": true, "scope": ["**"] } }
   },
   "bundle": { "active": true, "targets": ["nsis"], "icon": ["icons/icon.ico", "icons/icon.png"], "windows": { "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true }, "nsis": { "languages": ["SimpChinese", "English"], "displayLanguageSelector": true } } }

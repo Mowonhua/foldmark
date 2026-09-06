@@ -1,6 +1,6 @@
 /**
  * 文件职责：通过公开 DOM 和浏览器文件端口验证真实 App 的编辑保存闭环。
- * 定义范围：任务完成、文本输入、重启、项目历史隔离、跨项目搜索及主题导入持久化。
+ * 定义范围：任务编辑、项目隔离、搜索、主题持久化及桌面窗口控制与退出保存。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from 'svelte';
@@ -12,6 +12,12 @@ import type { AppConfig, Project, ProjectView } from '../contracts';
 const desktopBoundary = vi.hoisted(() => ({
   enabled: false,
   close: null as null | ((event: { preventDefault: () => void }) => Promise<void>),
+  resized: null as null | (() => void),
+  focused: null as null | ((event: { payload: boolean }) => void),
+  maximized: false,
+  minimize: vi.fn(async () => {}),
+  toggleMaximize: vi.fn(async () => {}),
+  requestClose: vi.fn(async () => {}),
   destroy: vi.fn(async () => {}),
   save: vi.fn<() => Promise<string | null>>(async () => null),
 }));
@@ -23,6 +29,19 @@ vi.mock('../files/tauri', async () => {
   return { TauriFilePort: BrowserFilePort, openExternalLink: vi.fn(async () => {}) };
 });
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({
+  minimize: desktopBoundary.minimize,
+  toggleMaximize: desktopBoundary.toggleMaximize,
+  isMaximized: async () => desktopBoundary.maximized,
+  isFocused: async () => true,
+  onResized: async (callback: () => void) => {
+    desktopBoundary.resized = callback;
+    return () => { desktopBoundary.resized = null; };
+  },
+  onFocusChanged: async (callback: (event: { payload: boolean }) => void) => {
+    desktopBoundary.focused = callback;
+    return () => { desktopBoundary.focused = null; };
+  },
+  close: desktopBoundary.requestClose,
   onCloseRequested: async (callback: (event: { preventDefault: () => void }) => Promise<void>) => {
     desktopBoundary.close = callback;
     return () => { desktopBoundary.close = null; };
@@ -39,6 +58,17 @@ let container: HTMLDivElement;
 /** jsdom 没有排版引擎；只补充几何 API，不替换真实编辑器、保存器或 App 行为。 */
 beforeEach(() => {
   desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
+  desktopBoundary.resized = null; desktopBoundary.focused = null; desktopBoundary.maximized = false;
+  desktopBoundary.minimize.mockClear();
+  desktopBoundary.toggleMaximize.mockReset().mockImplementation(async () => {
+    desktopBoundary.maximized = !desktopBoundary.maximized;
+    desktopBoundary.resized?.();
+  });
+  // 自定义关闭按钮与系统关闭共享 CloseRequested，避免测试绕开退出保存契约。
+  desktopBoundary.requestClose.mockReset().mockImplementation(async () => {
+    if (!desktopBoundary.close) throw new Error('窗口关闭监听尚未注册');
+    await desktopBoundary.close({ preventDefault: vi.fn() });
+  });
   desktopBoundary.save.mockReset().mockResolvedValue(null);
   // Node 的实验性同名全局不代表浏览器存储，固定使用 jsdom 的真实 Storage。
   const browserStorage = (globalThis as unknown as { jsdom: { window: { localStorage: Storage } } }).jsdom.window.localStorage;
@@ -221,6 +251,52 @@ describe('App 主题导入与持久化', () => {
     systemDark = false; events.dispatchEvent(new Event('change')); await tick();
     systemDark = true; events.dispatchEvent(new Event('change')); await tick();
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#F8FAFC');
+  });
+});
+
+describe('App 顶部工具栏窗口控制', () => {
+  it('浏览器预览不展示桌面窗口控制', async () => {
+    await start(['# 浏览器预览\n']);
+    expect(document.querySelector('[aria-label="窗口控制"]')).toBeNull();
+    expect(document.querySelector('[aria-label="关闭窗口"]')).toBeNull();
+  });
+
+  it('最小化与最大化按钮调用窗口边界，窗口状态变化后可还原', async () => {
+    desktopBoundary.enabled = true;
+    await start(['# 桌面窗口\n']);
+    await vi.waitFor(() => expect(desktopBoundary.resized).not.toBeNull());
+    const controls = document.querySelector('[aria-label="窗口控制"]');
+    expect(controls).not.toBeNull();
+    expect(controls?.closest('.topbar')).not.toBeNull();
+    expect(document.querySelector('.window-titlebar')).toBeNull();
+    expect(document.body.textContent?.match(/Foldmark/g)).toHaveLength(1);
+    expect(document.querySelector('.sidebar .brand')?.textContent).toContain('Foldmark');
+    button('最小化').click();
+    await vi.waitFor(() => expect(desktopBoundary.minimize).toHaveBeenCalledOnce());
+    button('最大化').click();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="还原"]')).not.toBeNull());
+    button('还原').click();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="最大化"]')).not.toBeNull());
+    expect(desktopBoundary.toggleMaximize).toHaveBeenCalledTimes(2);
+  });
+
+  it('点击关闭先保存正文，保存失败保留草稿并允许重试退出', async () => {
+    desktopBoundary.enabled = true;
+    const original = '# 退出保存\n';
+    await start([original]);
+    await vi.waitFor(() => expect(desktopBoundary.close).not.toBeNull());
+    const saveRecovery = vi.spyOn(BrowserFilePort.prototype, 'saveRecovery').mockRejectedValue(new Error('FILE_PERMISSION: 恢复目录不可写'));
+    await insertTask(); await paste('关闭时不能丢失的草稿');
+    button('关闭窗口').click();
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('FILE_PERMISSION'));
+    expect(desktopBoundary.requestClose).toHaveBeenCalledOnce();
+    expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+    expect(documentInput().textContent).toContain('关闭时不能丢失的草稿');
+    expect((await files.read(firstProject.path)).text).toBe(original);
+    saveRecovery.mockRestore();
+    button('关闭窗口').click();
+    await vi.waitFor(() => expect(desktopBoundary.destroy).toHaveBeenCalledOnce());
+    expect((await files.read(firstProject.path)).text).toBe(`${original}- [ ] 关闭时不能丢失的草稿`);
   });
 });
 
