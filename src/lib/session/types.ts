@@ -13,6 +13,8 @@ export interface ProjectSession {
   ui: ProjectView;
   saver: SaveCoordinator;
   status: SaveStatus;
+  /** 恢复读取失败独立于正文保存反馈，避免已保存状态掩盖损坏草稿提示。 */
+  recoveryWarning?: string;
   stopWatch: () => void;
 }
 /** 结构职责：表示只读搜索投影；from 仅作为定位锚点，不允许直接修改搜索副本。 */

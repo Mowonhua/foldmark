@@ -184,7 +184,7 @@ class LinkWidget extends WidgetType {
   eq(other: LinkWidget): boolean { return this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image && this.title === other.title; }
   toDOM(view: EditorView): HTMLElement {
     const resources = view.state.facet(resourcesFacet);
-    const original = safeUrl(this.url, this.image) ?? (resources.resolveResource && /^[a-z]:[\\/]/i.test(this.url) ? this.url : null);
+    const original = safeUrl(this.url, this.image) ?? (resources.resolveResource && !/[\u0000-\u001f\u007f]/.test(this.url) && /^(?:[a-z]:[\\/]|file:)/i.test(this.url) ? this.url : null);
     const url = original === null ? null : resources.resolveResource?.(original) ?? original;
     if (this.image && url) {
       const image = document.createElement('img');

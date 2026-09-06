@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
+use std::path::PathBuf;
 use std::{fs, io::Write};
 
 /// 结构职责：返回已读取字节的文本与内容基线。
@@ -77,6 +78,51 @@ impl FileError {
 /// 内容指纹来自完整原始字节；恢复草稿键复用相同散列以避免路径字符进入文件名。
 pub fn fingerprint(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+/// 函数职责：提供恢复文件命名与草稿归属校验共同使用的路径身份。
+/// 输入说明：路径来自已关联文件；即使文件暂时缺失也必须能计算身份。
+/// 输出说明：Windows 忽略大小写并统一分隔符，不要求再次访问主文件。
+/// 实现思路：保持与已有恢复键一致的字符串归一化规则。
+pub fn file_identity(path: &str) -> String {
+    let identity = path.replace('\\', "/");
+    #[cfg(windows)]
+    let identity = identity.to_lowercase();
+    identity
+}
+
+/// 函数职责：读取可选文件的完整字节，并严格区分缺失与 IO 错误。
+/// 输入说明：路径可以位于尚未创建的应用状态目录。
+/// 输出说明：仅 NotFound 返回 None，其他错误原样映射为稳定文件错误。
+/// 实现思路：共用一次原始字节读取，供配置和恢复校验解码。
+pub fn read_optional_bytes(path: &Path) -> Result<Option<Vec<u8>>, FileError> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(FileError::io(error)),
+    }
+}
+
+/// 函数职责：在原文件同目录永久保留一份不可覆盖的损坏字节备份。
+/// 输入说明：bytes 是此次已读取的原始内容，不重新序列化；原文件在本函数中只读。
+/// 输出说明：成功返回唯一备份路径，失败不删除或覆盖原文件。
+/// 实现思路：排他创建带 corrupt 标记的随机名称文件，刷新内容后保留为永久备份。
+pub fn backup_corrupt_bytes(path: &Path, bytes: &[u8]) -> Result<PathBuf, FileError> {
+    let parent = path
+        .parent()
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut backup = tempfile::Builder::new()
+        .prefix(".foldmark.corrupt-")
+        .suffix(".backup")
+        .tempfile_in(parent)
+        .map_err(FileError::io)?;
+    backup.write_all(bytes).map_err(FileError::io)?;
+    backup.as_file().sync_all().map_err(FileError::io)?;
+    // keep 只保留本次排他创建的随机路径，不通过覆盖式 persist 复用任何已有备份名。
+    let (_file, backup_path) = backup.keep().map_err(|error| FileError::io(error.error))?;
+    sync_parent(&backup_path)?;
+    Ok(backup_path)
 }
 
 fn snapshot(path: &Path, bytes: &[u8]) -> Result<FileSnapshot, FileError> {
@@ -229,10 +275,8 @@ pub fn save_json(path: &Path, value: &serde_json::Value) -> Result<(), FileError
 /// 输出说明：仅缺失返回 None；损坏和权限错误不伪装为空配置。
 /// 实现思路：读取后解析 JSON，独立映射错误。
 pub fn load_json(path: &Path) -> Result<Option<serde_json::Value>, FileError> {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(FileError::io(error)),
+    let Some(bytes) = read_optional_bytes(path)? else {
+        return Ok(None);
     };
     serde_json::from_slice(&bytes)
         .map(Some)

@@ -4,12 +4,13 @@
   import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { BrowserFilePort, defaultPreferences, welcomeText } from './lib/browser-files';
-  import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, ViewMode } from './lib/contracts';
+  import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, RecoveryDraft, ViewMode } from './lib/contracts';
   import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
   import type { ProjectSession, TaskResult } from './lib/session/types';
   import { parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
+  import { validateAppConfig } from './lib/config-validation';
 
   const desktop = isTauri();
   let files: FilePort;
@@ -21,6 +22,8 @@
   let active = $state.raw<ProjectSession | null>(null);
   let config = $state<AppConfig>({ projects: [], activeProjectId: null, preferences: { ...defaultPreferences }, projectViews: {} });
   let ready = $state(false);
+  let configReady = $state(false);
+  let configError = $state('');
   let switching = false;
   let openGeneration = 0;
   let version = $state(0);
@@ -31,7 +34,9 @@
   let searchOpen = $state(false);
   let includeArchived = $state(false);
   let results = $state<TaskResult[]>([]);
+  let resultLimit = $state(100);
   let aggregateResults = $state<TaskResult[]>([]);
+  let aggregateLimits = $state<Record<string, number>>({});
   let indexing = $state(false);
   let indexGeneration = 0;
   const indexCache = new Map<string, { text: string; model: DocumentModel }>();
@@ -67,7 +72,7 @@
     document.documentElement.style.setProperty('--document-font', p.fontFamily);
     document.documentElement.style.setProperty('--document-size', `${p.fontSize}px`);
     document.documentElement.style.setProperty('--document-width', `${p.contentWidth}px`);
-    if (ready) scheduleConfig();
+    if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
 
@@ -80,12 +85,13 @@
     clearTimeout(configTimer);
     configTimer = setTimeout(() => { void persistConfig(); }, 250);
   }
-  async function persistConfig(): Promise<void> {
-    if (!files) return;
+  async function persistConfig(): Promise<boolean> {
+    if (!files || !configReady) return false;
     captureUI();
     const snapshot = JSON.parse(JSON.stringify(config)) as AppConfig;
     configQueue = configQueue.catch(() => {}).then(() => files.saveConfig(snapshot));
-    try { await configQueue; } catch (error) { notify(`配置保存失败：${errorMessage(error)}`); }
+    try { await configQueue; configError = ''; return true; }
+    catch (error) { configError = `配置保存失败：${errorMessage(error)}`; notify(configError); return false; }
   }
   function captureUI(): void {
     if (!active || !editor || switching) return;
@@ -110,7 +116,10 @@
       let session = sessions.get(project.id);
       if (!session) {
         const disk = await files.read(project.path);
-        const draft = await files.loadRecovery(project.path);
+        let draft: RecoveryDraft | null = null;
+        let recoveryWarning = '';
+        try { draft = await files.loadRecovery(project.path); }
+        catch (error) { recoveryWarning = `恢复草稿无法读取：${errorMessage(error)}`; }
         if (generation !== openGeneration) return;
         const ui = freshUI(project);
         resourceDocumentPath = project.path;
@@ -124,11 +133,11 @@
         else editor.setText(disk.text, true);
         editor.setMode(ui.mode); editor.setUIState(ui);
         const current: ProjectSession = {
-          project, state: editor.state, ui, stopWatch: () => {}, status: { kind: 'saved', message: '所有更改已保存' },
+          project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: '所有更改已保存' },
           saver: undefined as unknown as SaveCoordinator,
         };
         current.saver = new SaveCoordinator({
-          files, snapshot: disk, getText: () => current.state.doc.toString(),
+          files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
           reload: text => {
             if (active?.project.id === project.id && editor) {
               switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
@@ -189,7 +198,7 @@
       // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
       await new Promise(resolve => setTimeout(resolve, 0));
     }
-    if (generation === indexGeneration) { results = found; aggregateResults = allFound; indexing = false; }
+    if (generation === indexGeneration) { results = found; resultLimit = 100; aggregateResults = allFound; indexing = false; }
   }
   async function locate(result: TaskResult): Promise<void> {
     const project = config.projects.find(item => item.id === result.projectId);
@@ -311,7 +320,17 @@
         else notify('未找到链接对应的章节');
         return;
       }
-      if (desktop) { await (await import('./lib/files/tauri')).openExternalLink(url); return; }
+      if (desktop) {
+        const platform = await import('./lib/files/tauri');
+        if (/^(https?:|mailto:)/i.test(url) || url.startsWith('//')) { await platform.openExternalLink(url.startsWith('//') ? `https:${url}` : url); return; }
+        const path = resolveDocumentResource(resourceDocumentPath, url, path => path);
+        const project = config.projects.find(item => item.path.replace(/\\/g, '/').toLocaleLowerCase() === path.toLocaleLowerCase());
+        if (project) {
+          await openProject(project);
+          const hash = url.indexOf('#'); if (hash >= 0) await openDocumentLink(url.slice(hash));
+        } else await platform.openLocalDocument(path);
+        return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) { notify(errorMessage(error)); }
   }
@@ -330,14 +349,14 @@
     const initialize = async () => {
       try {
         files = desktop ? new (await import('./lib/files/tauri')).TauriFilePort() : new BrowserFilePort();
-        const loaded = await files.loadConfig();
+        const loaded = validateAppConfig(await files.loadConfig());
         if (loaded) config = { ...loaded, preferences: { ...defaultPreferences, ...loaded.preferences }, projectViews: loaded.projectViews ?? {} };
         else if (!desktop) {
           const path = '浏览器/开始.md';
           try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
           config.projects = [{ id: 'welcome', name: '开始', path }]; config.activeProjectId = 'welcome';
         }
-        if (disposed) return; ready = true;
+        if (disposed) return; configReady = true; ready = true;
         const project = config.projects.find(item => item.id === config.activeProjectId) ?? config.projects[0];
         if (project) await openProject(project);
         if (desktop) {
@@ -345,9 +364,9 @@
           unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
             event.preventDefault(); captureUI();
             const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
-            await persistConfig();
-            if (saved.every(Boolean)) await getCurrentWindow().destroy();
-            else notify('仍有未保存修改，请处理文件冲突或保存失败后关闭。恢复草稿已保留。');
+            const configured = await persistConfig();
+            if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
+            else notify('仍有正文或配置未保存，请处理保存失败后关闭。');
           });
         }
       } catch (error) { fatal = errorMessage(error); ready = true; }
@@ -406,7 +425,7 @@
       <section class="search-panel" aria-label="跨项目搜索">
         <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}>×</button></div>
         <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> 包含归档</label>
-        <div class="search-results">{#each results.slice(0, 100) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}</div>
+        <div class="search-results">{#each results.slice(0, resultLimit) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}{#if resultLimit < results.length}<button class="load-more" onclick={() => resultLimit += 100}>显示更多（还有 {results.length - resultLimit} 条）</button>{/if}</div>
       </section>
     {/if}
 
@@ -415,6 +434,8 @@
     {/if}
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
+    {#if configError}<div class="error-banner" role="alert">{configError}<button onclick={() => persistConfig()}>重试配置保存</button></div>{/if}
+    {#if active?.recoveryWarning}<div class="error-banner" role="alert">{active.recoveryWarning}。当前显示完好的 Markdown 原文件。</div>{/if}
     {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">磁盘文件有新的修改，你的编辑已保留。<button onclick={() => openDialog('conflict')}>比较并处理</button></div>{/if}
     {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">保存失败：{saveStatus.message}<button onclick={save}>重试保存</button><button onclick={() => exportMarkdown()}>另存副本</button><button onclick={relocate}>重新定位文件</button></div>{/if}
 
@@ -426,7 +447,7 @@
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
         {#each config.projects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
-          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span>{result.title}<small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}</section>{/if}
+          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span>{result.title}<small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}{#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}</section>{/if}
         {/each}
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>

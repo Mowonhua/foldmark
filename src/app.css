@@ -85,6 +85,7 @@ button svg{flex-shrink:0}
 .check-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);padding:10px 0}
 .check-label input{accent-color:var(--accent)}
 .search-results{max-height:350px;overflow:auto}
+.load-more{display:block;width:100%;padding:12px;border-top:1px solid var(--line);font-size:12px;color:var(--accent);text-align:center}
 .search-result{display:flex;flex-direction:column;width:100%;text-align:left;border-top:1px solid var(--line);padding:12px 7px;gap:7px;font-size:13px}
 .search-result small{color:var(--muted);font-size:10px}
 .aggregate{overflow:auto;flex:1;padding:45px max(35px,calc((100% - 800px)/2));}

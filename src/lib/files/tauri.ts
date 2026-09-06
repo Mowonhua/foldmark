@@ -20,6 +20,14 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
 export function openExternalLink(url: string): Promise<void> { return command('open_external_link', { url }); }
 
 /**
+ * 函数职责：用系统默认应用打开现存本地文档或目录。
+ * 输入说明：path 由应用解析 Markdown 相对路径得到。
+ * 输出说明：原生边界检查文件类型后打开，拒绝可执行或脚本目标。
+ * 实现思路：通过独立平台命令调用，不扩大正文读写端口。
+ */
+export function openLocalDocument(path: string): Promise<void> { return command('open_local_document', { path }); }
+
+/**
  * 接口职责：提供异步桌面文件访问能力。
  * 调用方：应用保存协调器与项目会话。
  * 实现要求：正文快照统一 LF，revision 覆盖原始字节，BOM 与 CRLF 由 Rust 保留。

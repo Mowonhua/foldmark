@@ -1,6 +1,7 @@
 //! 文件职责：连接桌面命令与文件基础设施。
 //! 定义范围：Tauri 启动入口和平台命令适配。
 mod external_link;
+mod recovery;
 mod storage;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
@@ -50,9 +51,7 @@ fn state_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, FileError> 
 
 /// Windows 的大小写和分隔符不应让同一关联产生多份恢复草稿；文件缺失时仍保留可寻址的草稿键。
 fn recovery_path(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, FileError> {
-    let identity = path.replace('\\', "/");
-    #[cfg(windows)]
-    let identity = identity.to_lowercase();
+    let identity = storage::file_identity(path);
     state_path(
         app,
         &format!(
@@ -85,6 +84,19 @@ async fn open_external_link(url: String, app: tauri::AppHandle) -> Result<(), Fi
     tauri::async_runtime::spawn_blocking(move || {
         app.opener()
             .open_url(validated, None::<&str>)
+            .map_err(|error| FileError::new("LINK_OPEN", error.to_string()))
+    })
+    .await
+    .map_err(|error| FileError::new("LINK_OPEN", error.to_string()))?
+}
+
+/// 本地资源打开独立于正文持久化；文件存在性与类型校验在后台线程执行。
+#[tauri::command]
+async fn open_local_document(path: String, app: tauri::AppHandle) -> Result<(), FileError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let validated = external_link::validated_local_document(Path::new(&path))?;
+        app.opener()
+            .open_path(validated, None::<&str>)
             .map_err(|error| FileError::new("LINK_OPEN", error.to_string()))
     })
     .await
@@ -143,9 +155,12 @@ async fn load_recovery(
     path: String,
     app: tauri::AppHandle,
     state: State<'_, FileState>,
-) -> Result<Option<Value>, FileError> {
-    let path = recovery_path(&app, &path)?;
-    disk(state.gate.clone(), move || storage::load_json(&path)).await
+) -> Result<Option<recovery::RecoveryDraft>, FileError> {
+    let stored_path = recovery_path(&app, &path)?;
+    disk(state.gate.clone(), move || {
+        recovery::load(&stored_path, &path)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -157,12 +172,11 @@ async fn save_recovery(
     let original_path = draft
         .get("path")
         .and_then(Value::as_str)
-        .ok_or_else(|| FileError::new("STATE_INVALID", "恢复草稿缺少路径。"))?;
-    let path = recovery_path(&app, original_path)?;
-    disk(state.gate.clone(), move || {
-        storage::save_json(&path, &draft)
-    })
-    .await
+        .unwrap_or("")
+        .to_owned();
+    let draft = recovery::validate(draft, &original_path)?;
+    let path = recovery_path(&app, &original_path)?;
+    disk(state.gate.clone(), move || recovery::save(&path, &draft)).await
 }
 
 #[tauri::command]
@@ -171,13 +185,9 @@ async fn clear_recovery(
     app: tauri::AppHandle,
     state: State<'_, FileState>,
 ) -> Result<(), FileError> {
-    let path = recovery_path(&app, &path)?;
+    let stored_path = recovery_path(&app, &path)?;
     disk(state.gate.clone(), move || {
-        match std::fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(FileError::io(error)),
-        }
+        recovery::clear(&stored_path, &path)
     })
     .await
 }
@@ -249,6 +259,7 @@ pub fn run() {
             read_file,
             canonical_file_path,
             open_external_link,
+            open_local_document,
             write_file,
             create_file,
             load_config,

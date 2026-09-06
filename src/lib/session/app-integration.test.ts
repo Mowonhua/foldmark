@@ -8,7 +8,24 @@ import App from '../../App.svelte';
 import { BrowserFilePort, defaultPreferences } from '../browser-files';
 import type { AppConfig, Project, ProjectView } from '../contracts';
 
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
+const desktopBoundary = vi.hoisted(() => ({
+  enabled: false,
+  close: null as null | ((event: { preventDefault: () => void }) => Promise<void>),
+  destroy: vi.fn(async () => {}),
+}));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path }));
+// 仅替换桌面 IO 与窗口事件边界，退出决策仍运行生产 App 代码。
+vi.mock('../files/tauri', async () => {
+  const { BrowserFilePort } = await import('../browser-files');
+  return { TauriFilePort: BrowserFilePort, openExternalLink: vi.fn(async () => {}) };
+});
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({
+  onCloseRequested: async (callback: (event: { preventDefault: () => void }) => Promise<void>) => {
+    desktopBoundary.close = callback;
+    return () => { desktopBoundary.close = null; };
+  },
+  destroy: desktopBoundary.destroy,
+}) }));
 
 const files = new BrowserFilePort();
 const firstProject: Project = { id: 'project-a', name: '甲项目', path: '浏览器/甲.md' };
@@ -18,6 +35,7 @@ let container: HTMLDivElement;
 
 /** jsdom 没有排版引擎；只补充几何 API，不替换真实编辑器、保存器或 App 行为。 */
 beforeEach(() => {
+  desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
   // Node 的实验性同名全局不代表浏览器存储，固定使用 jsdom 的真实 Storage。
   const browserStorage = (globalThis as unknown as { jsdom: { window: { localStorage: Storage } } }).jsdom.window.localStorage;
   vi.stubGlobal('localStorage', browserStorage);
@@ -250,5 +268,93 @@ describe('跨项目反馈和搜索范围', () => {
     const include = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('包含归档'))!.querySelector<HTMLInputElement>('input')!;
     include.click(); await tick();
     await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('聚合页归档目标'), { timeout: 3000 });
+  });
+});
+
+
+describe('完整搜索结果、失效路径和退出保存', () => {
+  it('损坏配置不会因初始化失败而被默认配置覆盖', async () => {
+    const raw = '{ this is invalid config'; localStorage.setItem('foldmark:config', raw);
+    const writes = vi.spyOn(BrowserFilePort.prototype, 'saveConfig');
+    mounted = mount(App, { target: container }); await tick();
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull());
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(writes).not.toHaveBeenCalled(); expect(localStorage.getItem('foldmark:config')).toBe(raw);
+  });
+
+  it('损坏恢复数据不会阻止完好的原文件打开，并保留独立提示', async () => {
+    vi.spyOn(BrowserFilePort.prototype, 'loadRecovery').mockRejectedValue(new Error('RECOVERY_INVALID: 原恢复文件已保留备份'));
+    await start(['# 完好原文件\n\n- [ ] 仍然可以查看\n']);
+    expect(documentInput().textContent).toContain('仍然可以查看');
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('RECOVERY_INVALID');
+    await shortcut('s');
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('RECOVERY_INVALID');
+  });
+
+  it('暂不恢复后正常保存和重新打开仍可找到草稿', async () => {
+    await start(['# 原文件\n\n- [ ] 磁盘内容\n']);
+    const disk = await files.read(firstProject.path);
+    const draft = { path: firstProject.path, text: '# 未保存的恢复内容\n', baseRevision: disk.revision, savedAt: Date.now() };
+    await files.saveRecovery(draft); await remount();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    button('暂不恢复').click(); await tick(); await shortcut('s');
+    expect((await files.loadRecovery(firstProject.path))?.text).toBe(draft.text);
+    await remount();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('未写入文件的草稿');
+  });
+
+  it('超过一百条同类搜索结果可继续加载并定位到末项原文', async () => {
+    const original = '# 大清单\n\n' + Array.from({ length: 105 }, (_, index) => `- [ ] 同类检索任务 ${index+1}\n`).join('');
+    await start([original]);
+    button(/^搜索/).click(); await tick();
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索所有项目"]')!;
+    search.value = '同类检索任务'; search.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.search-result')).toHaveLength(100));
+    expect(document.querySelector('.search-results')?.textContent).not.toContain('同类检索任务 105');
+    button(/显示更多/).click(); await tick();
+    expect(document.querySelectorAll('.search-result')).toHaveLength(105);
+    button(/待办.*同类检索任务 105/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="跨项目搜索"]')).toBeNull());
+    await paste('定位证据\n'); await shortcut('s');
+    const target = original.indexOf('- [ ] 同类检索任务 105');
+    await savedText(firstProject, original.slice(0,target)+'定位证据\n'+original.slice(target));
+  });
+
+  it('原路径失效后重新定位保留本地草稿，并在比较确认后写入新文件', async () => {
+    const original = '# 原清单\n\n- [ ] 旧任务\n';
+    const destination = '# 新文件\n\n- [ ] 新文件自己的任务\n';
+    await start([original]);
+    await files.create(secondProject.path,destination);
+    vi.spyOn(BrowserFilePort.prototype,'chooseFile').mockResolvedValue(secondProject.path);
+    button('＋ 新任务').click(); await tick(); await paste('迁移时不能丢的草稿');
+    const draft = `${original}- [ ] 迁移时不能丢的草稿`;
+    localStorage.removeItem(`foldmark:file:${firstProject.path}`);
+    await shortcut('s');
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('FILE_NOT_FOUND'));
+    button('重新定位文件').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('未写入文件的草稿'));
+    const versions = [...document.querySelectorAll<HTMLTextAreaElement>('[role="dialog"] textarea')].map(field=>field.value);
+    expect(versions).toEqual([draft,destination]);
+    expect((await files.read(secondProject.path)).text).toBe(destination);
+    expect((await files.loadRecovery(secondProject.path))?.text).toBe(draft);
+    button('恢复草稿继续编辑').click(); await tick(); await shortcut('s');
+    await savedText({ ...firstProject,path:secondProject.path },draft);
+    await expect(files.read(firstProject.path)).rejects.toThrow('FILE_NOT_FOUND');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects[0].path).toBe(secondProject.path));
+  });
+
+  it('正文保存成功但配置保存失败时阻止桌面窗口退出，重试成功才销毁', async () => {
+    desktopBoundary.enabled = true;
+    await start(['# 甲清单\n\n- [ ] 保留项目关联\n']);
+    await vi.waitFor(() => expect(desktopBoundary.close).not.toBeNull());
+    const saveConfig = vi.spyOn(BrowserFilePort.prototype,'saveConfig').mockRejectedValue(new Error('FILE_PERMISSION: 配置目录不可写'));
+    const preventDefault = vi.fn();
+    await desktopBoundary.close!({ preventDefault }); await tick();
+    expect(preventDefault).toHaveBeenCalled();
+    expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+    expect(documentInput().textContent).toContain('保留项目关联');
+    saveConfig.mockRestore();
+    await desktopBoundary.close!({ preventDefault });
+    expect(desktopBoundary.destroy).toHaveBeenCalledTimes(1);
   });
 });

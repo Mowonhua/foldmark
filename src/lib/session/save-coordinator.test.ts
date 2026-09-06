@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FilePort, FileSnapshot } from '../contracts';
 import { SaveCoordinator } from './save-coordinator';
 
-function fixture() {
+function fixture(preserveRecovery = false) {
   let disk: FileSnapshot = { path: 'a.md', text: 'base', revision: '1' };
   let text = 'base';
   const status = vi.fn();
@@ -16,11 +16,28 @@ function fixture() {
     }),
     saveRecovery: vi.fn(async () => {}), clearRecovery: vi.fn(async () => {}),
   } as unknown as FilePort;
-  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload: value => { text = value; }, onStatus: status, delay: 60000 });
+  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload: value => { text = value; }, onStatus: status, delay: 60000, preserveRecovery });
   return { saver, files, status, setText: (value: string) => { text = value; saver.changed(); }, getText: () => text, external: (value: string) => { disk = { ...disk, text: value, revision: '9' }; }, disk: () => disk };
 }
 
 describe('单文档保存协调', () => {
+  it('暂不恢复已有草稿时，无编辑保存不会删除该草稿', async () => {
+    const f = fixture(true);
+    expect(await f.saver.flush()).toBe(true);
+    expect(f.files.clearRecovery).not.toHaveBeenCalled(); f.saver.dispose();
+  });
+  it('选用磁盘版本后，正常关闭仍保留被替换的本地恢复稿', async () => {
+    const f = fixture(); f.setText('local draft'); f.external('disk version');
+    await f.saver.acceptExternal(f.disk());
+    expect(await f.saver.flush()).toBe(true);
+    expect(f.files.saveRecovery).toHaveBeenCalledWith(expect.objectContaining({ text: 'local draft' }));
+    expect(f.files.clearRecovery).not.toHaveBeenCalled(); f.saver.dispose();
+  });
+  it('已有草稿被明确恢复并成功写回后可清理恢复文件', async () => {
+    const f = fixture(true); f.setText('restored content');
+    expect(await f.saver.flush()).toBe(true);
+    expect(f.files.clearRecovery).toHaveBeenCalled(); f.saver.dispose();
+  });
   it('合并连续输入并只保存最新快照', async () => {
     const f = fixture(); f.setText('one'); f.setText('two');
     expect(await f.saver.flush()).toBe(true);

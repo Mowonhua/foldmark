@@ -7,7 +7,12 @@ import type { FilePort, FileSnapshot } from '../contracts';
 /** 结构职责：表示界面可解释的保存状态；冲突时保留最新磁盘快照供用户比较。 */
 export interface SaveStatus { kind: 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'; message: string; external?: FileSnapshot }
 /** 结构职责：绑定唯一编辑器文档与保存策略；reload 只在无本地修改或明确选用磁盘版本时调用。 */
-export interface SaveOptions { files: FilePort; snapshot: FileSnapshot; getText: () => string; reload: (text: string) => void; onStatus: (status: SaveStatus) => void; delay?: number }
+export interface SaveOptions {
+  files: FilePort; snapshot: FileSnapshot; getText: () => string; reload: (text: string) => void;
+  onStatus: (status: SaveStatus) => void; delay?: number;
+  /** 已有草稿尚未恢复或用户选用了磁盘版本时，无编辑的保存/关闭不能删除草稿。 */
+  preserveRecovery?: boolean;
+}
 /**
  * 接口职责：按顺序保存最新文本并保护磁盘基线。
  * 调用方：每项目一个会话；非当前会话仍可完成保存。
@@ -23,8 +28,9 @@ export class SaveCoordinator {
   private disposed = false;
   private externalGeneration = 0;
   private externalCheckPending = false;
+  private preserveRecovery: boolean;
 
-  constructor(private readonly options: SaveOptions) { this.baseline = options.snapshot; }
+  constructor(private readonly options: SaveOptions) { this.baseline = options.snapshot; this.preserveRecovery = options.preserveRecovery ?? false; }
 
   /** 用于失效路径重定位；只读比较唯一编辑状态与已加载磁盘基线。 */
   get hasLocalChanges(): boolean { return this.options.getText() !== this.baseline.text; }
@@ -66,10 +72,11 @@ export class SaveCoordinator {
         const text = this.options.getText();
         this.options.onStatus({ kind: 'saving', message: '正在保存…' });
         this.baseline = await this.options.files.write(this.baseline.path, text, this.baseline.revision);
+        this.preserveRecovery = false;
       }
       // 清除草稿也必须排在所有已提交的恢复写入之后，避免旧草稿复活。
       await this.recoveryQueue;
-      await this.options.files.clearRecovery(this.baseline.path);
+      if (!this.preserveRecovery) await this.options.files.clearRecovery(this.baseline.path);
       if (this.options.getText() !== this.baseline.text) return this.saveLatest();
       this.options.onStatus({ kind: 'saved', message: '所有更改已保存' });
       return true;
@@ -120,6 +127,7 @@ export class SaveCoordinator {
     this.recoveryTimer = undefined;
     await this.persistRecovery();
     this.externalGeneration += 1;
+    this.preserveRecovery = true;
     this.baseline = snapshot; this.conflict = false;
     this.options.reload(snapshot.text);
     this.options.onStatus({ kind: 'saved', message: '已选用磁盘版本；原草稿保留在恢复数据中' });

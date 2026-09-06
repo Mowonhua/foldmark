@@ -10,9 +10,14 @@ describe('文档资源定位', () => {
     expect(resolveDocumentResource('D:/清单.md', 'https://example.com/a.png', convert)).toBe('https://example.com/a.png');
     expect(resolveDocumentResource('D:/清单.md', 'data:image/png;base64,YQ==', convert)).toBe('data:image/png;base64,YQ==');
     expect(resolveDocumentResource('D:/清单.md', '#小节', convert)).toBe('#小节');
+    expect(resolveDocumentResource('D:/清单.md', '//example.com/a.png', convert)).toBe('https://example.com/a.png');
   });
   it('正确处理盘符绝对路径与 UNC 共享', () => {
     expect(resolveDocumentResource('D:/docs/list.md', 'C:\\图\\a.png', convert)).toBe('asset:C:/图/a.png');
+    expect(resolveDocumentResource('D:/docs/list.md', 'file:///C:/图/a.png', convert)).toBe('asset:C:/图/a.png');
     expect(resolveDocumentResource('\\\\server\\share\\docs\\list.md', '../a.png', convert)).toBe('asset://server/share/a.png');
+  });
+  it('包含百分号的合法文件名不让中文目录解析失败', () => {
+    expect(resolveDocumentResource('D:/项目/清单.md', '完成100%.png', convert)).toBe('asset:D:/项目/完成100%.png');
   });
 });

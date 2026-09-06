@@ -11,12 +11,16 @@
  */
 export function resolveDocumentResource(documentPath: string, resource: string, convert: (path: string) => string): string {
   if (/^(?:https?:|mailto:|data:|#)/i.test(resource)) return resource;
+  if (resource.startsWith('//')) return `https:${resource}`;
   const document = documentPath.replace(/\\/g, '/');
   const target = resource.replace(/\\/g, '/');
   const base = document.startsWith('//') ? `file:${document}` : `file:///${document}`;
   const relative = /^[a-z]:\//i.test(target) ? `file:///${target}` : target;
   const url = new URL(relative, encodeURI(base).replace(/#/g, '%23').replace(/\?/g, '%3F'));
-  let path = decodeURIComponent(url.pathname);
+  // 单独保留损坏的百分号序列，避免一个无效资源地址使整份编辑器预览抛错。
+  let path = url.pathname.replace(/(?:%[\da-f]{2})+/gi, encoded => {
+    try { return decodeURIComponent(encoded); } catch { return encoded; }
+  });
   if (/^\/[a-z]:/i.test(path)) path = path.slice(1);
   if (url.host) path = `//${url.host}${path}`;
   return convert(path);
