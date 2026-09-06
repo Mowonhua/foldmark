@@ -127,6 +127,47 @@ async function savedText(project: Project, expected: string): Promise<void> {
 }
 
 describe('App 真实编辑与文件闭环', () => {
+  it('项目搜索按需打开，搜索内部点击保留、外部点击关闭且清除隐藏筛选', async () => {
+    await start(['# 甲\n', '# 乙\n']);
+    expect(document.getElementById('project-filter')).toBeNull();
+    button('查找项目').click(); await tick();
+    const filter = document.getElementById('project-filter') as HTMLInputElement;
+    expect(document.activeElement).toBe(filter);
+    filter.value = '乙'; filter.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    expect(document.querySelectorAll('.project-list button')).toHaveLength(1);
+    filter.click(); await tick();
+    expect(document.getElementById('project-filter')).toBe(filter);
+    await switchProject(secondProject);
+    expect(document.getElementById('project-filter')).toBeNull();
+    expect(document.querySelectorAll('.project-list button')).toHaveLength(2);
+    await shortcut('p');
+    expect(document.getElementById('project-filter')).not.toBeNull();
+    button(/^搜索/).click(); await tick();
+    expect(document.getElementById('project-filter')).toBeNull();
+    const globalSearch = document.getElementById('global-search') as HTMLInputElement;
+    globalSearch.click(); await tick();
+    expect(document.getElementById('global-search')).toBe(globalSearch);
+    documentInput().click(); await tick();
+    expect(document.getElementById('global-search')).toBeNull();
+  });
+
+  it('顶部星号跟随正文保存，底部源码入口切换真实编辑视图', async () => {
+    await start(['# 清单\n']);
+    expect(document.querySelector('.unsaved-mark')).toBeNull();
+    const sourceButton = button('完整源码');
+    expect(sourceButton.closest('footer')).not.toBeNull();
+    sourceButton.click(); await tick();
+    expect(sourceButton.getAttribute('aria-pressed')).toBe('true');
+    await insertTask();
+    expect(document.querySelector('.breadcrumb [aria-label="未保存"]')).not.toBeNull();
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n- [ ] ');
+    await vi.waitFor(() => expect(document.querySelector('.unsaved-mark')).toBeNull());
+    sourceButton.click(); await tick();
+    expect(sourceButton.getAttribute('aria-pressed')).toBe('false');
+    expect(button(/^待办/).classList.contains('tab-active')).toBe(true);
+  });
+
   it('围栏回车补全和语言输入通过真实保存路径持久化', async () => {
     const source = '# 代码\n\n```';
     await start([source], { [firstProject.id]: { mode: 'todo', cursor: source.length, scrollTop: 0, folded: [] } });

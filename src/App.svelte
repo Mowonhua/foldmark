@@ -31,6 +31,7 @@
   let screen = $state<'project' | 'all'>('project');
   let sidebar = $state(true);
   let projectFilter = $state('');
+  let projectSearchOpen = $state(false);
   let query = $state('');
   let searchOpen = $state(false);
   let includeArchived = $state(false);
@@ -61,6 +62,8 @@
   const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
   const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
   const saveStatus = $derived.by(() => { void version; return active?.status; });
+  // 按正文与磁盘基线比较，避免撤销回原文或仅恢复数据清理失败时误报未保存。
+  const hasUnsavedChanges = $derived.by(() => { void version; return active?.saver.hasLocalChanges ?? false; });
   const counts = $derived.by(() => {
     void version;
     if (!active) return { todo: 0, archive: 0 };
@@ -347,13 +350,33 @@
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) { notify(errorMessage(error)); }
   }
+  function closeProjectSearch(): void {
+    projectSearchOpen = false;
+    projectFilter = '';
+  }
+
+  function openProjectSearch(): void {
+    sidebar = true;
+    projectSearchOpen = true;
+    searchOpen = false;
+    void tick().then(() => document.getElementById('project-filter')?.focus());
+  }
+
+  /** 点击冒泡到窗口后再收起，确保项目选择、搜索结果定位先完成；触发按钮也属于弹窗内部。 */
+  function dismissSearch(event: MouseEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.closest('[data-project-search]')) closeProjectSearch();
+    if (!target.closest('[data-global-search]')) searchOpen = false;
+  }
+
   function keydown(event: KeyboardEvent): void {
     if (event.isComposing) return;
-    if (event.key === 'Escape') { dialog = null; searchOpen = false; menuOpen = false; return; }
+    if (event.key === 'Escape') { dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
-    if (event.key.toLowerCase() === 'p') { event.preventDefault(); sidebar = true; void tick().then(() => document.getElementById('project-filter')?.focus()); }
-    if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
+    if (event.key.toLowerCase() === 'p') { event.preventDefault(); openProjectSearch(); }
+    if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); closeProjectSearch(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
   }
 
   onMount(() => {
@@ -396,18 +419,23 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window onkeydown={keydown} onclick={dismissSearch} />
 
 <div class="app-shell" class:sidebar-hidden={!sidebar}>
   {#if sidebar}
     <aside class="sidebar" aria-label="项目导航">
       <div class="brand"><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航">‹</button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
-      <div class="sidebar-section"><span>项目</span><button class="icon-button" aria-label="新增项目" onclick={() => openDialog('project')}>+</button></div>
-      <input id="project-filter" class="project-filter" aria-label="快速查找项目" placeholder="查找项目…  Ctrl P" bind:value={projectFilter} />
+      <div class="sidebar-section"><span>项目</span><div class="project-actions">
+        <div class="project-search" data-project-search>
+          <button class="icon-button" aria-label="查找项目" title="查找项目 (Ctrl P)" aria-expanded={projectSearchOpen} aria-controls="project-search-panel" onclick={() => projectSearchOpen ? closeProjectSearch() : openProjectSearch()}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg></button>
+        </div>
+        <button class="icon-button" aria-label="新增项目" onclick={() => openDialog('project')}><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 3v14M3 10h14"/></svg></button>
+      </div></div>
+      {#if projectSearchOpen}<div id="project-search-panel" class="project-search-panel" data-project-search><input id="project-filter" class="project-filter" aria-label="快速查找项目" placeholder="查找项目…" bind:value={projectFilter} /></div>{/if}
       <nav class="project-list">
         {#each visibleProjects as project (project.id)}
-          <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id} onclick={() => openProject(project)} title={project.path}><span class="project-mark" aria-hidden="true">{project.name.slice(0, 1)}</span><span class="project-name">{project.name}</span></button>
+          <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id} onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
       <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
@@ -416,8 +444,8 @@
 
   <main class="main-pane">
     <header class="topbar">
-      <div class="breadcrumb">{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong></div>
-      <div class="top-actions"><button class="search-button" onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button></div>
+      <div class="breadcrumb">{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
+      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button></div>
       {#if menuOpen}<div class="dropdown" role="menu">
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
@@ -434,7 +462,7 @@
     </header>
 
     {#if searchOpen}
-      <section class="search-panel" aria-label="跨项目搜索">
+      <section class="search-panel" data-global-search aria-label="跨项目搜索">
         <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}>×</button></div>
         <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> 包含归档</label>
         <div class="search-results">{#each results.slice(0, resultLimit) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}{#if resultLimit < results.length}<button class="load-more" onclick={() => resultLimit += 100}>显示更多（还有 {results.length - resultLimit} 条）</button>{/if}</div>
@@ -442,7 +470,7 @@
     {/if}
 
     {#if screen === 'project'}
-      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive],['source','完整源码',null]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
+      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
@@ -464,7 +492,7 @@
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
     {/if}
-    <footer class="statusbar"><span>{desktop ? saveStatus?.message ?? '本地 Markdown 文件' : '浏览器预览 · 数据保存在此浏览器，可另存 Markdown'}</span><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
+    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label="完整源码" title="完整源码" aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={() => setMode(mode === 'source' ? 'todo' : 'source')}>&lt;/&gt;</button><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
   </main>
 </div>
 
