@@ -13,6 +13,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none;transition:background .12s,color .12s}
 button:disabled{opacity:.4;cursor:default}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* 文本类控件复用已有边框表示焦点；复选框、滑块及无边框按钮保留独立焦点环。 */
+input:not([type=checkbox]):not([type=radio]):not([type=range]):focus-visible,select:focus-visible,textarea:focus-visible{outline:none;border-color:var(--accent)}
 button:hover:not(:disabled){background:var(--hover)}
 input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:10px 12px;min-width:0}
 button,input{touch-action:manipulation}
@@ -41,7 +43,6 @@ button svg{flex-shrink:0}
 .project-search{display:flex}
 .project-search-panel{margin:4px 9px 8px;flex-shrink:0}
 .project-filter{display:block;width:100%;height:30px;font-size:11px;padding:5px 8px;background:transparent;border:1px solid var(--line);border-radius:4px}
-.project-filter:focus-visible{outline:none;border-color:var(--accent)}
 .project-filter::placeholder{color:var(--muted)}
 .project-list{overflow:auto;min-height:0}
 .project-list .nav-item{margin-bottom:4px}
@@ -88,7 +89,6 @@ button svg{flex-shrink:0}
 .search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:0 8px 28px #0000000a}
 .search-row{display:flex;align-items:center;gap:8px}
 .search-row input{flex:1;font-size:13px}
-.search-row input:focus-visible{outline:none;border-color:var(--accent)}
 .check-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);padding:10px 0}
 .check-label input{accent-color:var(--accent)}
 .search-results{max-height:350px;overflow:auto}
@@ -126,6 +126,7 @@ button svg{flex-shrink:0}
 .modal input[type=range]{padding:0;accent-color:var(--accent)}
 .file-buttons{display:flex;gap:10px;margin:20px 0}
 .file-buttons button,.modal-actions button:not(.primary){border:1px solid var(--line);border-radius:5px;padding:10px 12px;font-size:12px}
+.file-buttons button:focus-visible,.modal-actions button:not(.primary):focus-visible{outline:none;border-color:var(--accent)}
 .file-path{font-family:Consolas,monospace;font-size:11px!important;background:var(--sidebar);border-radius:4px;padding:10px;word-break:break-all}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:24px}
 .dialog-error{color:var(--danger);font-size:12px!important;margin:15px 0 0}
