@@ -69,7 +69,7 @@ describe('projection and discovery', () => {
     expect(visible).toContain('# work');expect(visible).toContain('- [ ] parent');expect(visible).toContain('archived body');expect(visible).not.toContain('unrelated');expect(visible).not.toContain('open');expect(visible).not.toContain('independent');
   });
   it('search shares ancestor completion and section semantics and ignores folded state', () => {
-    const m=parseDocument('# work\n\n- [x] parent\n  - [ ] hidden child\n- [ ] active child');expect(searchTasks(m,'child',false)).toHaveLength(1);expect(searchTasks(m,'hidden',true).at(-1)?.heading).toBe('work');expect(searchTasks(m,'active child',false)[0].title).toBe('active child');
+    const m=parseDocument('# work\n\n- [x] parent\n  - [x] hidden child\n- [ ] active child');expect(searchTasks(m,'child',false)).toHaveLength(1);expect(searchTasks(m,'hidden',true).at(-1)?.heading).toBe('work');expect(searchTasks(m,'active child',false)[0].title).toBe('active child');
   });
   it('fold keys follow unique unchanged text and decline ambiguous duplicates', () => {
     const m=parseDocument('- one\n  body\n- two\n');const key=foldKey(m,m.items[0]);const moved=parseDocument(apply(m.text,moveItemChanges(m,0,null)));expect(foldKey(moved,moved.items[1])).toBe(key);
@@ -93,5 +93,30 @@ describe('structural edge cases', () => {
   it('preserves a loose list when its last item moves before a preceding item', () => {
     const m=parseDocument('- one\n\n- two\n');const next=parseDocument(apply(m.text,moveItemChanges(m,m.items[1].from,0)));
     expect(next.text).toBe('- two\n\n- one\n\n');
+  });
+});
+
+describe('quoted and ordered list boundaries', () => {
+  it('moves quoted sibling items with all quote markers intact', () => {
+    const m=parseDocument('> - [ ] first\n>   body\n> - [ ] second\n');
+    const moved=apply(m.text,moveItemChanges(m,m.tasks[1].from,m.tasks[0].from));
+    expect(moved).toBe('> - [ ] second\n> - [ ] first\n>   body\n');expect(parseDocument(moved).tasks).toHaveLength(2);
+  });
+  it('does not rewrite ordered source markers during sorting', () => {
+    const m=parseDocument('4. [ ] alpha\n5. [ ] beta\n6. [x] gamma\n');
+    expect(apply(m.text,moveItemChanges(m,m.tasks[1].from,m.tasks[0].from))).toBe('5. [ ] beta\n4. [ ] alpha\n6. [x] gamma\n');
+  });
+});
+
+describe('inconsistent completion imported from source', () => {
+  it('keeps unchecked descendants reachable when an imported parent is already checked', () => {
+    const m=parseDocument('- [x] parent\n  - [ ] unfinished\n  - [x] finished\n');
+    const visible=apply(m.text,getHiddenRanges(m,'todo').map(range=>({...range,insert:''})));
+    expect(visible).toContain('parent');expect(visible).toContain('unfinished');expect(visible).not.toContain('- [x] finished');
+    expect(searchTasks(m,'unfinished',false)).toHaveLength(1);
+  });
+  it('explicit group completion completes remaining descendants even if parent was already checked', () => {
+    const m=parseDocument('- [x] parent\n  - [ ] unfinished\n');const changes=taskToggleChanges(m,0,true);
+    expect(apply(m.text,changes)).toBe('- [x] parent\n  - [x] unfinished\n');expect(changes).toHaveLength(1);
   });
 });

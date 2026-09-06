@@ -5,5 +5,5 @@
 export type * from './types';
 export { parseDocument } from './parse';
 export { taskToggleChanges, moveItemChanges, moveItemPosition, indentItemChanges } from './transactions';
-export { getHiddenRanges, searchTasks, foldKey } from './projection';
+export { getHiddenRanges, searchTasks, foldKey, taskIsArchived } from './projection';
 export { markdownExtensions, mathExtension } from './syntax';

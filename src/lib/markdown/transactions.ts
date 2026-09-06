@@ -12,17 +12,17 @@ function requireItem(model: DocumentModel, from: number): ListItem {
 }
 /**
  * 函数职责：生成完成、整组完成或恢复的状态字符替换。
- * 输入说明：存在未完成后代时，完成父项要求 completeGroup=true。
+ * 输入说明：completeGroup=true 明确完成所有后代，即使父项已勾选；否则反转父项并检查后代。
  * 输出说明：全部更改相对旧快照且互不重叠，恢复包含所有已完成祖先。
  * 实现思路：限定子树任务集合，恢复时沿父链回溯。
  */
 export function taskToggleChanges(model: DocumentModel, itemFrom: number, completeGroup = false): TextChange[] {
   const item = requireItem(model, itemFrom);
   if (!item.task) throw new Error('NOT_A_TASK');
-  const checked = !item.task.checked;
+  const checked = completeGroup || !item.task.checked;
   const descendants = model.tasks.filter(task => task.from > item.from && task.to <= item.to);
   if (checked && !completeGroup && descendants.some(task => !task.task!.checked)) throw new Error('TASK_GROUP_REQUIRED');
-  const targets = [item];
+  const targets = item.task.checked === checked ? [] : [item];
   if (checked && completeGroup) targets.push(...descendants.filter(task => !task.task!.checked));
   if (!checked) {
     const byFrom = new Map(model.items.map(entry => [entry.from, entry]));
@@ -38,11 +38,11 @@ export function taskToggleChanges(model: DocumentModel, itemFrom: number, comple
 /** 校验同列表同父级落点，返回未删除源项之前的插入位置。 */
 function moveTarget(model: DocumentModel, source: ListItem, beforeFrom: number | null): number {
   const siblings = model.items.filter(item => item.listFrom === source.listFrom && item.parentFrom === source.parentFrom);
-  // 同一物理行内的嵌套列表无法独立搬移，必须先通过正常输入建立独立行。
-  if (source.from !== source.moveFrom && model.text.slice(source.moveFrom, source.from).trim()) throw new Error('INVALID_MOVE');
+  // 引用前缀随完整行保留；同一行中的父级列表标记不能随子项一起移动。
+  if (!/^[ \t>]*$/.test(model.text.slice(source.moveFrom, source.from))) throw new Error('INVALID_MOVE');
   if (beforeFrom === null) return siblings.at(-1)!.moveTo;
   const target = siblings.find(item => item.from === beforeFrom);
-  if (!target || model.text.slice(target.moveFrom, target.from).trim()) throw new Error('INVALID_MOVE');
+  if (!target || !/^[ \t>]*$/.test(model.text.slice(target.moveFrom, target.from))) throw new Error('INVALID_MOVE');
   return target.moveFrom;
 }
 /**

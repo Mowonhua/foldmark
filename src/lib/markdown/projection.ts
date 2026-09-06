@@ -5,10 +5,22 @@
 import type { DocumentModel, HiddenRange, ListItem, TaskSearchResult } from './types';
 import { afterLine } from './parse';
 
-/** 按前序关系一次传播完成状态，普通列表祖先也参与父链连接。 */
+const archiveStates = new WeakMap<DocumentModel, Map<number, boolean>>();
+/** 外部源文可以包含已勾父项和未完成后代；此时只归档真正完成的子树。 */
 function archivedItems(model: DocumentModel): Map<number, boolean> {
+  const cached = archiveStates.get(model);
+  if (cached) return cached;
+  const incomplete = new Set<number>();
+  for (let index = model.items.length - 1; index >= 0; index--) {
+    const item = model.items[index];
+    if (item.task && !item.task.checked) incomplete.add(item.from);
+    if (incomplete.has(item.from) && item.parentFrom !== null) incomplete.add(item.parentFrom);
+  }
   const archived = new Map<number, boolean>();
-  for (const item of model.items) archived.set(item.from, !!item.task?.checked || (item.parentFrom !== null && !!archived.get(item.parentFrom)));
+  for (const item of model.items) {
+    archived.set(item.from, (!!item.task?.checked && !incomplete.has(item.from)) || (item.parentFrom !== null && !!archived.get(item.parentFrom)));
+  }
+  archiveStates.set(model, archived);
   return archived;
 }
 /** 合并已排序的重叠范围，避免编辑器收到重叠的替换装饰。 */
@@ -31,7 +43,7 @@ function mergeRanges(ranges: HiddenRange[]): HiddenRange[] {
 export function getHiddenRanges(model: DocumentModel, mode: 'todo' | 'archive' | 'source'): HiddenRange[] {
   if (mode === 'source') return [];
   const archived = archivedItems(model);
-  const completedRoots = model.tasks.filter(item => item.task!.checked && (item.parentFrom === null || !archived.get(item.parentFrom)));
+  const completedRoots = model.tasks.filter(item => archived.get(item.from) && (item.parentFrom === null || !archived.get(item.parentFrom)));
   if (mode === 'todo') return completedRoots.map(item => ({ from: item.moveFrom, to: item.moveTo, parentFrom: item.parentFrom, count: 1 }));
   const byFrom = new Map(model.items.map(item => [item.from,item]));
   const visible: HiddenRange[] = [];
@@ -112,3 +124,10 @@ export function foldKey(model: DocumentModel, item: ListItem): string {
   const content = model.text.slice(item.from,item.to);
   return counts.get(content) === 1 ? `item:${content}` : '';
 }
+/**
+ * 函数职责：判断条目是否属于可整体归档的已完成子树。
+ * 输入说明：item 来自同一模型；外部原文中已勾父项可能仍含未完成后代。
+ * 输出说明：此类不完整父项保留待办上下文，不视为已整体归档。
+ * 实现思路：先自底向上标记未完成后代，再按前序传播有效归档状态并缓存。
+ */
+export function taskIsArchived(model: DocumentModel, item: ListItem): boolean { return archivedItems(model).get(item.from) ?? false; }
