@@ -1,0 +1,1502 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-09-06T05:55:48.9672581Z",
+  "purpose": "Windows 原生功能验证与已运行进程内存抽样；这是开发过程证据，不是最终验收报告。",
+  "tested_build": {
+    "product": "Foldmark",
+    "version": "0.1.0",
+    "profile": "release",
+    "platform": "windows-x86_64",
+    "binary_last_write_utc": "2026-09-06T05:45:10.9049409Z",
+    "process_started_at_utc": "2026-09-06T05:45:30.865562Z",
+    "binary_size_bytes": 11802112,
+    "binary_sha256": "ed3d9003d9e68d9f8140f8b24114af26310f3bf3292f3e6392cf090f28b41980",
+    "source_commit": null,
+    "source_commit_note": "构建来自开发中的工作区；不能将后续源码提交或最终安装包归为此测量对象。",
+    "installer": {
+      "name": "Foldmark_0.1.0_x64-setup.exe",
+      "build_succeeded": true,
+      "size_bytes": 3320166,
+      "sha256": "9fa85b3ebe04ab0958ef45426971d0009536750463b3403c6fa64b5a7bbaf4f5",
+      "note": "中间安装包已生成；此处未执行安装器，不代表最终交付包或安装验证。",
+      "webview2_mode": "downloadBootstrapper",
+      "webview2_dependency_note": "安装包不包含完整 WebView2 运行时；本机使用已安装运行时，缺少运行时的设备需要下载。"
+    }
+  },
+  "environment": {
+    "os_caption": "Microsoft Windows 11 家庭版 中文版",
+    "os_version": "10.0.26200",
+    "os_build": "26200",
+    "cpu": "Intel(R) Core(TM) Ultra 7 255HX",
+    "logical_processors": 20,
+    "physical_memory_bytes": 33738285056,
+    "webview2_version": "152.0.4191.66",
+    "architecture": "x64"
+  },
+  "fixture": {
+    "label": "隔离临时 Markdown 清单",
+    "associated_projects": 1,
+    "document_bytes_at_sampling_start": 87,
+    "document_bytes_at_report": 87,
+    "encoding": "UTF-8 with BOM",
+    "line_ending": "CRLF",
+    "content_included": false,
+    "path_included": false,
+    "note": "不包含正文或个人路径。实际文档可能在原生窗口中被继续编辑；此场景远小于 20 项目与 5000 任务的目标验收负载。"
+  },
+  "verification": {
+    "rust": {
+      "tests_passed": 9,
+      "tests_command": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
+      "clippy_passed": true,
+      "clippy_command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+      "coverage": [
+        "陈旧内容基线与外部修改冲突拒绝覆盖",
+        "同基线并发保存只成功一次",
+        "创建文件拒绝覆盖现存文件",
+        "非法 UTF-8 与损坏 JSON 独立报错",
+        "BOM、CRLF 与混合换行保留",
+        "恢复 JSON 原子落盘与再次读回",
+        "路径别名归一化",
+        "目录监听跨原子替换、删除及重新创建",
+        "外链协议白名单"
+      ]
+    },
+    "native_observed": [
+      {
+        "check": "中文 BOM/CRLF 文件载入原生窗口",
+        "result": "passed",
+        "method": "通过 Windows Computer Use 读取真实 Tauri 窗口。"
+      },
+      {
+        "check": "外部文件修改经 notify 载入窗口",
+        "result": "passed",
+        "method": "修改隔离文件后观察到原生窗口显示新内容。"
+      },
+      {
+        "check": "编辑会话保存一致性",
+        "result": "issue_found_and_fixed",
+        "method": "首次原生复选框测试揭露 UI 已完成但磁盘未保存；应用层修复 Svelte 深代理与原始会话引用分离问题。"
+      },
+      {
+        "check": "修复后原生编辑落盘",
+        "result": "observed",
+        "method": "原生进程运行期间，只读确认隔离清单新增任务已实际落盘，BOM 与 CRLF 保留。未将受到用户输入干扰的代理点击计为自动化通过。"
+      },
+      {
+        "check": "首次测试进程正常关闭",
+        "result": "passed",
+        "method": "Alt+F4 后进程退出；窗口关闭与 destroy 权限生效。"
+      }
+    ],
+    "pending": [
+      "最新版本完整原生复选框自动保存复验",
+      "真实异常退出与重启后的恢复对话框验收",
+      "系统中文输入法候选期间 Enter 行为",
+      "最终安装包的安装、启动与升级验证"
+    ],
+    "interaction_limit": "后续窗口最小化且持续检测到用户输入，按 Computer Use 恢复限制停止 UI 操作；未强停进程。",
+    "configuration_state": "隔离测试配置和用户可能继续输入的测试内容保留，未在进程运行时恢复或删除；恢复工作由主任务后续协调。"
+  },
+  "memory_measurement": {
+    "started_at_utc": "2026-09-06T05:53:33.7319476Z",
+    "ended_at_utc": "2026-09-06T05:53:58.84199Z",
+    "sample_count": 20,
+    "sampling_loop_duration_seconds": 25.527,
+    "requested_delay_between_samples_ms": 1000,
+    "process_discovery": "每次查询 Win32_Process，从唯一 Foldmark 主进程按 ParentProcessId 递归收集后代，仅累计主进程与其 msedgewebview2.exe 后代。",
+    "root_pid": 22884,
+    "root_present_in_all_samples": true,
+    "process_count_min": 7.0,
+    "process_count_max": 7.0,
+    "metric_definitions": {
+      "working_set_bytes": "System.Diagnostics.Process.WorkingSet64，各进程当前驻留工作集之和；共享页可能在多个进程重复计数。",
+      "private_memory_bytes": "System.Diagnostics.Process.PrivateMemorySize64，各进程私有提交内存之和，不等同于驻留物理内存。",
+      "sum_process_lifetime_peak_working_set_bytes": "各进程 PeakWorkingSet64 生命周期峰值之和；这些峰值不一定同时发生，不能称为实际同时峰值。",
+      "sampled_maximum": "20 个采样时点中的最大总值；不覆盖采样间隔内未观察到的尖峰。",
+      "mib": "1 MiB = 1048576 bytes"
+    },
+    "summary": {
+      "working_set_min_bytes": 524386304,
+      "working_set_max_bytes": 524525568,
+      "working_set_p95_bytes": 524525568,
+      "working_set_mean_bytes": 524404531,
+      "private_memory_min_bytes": 264015872,
+      "private_memory_max_bytes": 264171520,
+      "private_memory_p95_bytes": 264167424,
+      "private_memory_mean_bytes": 264039219,
+      "maximum_sum_of_process_lifetime_peak_working_sets_bytes": 596070400
+    },
+    "limitations": [
+      "进程在抽样前已经运行约 8 分钟，此测量不是冷启动。",
+      "用户可能正在操作或最小化窗口，未控制前台状态、系统负载及输入。",
+      "仅覆盖一个 87 字节清单，不能替代 20 项目、5000 任务的正式场景。",
+      "这不是最终安装包的测量；后续源码、打包与依赖变更需要重新验证。",
+      "按父子关系排除了其他应用的 WebView2 进程；采样间隔内已退出的短命进程与未观察到的尖峰不计。",
+      "总 WorkingSet 包含重复计算的共享页，不等于该应用独占的物理内存。",
+      "未预设该指标下的通过阈值，不能将这组结果宣称为性能目标已达标。"
+    ],
+    "samples": [
+      {
+        "index": 1,
+        "timestamp_utc": "2026-09-06T05:53:33.7319476Z",
+        "elapsed_seconds": 0.416,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264015872,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177754112,
+            "private_memory_bytes": 72667136,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20410368,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99786752,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "timestamp_utc": "2026-09-06T05:53:35.1199178Z",
+        "elapsed_seconds": 1.804,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524398592,
+        "private_memory_bytes": 264019968,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99786752,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "timestamp_utc": "2026-09-06T05:53:36.4821441Z",
+        "elapsed_seconds": 3.166,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264019968,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "timestamp_utc": "2026-09-06T05:53:37.7562831Z",
+        "elapsed_seconds": 4.44,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "timestamp_utc": "2026-09-06T05:53:39.0652055Z",
+        "elapsed_seconds": 5.749,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "timestamp_utc": "2026-09-06T05:53:40.3577807Z",
+        "elapsed_seconds": 7.042,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "timestamp_utc": "2026-09-06T05:53:41.7209872Z",
+        "elapsed_seconds": 8.405,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524525568,
+        "private_memory_bytes": 264167424,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177897472,
+            "private_memory_bytes": 72818688,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "timestamp_utc": "2026-09-06T05:53:43.0200115Z",
+        "elapsed_seconds": 9.704,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264019968,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "timestamp_utc": "2026-09-06T05:53:44.2930046Z",
+        "elapsed_seconds": 10.977,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264019968,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "timestamp_utc": "2026-09-06T05:53:45.5970998Z",
+        "elapsed_seconds": 12.281,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 11,
+        "timestamp_utc": "2026-09-06T05:53:46.9288489Z",
+        "elapsed_seconds": 13.613,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 12,
+        "timestamp_utc": "2026-09-06T05:53:48.2756842Z",
+        "elapsed_seconds": 14.96,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 13,
+        "timestamp_utc": "2026-09-06T05:53:49.6123184Z",
+        "elapsed_seconds": 16.296,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 14,
+        "timestamp_utc": "2026-09-06T05:53:50.9627182Z",
+        "elapsed_seconds": 17.647,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524390400,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177762304,
+            "private_memory_bytes": 72675328,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107040768,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 15,
+        "timestamp_utc": "2026-09-06T05:53:52.3093834Z",
+        "elapsed_seconds": 18.993,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524525568,
+        "private_memory_bytes": 264171520,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177897472,
+            "private_memory_bytes": 72818688,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 16,
+        "timestamp_utc": "2026-09-06T05:53:53.6241884Z",
+        "elapsed_seconds": 20.308,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 17,
+        "timestamp_utc": "2026-09-06T05:53:54.9772237Z",
+        "elapsed_seconds": 21.661,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 18,
+        "timestamp_utc": "2026-09-06T05:53:56.3333577Z",
+        "elapsed_seconds": 23.017,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 19,
+        "timestamp_utc": "2026-09-06T05:53:57.5756056Z",
+        "elapsed_seconds": 24.259,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524386304,
+        "private_memory_bytes": 264024064,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177758208,
+            "private_memory_bytes": 72671232,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      },
+      {
+        "index": 20,
+        "timestamp_utc": "2026-09-06T05:53:58.84199Z",
+        "elapsed_seconds": 25.526,
+        "root_present": true,
+        "process_count": 7,
+        "working_set_bytes": 524423168,
+        "private_memory_bytes": 264060928,
+        "sum_process_lifetime_peak_working_set_bytes": 596070400,
+        "processes": [
+          {
+            "pid": 22884,
+            "parent_pid": 37200,
+            "name": "foldmark.exe",
+            "working_set_bytes": 30879744,
+            "private_memory_bytes": 6668288,
+            "process_lifetime_peak_working_set_bytes": 36749312
+          },
+          {
+            "pid": 34268,
+            "parent_pid": 22884,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 177795072,
+            "private_memory_bytes": 72708096,
+            "process_lifetime_peak_working_set_bytes": 198524928
+          },
+          {
+            "pid": 42020,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 14925824,
+            "private_memory_bytes": 3387392,
+            "process_lifetime_peak_working_set_bytes": 21024768
+          },
+          {
+            "pid": 35800,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 140599296,
+            "private_memory_bytes": 107044864,
+            "process_lifetime_peak_working_set_bytes": 174018560
+          },
+          {
+            "pid": 27732,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 40034304,
+            "private_memory_bytes": 12550144,
+            "process_lifetime_peak_working_set_bytes": 41021440
+          },
+          {
+            "pid": 5900,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 20414464,
+            "private_memory_bytes": 8785920,
+            "process_lifetime_peak_working_set_bytes": 20537344
+          },
+          {
+            "pid": 5488,
+            "parent_pid": 34268,
+            "name": "msedgewebview2.exe",
+            "working_set_bytes": 99774464,
+            "private_memory_bytes": 52916224,
+            "process_lifetime_peak_working_set_bytes": 104194048
+          }
+        ]
+      }
+    ]
+  }
+}

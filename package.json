@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:app": "vitest run --config vitest.app.config.ts",
     "benchmark:core": "vite-node scripts/benchmark-core.ts",
-    "test:e2e": "playwright test",
+    "benchmark:browser:build": "vite build --config tests/vite.perf.config.ts",
+    "benchmark:browser": "vite preview --config tests/vite.perf.config.ts",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -27,7 +28,6 @@
     "svelte": "^5.39.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.0",
     "@tauri-apps/cli": "^2.8.4",
     "@types/katex": "^0.16.7",

@@ -1,0 +1,2090 @@
+{
+  "schema": "foldmark.browser-interaction-performance.v1",
+  "generatedAt": "2026-09-06T06:20:16.495Z",
+  "phase": "idle",
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 20,
+    "language": "zh-CN",
+    "viewport": {
+      "width": 1280,
+      "height": 720,
+      "devicePixelRatio": 1.5
+    },
+    "visibility": "visible",
+    "timeOrigin": 1788675270634.7,
+    "location": "/tests/browser-performance.html"
+  },
+  "fixture": {
+    "generator": "deterministic-project-task-cycle-v1",
+    "projectCount": 20,
+    "mountedEditorViews": 1,
+    "main": {
+      "taskCount": 5000,
+      "utf8Bytes": 576584,
+      "maxTaskDepth": 2,
+      "inlineFormulaCount": 250,
+      "blockFormulaCount": 50,
+      "codeBlockCount": 200,
+      "characters": 293184,
+      "actualParsedTasks": 5000,
+      "actualMaxDepth": 2
+    },
+    "background": {
+      "projectCount": 19,
+      "tasksPerProject": 250,
+      "totalTasks": 4750,
+      "totalCharacters": 275409,
+      "totalUtf8Bytes": 544734,
+      "retainedAs": "Read-only shared syntax models; no background EditorView"
+    },
+    "scenarioLoad": {
+      "indexingMs": 49,
+      "editorConstructionMs": 81.20000000111759,
+      "totalToReadyMs": 166
+    }
+  },
+  "measurementBoundaries": {
+    "input": "Trusted beforeinput capture to next requestAnimationFrame callback; not final pixels, layout completion, or presentation timestamp.",
+    "checkbox": "Trusted pointerup capture or keyboard click capture to next requestAnimationFrame callback; completion text must have committed.",
+    "dispatch": "Elapsed synchronous execution of the actual EditorView.dispatch public method when its document changes; includes synchronous DOM updates, excludes later layout and paint.",
+    "aggregation": "First 20 visible-page trusted events with a document change observed before their next rAF. P95 is nearest-rank ceil(0.95*N). Raw excluded samples are retained.",
+    "nativeEventTiming": "Auxiliary only: requested durationThreshold=16ms, duration is quantized to 8ms. Missing entries are not zero and cannot establish a sub-16ms percentile.",
+    "instrumentation": "The JSON report textarea is frozen while sampling. Only compact counters update after measured frames; full serialization happens after sampling stops.",
+    "excludedProductMetrics": [
+      "Tauri cold startup",
+      "WebView2 runtime installation",
+      "WebView2 aggregate process memory",
+      "disk saving",
+      "final pixel presentation"
+    ],
+    "automation": "This page never generates keyboard or pointer input. Script-dispatched untrusted events are reported separately and never included in trusted percentiles."
+  },
+  "trustedInput": {
+    "count": 20,
+    "nextRafMs": {
+      "p50": 14.099999999627471,
+      "p95": 17.700000001117587,
+      "min": 12.699999999254942,
+      "max": 22
+    },
+    "synchronousDispatchMs": {
+      "p50": 1.900000000372529,
+      "p95": 4.900000000372529,
+      "min": 1.5,
+      "max": 5.099999999627471
+    },
+    "eventToDocumentCommitMs": {
+      "p50": 10.800000000745058,
+      "p95": 14.300000000745058,
+      "min": 9.5,
+      "max": 16.09999999962747
+    },
+    "rawSamples": [
+      {
+        "sequence": 1,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 403.1000000014901,
+        "eventTimestamp": 403,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 22,
+        "firstDocumentChangeMs": 16.09999999962747,
+        "dispatchMs": [
+          4.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 2,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 461.90000000037253,
+        "eventTimestamp": 461.80000000074506,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 16.09999999962747,
+        "firstDocumentChangeMs": 12.200000001117587,
+        "dispatchMs": [
+          2.800000000745058
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 3,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 508.1000000014901,
+        "eventTimestamp": 508,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 16.09999999962747,
+        "firstDocumentChangeMs": 12,
+        "dispatchMs": [
+          2.900000000372529
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 4,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 553.4000000003725,
+        "eventTimestamp": 553.4000000003725,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 17.700000001117587,
+        "firstDocumentChangeMs": 13.200000001117587,
+        "dispatchMs": [
+          3
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 5,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 617.2000000011176,
+        "eventTimestamp": 617.2000000011176,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 14.799999998882413,
+        "firstDocumentChangeMs": 13.199999999254942,
+        "dispatchMs": [
+          4.900000000372529
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 6,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 665.3000000007451,
+        "eventTimestamp": 665.3000000007451,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 14,
+        "firstDocumentChangeMs": 10.800000000745058,
+        "dispatchMs": [
+          2
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 7,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 723.3000000007451,
+        "eventTimestamp": 723.3000000007451,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 15.800000000745058,
+        "firstDocumentChangeMs": 14.300000000745058,
+        "dispatchMs": [
+          4.200000001117587
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 8,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 770.5,
+        "eventTimestamp": 770.5,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.600000001490116,
+        "firstDocumentChangeMs": 10,
+        "dispatchMs": [
+          1.8999999985098839
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 9,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 827.1000000014901,
+        "eventTimestamp": 827.1000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 14.699999999254942,
+        "firstDocumentChangeMs": 13.099999999627471,
+        "dispatchMs": [
+          4.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 10,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 879.2000000011176,
+        "eventTimestamp": 879.2000000011176,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 15.699999999254942,
+        "firstDocumentChangeMs": 12.400000000372529,
+        "dispatchMs": [
+          1.700000001117587
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 11,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 928.7000000011176,
+        "eventTimestamp": 928.7000000011176,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.400000000372529,
+        "firstDocumentChangeMs": 10.199999999254942,
+        "dispatchMs": [
+          1.699999999254942
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 12,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 969.6000000014901,
+        "eventTimestamp": 969.6000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 12.899999998509884,
+        "firstDocumentChangeMs": 9.5,
+        "dispatchMs": [
+          1.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 13,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1011.1000000014901,
+        "eventTimestamp": 1011.1000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 14.699999999254942,
+        "firstDocumentChangeMs": 11.199999999254942,
+        "dispatchMs": [
+          1.900000000372529
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 14,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1053.2000000011176,
+        "eventTimestamp": 1053.2000000011176,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.199999999254942,
+        "firstDocumentChangeMs": 9.799999998882413,
+        "dispatchMs": [
+          1.599999999627471
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 15,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1094.2000000011176,
+        "eventTimestamp": 1094.1000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.099999999627471,
+        "firstDocumentChangeMs": 9.599999999627471,
+        "dispatchMs": [
+          1.599999999627471
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 16,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1136.7000000011176,
+        "eventTimestamp": 1136.7000000011176,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.900000000372529,
+        "firstDocumentChangeMs": 10.5,
+        "dispatchMs": [
+          2
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 17,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1179.2000000011176,
+        "eventTimestamp": 1179.1000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 12.699999999254942,
+        "firstDocumentChangeMs": 9.5,
+        "dispatchMs": [
+          1.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 18,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1218.6000000014901,
+        "eventTimestamp": 1218.6000000014901,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 14.099999999627471,
+        "firstDocumentChangeMs": 10.699999999254942,
+        "dispatchMs": [
+          1.699999999254942
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 19,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1282.5,
+        "eventTimestamp": 1282.5,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 15.400000000372529,
+        "firstDocumentChangeMs": 14,
+        "dispatchMs": [
+          5.099999999627471
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 20,
+        "kind": "input",
+        "eventName": "beforeinput",
+        "isTrusted": true,
+        "startedAt": 1333.800000000745,
+        "eventTimestamp": 1333.800000000745,
+        "inputType": "insertText",
+        "dataLength": 1,
+        "nextRafMs": 13.400000000372529,
+        "firstDocumentChangeMs": 10.199999999254942,
+        "dispatchMs": [
+          1.699999999254942
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      }
+    ]
+  },
+  "trustedCheckbox": {
+    "count": 20,
+    "nextRafMs": {
+      "p50": 18.699999999254942,
+      "p95": 27.800000000745058,
+      "min": 16.600000001490116,
+      "max": 28.100000001490116
+    },
+    "synchronousDispatchMs": {
+      "p50": 9.400000002235174,
+      "p95": 15.599999997764826,
+      "min": 7.899999998509884,
+      "max": 16.900000002235174
+    },
+    "eventToDocumentCommitMs": {
+      "p50": 9.599999997764826,
+      "p95": 15.800000000745058,
+      "min": 8,
+      "max": 17.300000000745058
+    },
+    "rawSamples": [
+      {
+        "sequence": 21,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 340488.30000000075,
+        "eventTimestamp": 340488,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 27.800000000745058,
+        "firstDocumentChangeMs": 17.300000000745058,
+        "dispatchMs": [
+          16.900000002235174
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 22,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 340815.69999999925,
+        "eventTimestamp": 340815.6000000015,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 24,
+        "firstDocumentChangeMs": 14.400000002235174,
+        "dispatchMs": [
+          14.100000001490116
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 23,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 340936.19999999925,
+        "eventTimestamp": 340936,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 19.700000002980232,
+        "firstDocumentChangeMs": 10.900000002235174,
+        "dispatchMs": [
+          10.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 24,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 341146.6000000015,
+        "eventTimestamp": 341146.5,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 18.599999997764826,
+        "firstDocumentChangeMs": 10.300000000745058,
+        "dispatchMs": [
+          9.700000002980232
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 25,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 341275.1000000015,
+        "eventTimestamp": 341275,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 20.300000000745058,
+        "firstDocumentChangeMs": 12,
+        "dispatchMs": [
+          11.699999999254942
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 26,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 341442.30000000075,
+        "eventTimestamp": 341429.90000000224,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 28.100000001490116,
+        "firstDocumentChangeMs": 14.600000001490116,
+        "dispatchMs": [
+          14.300000000745058
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 27,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 341799.69999999925,
+        "eventTimestamp": 341799.6000000015,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 20.5,
+        "firstDocumentChangeMs": 9.700000002980232,
+        "dispatchMs": [
+          9.400000002235174
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 29,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 342543.19999999925,
+        "eventTimestamp": 342543.1000000015,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 19.300000000745058,
+        "firstDocumentChangeMs": 8.200000002980232,
+        "dispatchMs": [
+          8
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 30,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 342720.69999999925,
+        "eventTimestamp": 342709.19999999925,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 20.200000002980232,
+        "firstDocumentChangeMs": 10.300000000745058,
+        "dispatchMs": [
+          10.099999997764826
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 31,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 342849.6000000015,
+        "eventTimestamp": 342849.40000000224,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 17.300000000745058,
+        "firstDocumentChangeMs": 8.300000000745058,
+        "dispatchMs": [
+          8.200000002980232
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 32,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 343052,
+        "eventTimestamp": 343051.69999999925,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 16.800000000745058,
+        "firstDocumentChangeMs": 8,
+        "dispatchMs": [
+          7.899999998509884
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 33,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 343160.69999999925,
+        "eventTimestamp": 343160.6000000015,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 18.100000001490116,
+        "firstDocumentChangeMs": 8.700000002980232,
+        "dispatchMs": [
+          8.600000001490116
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 34,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 343318.69999999925,
+        "eventTimestamp": 343318.19999999925,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 26.200000002980232,
+        "firstDocumentChangeMs": 15.800000000745058,
+        "dispatchMs": [
+          15.599999997764826
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 35,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 343546.19999999925,
+        "eventTimestamp": 343545.90000000224,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 17.5,
+        "firstDocumentChangeMs": 8.700000002980232,
+        "dispatchMs": [
+          8.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 36,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 343662.30000000075,
+        "eventTimestamp": 343662.1000000015,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 16.600000001490116,
+        "firstDocumentChangeMs": 8.199999999254942,
+        "dispatchMs": [
+          8.099999997764826
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 38,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 344354.1000000015,
+        "eventTimestamp": 344353.90000000224,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 17.599999997764826,
+        "firstDocumentChangeMs": 9.599999997764826,
+        "dispatchMs": [
+          9.5
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 39,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 344555.90000000224,
+        "eventTimestamp": 344555.80000000075,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 18,
+        "firstDocumentChangeMs": 10.199999999254942,
+        "dispatchMs": [
+          9.900000002235174
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 40,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 344670.1000000015,
+        "eventTimestamp": 344670,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 18.099999997764826,
+        "firstDocumentChangeMs": 9.300000000745058,
+        "dispatchMs": [
+          9
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 41,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 344838.1000000015,
+        "eventTimestamp": 344829.69999999925,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 18.699999999254942,
+        "firstDocumentChangeMs": 9.199999999254942,
+        "dispatchMs": [
+          9
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      },
+      {
+        "sequence": 42,
+        "kind": "checkbox",
+        "eventName": "click",
+        "isTrusted": true,
+        "startedAt": 345010.30000000075,
+        "eventTimestamp": 345010,
+        "inputType": null,
+        "dataLength": null,
+        "nextRafMs": 20.600000001490116,
+        "firstDocumentChangeMs": 9.300000000745058,
+        "dispatchMs": [
+          9.100000001490116
+        ],
+        "sharedDispatch": false,
+        "documentChanged": true,
+        "frameObserved": true,
+        "visibility": "visible"
+      }
+    ]
+  },
+  "trustedOverflow": {
+    "input": [],
+    "checkbox": []
+  },
+  "syntheticExcluded": [],
+  "trustedExcludedOrPending": [
+    {
+      "sequence": 28,
+      "kind": "checkbox",
+      "eventName": "click",
+      "isTrusted": true,
+      "startedAt": 342146,
+      "eventTimestamp": 342145.80000000075,
+      "inputType": null,
+      "dataLength": null,
+      "nextRafMs": 11.900000002235174,
+      "firstDocumentChangeMs": null,
+      "dispatchMs": [],
+      "sharedDispatch": false,
+      "documentChanged": false,
+      "frameObserved": true,
+      "visibility": "visible"
+    },
+    {
+      "sequence": 37,
+      "kind": "checkbox",
+      "eventName": "click",
+      "isTrusted": true,
+      "startedAt": 343996.1000000015,
+      "eventTimestamp": 343995.90000000224,
+      "inputType": null,
+      "dataLength": null,
+      "nextRafMs": 10.899999998509884,
+      "firstDocumentChangeMs": null,
+      "dispatchMs": [],
+      "sharedDispatch": false,
+      "documentChanged": false,
+      "frameObserved": true,
+      "visibility": "visible"
+    }
+  ],
+  "nativeEventTiming": {
+    "support": "observing-editor-events",
+    "requestedDurationThresholdMs": 16,
+    "durationGranularityMs": 8,
+    "entries": [
+      {
+        "name": "keydown",
+        "startTime": 401.90000000037253,
+        "duration": 24,
+        "processingStart": 402,
+        "processingEnd": 402.90000000037253,
+        "interactionId": 8121
+      },
+      {
+        "name": "keypress",
+        "startTime": 401.90000000037253,
+        "duration": 24,
+        "processingStart": 402.90000000037253,
+        "processingEnd": 404.7000000011176,
+        "interactionId": 8121
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 403,
+        "duration": 24,
+        "processingStart": 403,
+        "processingEnd": 403.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 404.40000000037253,
+        "duration": 24,
+        "processingStart": 404.6000000014901,
+        "processingEnd": 404.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 461.6000000014901,
+        "duration": 24,
+        "processingStart": 461.7000000011176,
+        "processingEnd": 461.80000000074506,
+        "interactionId": 8128
+      },
+      {
+        "name": "keypress",
+        "startTime": 461.6000000014901,
+        "duration": 24,
+        "processingStart": 461.80000000074506,
+        "processingEnd": 463.5,
+        "interactionId": 8128
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 461.80000000074506,
+        "duration": 24,
+        "processingStart": 461.80000000074506,
+        "processingEnd": 461.90000000037253,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 463.30000000074506,
+        "duration": 24,
+        "processingStart": 463.5,
+        "processingEnd": 463.5,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 506.7000000011176,
+        "duration": 24,
+        "processingStart": 507.90000000037253,
+        "processingEnd": 508,
+        "interactionId": 8135
+      },
+      {
+        "name": "keypress",
+        "startTime": 506.7000000011176,
+        "duration": 24,
+        "processingStart": 508,
+        "processingEnd": 509.6000000014901,
+        "interactionId": 8135
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 508,
+        "duration": 24,
+        "processingStart": 508,
+        "processingEnd": 508.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 509.30000000074506,
+        "duration": 24,
+        "processingStart": 509.6000000014901,
+        "processingEnd": 509.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 553.2000000011176,
+        "duration": 24,
+        "processingStart": 553.3000000007451,
+        "processingEnd": 553.4000000003725,
+        "interactionId": 8142
+      },
+      {
+        "name": "keypress",
+        "startTime": 553.2000000011176,
+        "duration": 24,
+        "processingStart": 553.4000000003725,
+        "processingEnd": 555.3000000007451,
+        "interactionId": 8142
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 553.4000000003725,
+        "duration": 24,
+        "processingStart": 553.4000000003725,
+        "processingEnd": 553.4000000003725,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 555.1000000014901,
+        "duration": 24,
+        "processingStart": 555.3000000007451,
+        "processingEnd": 555.3000000007451,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 607.9000000003725,
+        "duration": 32,
+        "processingStart": 617.1000000014901,
+        "processingEnd": 617.2000000011176,
+        "interactionId": 8149
+      },
+      {
+        "name": "keypress",
+        "startTime": 607.9000000003725,
+        "duration": 32,
+        "processingStart": 617.2000000011176,
+        "processingEnd": 618.6000000014901,
+        "interactionId": 8149
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 617.2000000011176,
+        "duration": 24,
+        "processingStart": 617.2000000011176,
+        "processingEnd": 617.3000000007451,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 618.3000000007451,
+        "duration": 16,
+        "processingStart": 618.6000000014901,
+        "processingEnd": 618.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 665.1000000014901,
+        "duration": 16,
+        "processingStart": 665.2000000011176,
+        "processingEnd": 665.3000000007451,
+        "interactionId": 8156
+      },
+      {
+        "name": "keypress",
+        "startTime": 665.1000000014901,
+        "duration": 16,
+        "processingStart": 665.3000000007451,
+        "processingEnd": 666.9000000003725,
+        "interactionId": 8156
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 665.3000000007451,
+        "duration": 16,
+        "processingStart": 665.3000000007451,
+        "processingEnd": 665.3000000007451,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 666.7000000011176,
+        "duration": 16,
+        "processingStart": 666.9000000003725,
+        "processingEnd": 666.9000000003725,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 716.2000000011176,
+        "duration": 32,
+        "processingStart": 723.2000000011176,
+        "processingEnd": 723.3000000007451,
+        "interactionId": 8163
+      },
+      {
+        "name": "keypress",
+        "startTime": 716.2000000011176,
+        "duration": 32,
+        "processingStart": 723.3000000007451,
+        "processingEnd": 724.6000000014901,
+        "interactionId": 8163
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 723.3000000007451,
+        "duration": 24,
+        "processingStart": 723.3000000007451,
+        "processingEnd": 723.3000000007451,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 724.3000000007451,
+        "duration": 24,
+        "processingStart": 724.5,
+        "processingEnd": 724.5,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 770.3000000007451,
+        "duration": 16,
+        "processingStart": 770.3000000007451,
+        "processingEnd": 770.4000000003725,
+        "interactionId": 8170
+      },
+      {
+        "name": "keypress",
+        "startTime": 770.3000000007451,
+        "duration": 16,
+        "processingStart": 770.5,
+        "processingEnd": 772.2000000011176,
+        "interactionId": 8170
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 770.5,
+        "duration": 16,
+        "processingStart": 770.5,
+        "processingEnd": 770.5,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 771.9000000003725,
+        "duration": 16,
+        "processingStart": 772.2000000011176,
+        "processingEnd": 772.2000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 820.1000000014901,
+        "duration": 24,
+        "processingStart": 826.9000000003725,
+        "processingEnd": 827,
+        "interactionId": 8177
+      },
+      {
+        "name": "keypress",
+        "startTime": 820.1000000014901,
+        "duration": 24,
+        "processingStart": 827,
+        "processingEnd": 828.5,
+        "interactionId": 8177
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 827.1000000014901,
+        "duration": 16,
+        "processingStart": 827.1000000014901,
+        "processingEnd": 827.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 828.2000000011176,
+        "duration": 16,
+        "processingStart": 828.5,
+        "processingEnd": 828.5,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 878.8000000007451,
+        "duration": 24,
+        "processingStart": 879,
+        "processingEnd": 879.1000000014901,
+        "interactionId": 8184
+      },
+      {
+        "name": "keypress",
+        "startTime": 878.8000000007451,
+        "duration": 24,
+        "processingStart": 879.1000000014901,
+        "processingEnd": 880.8000000007451,
+        "interactionId": 8184
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 879.2000000011176,
+        "duration": 24,
+        "processingStart": 879.2000000011176,
+        "processingEnd": 879.2000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 880.5,
+        "duration": 16,
+        "processingStart": 880.8000000007451,
+        "processingEnd": 880.8000000007451,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 928.5,
+        "duration": 16,
+        "processingStart": 928.5,
+        "processingEnd": 928.7000000011176,
+        "interactionId": 8191
+      },
+      {
+        "name": "keypress",
+        "startTime": 928.5,
+        "duration": 16,
+        "processingStart": 928.7000000011176,
+        "processingEnd": 930.6000000014901,
+        "interactionId": 8191
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 928.7000000011176,
+        "duration": 16,
+        "processingStart": 928.7000000011176,
+        "processingEnd": 928.7000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 930.3000000007451,
+        "duration": 16,
+        "processingStart": 930.6000000014901,
+        "processingEnd": 930.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 969.4000000003725,
+        "duration": 16,
+        "processingStart": 969.5,
+        "processingEnd": 969.6000000014901,
+        "interactionId": 8198
+      },
+      {
+        "name": "keypress",
+        "startTime": 969.4000000003725,
+        "duration": 16,
+        "processingStart": 969.6000000014901,
+        "processingEnd": 971.1000000014901,
+        "interactionId": 8198
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 969.6000000014901,
+        "duration": 16,
+        "processingStart": 969.6000000014901,
+        "processingEnd": 969.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 970.9000000003725,
+        "duration": 16,
+        "processingStart": 971.1000000014901,
+        "processingEnd": 971.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1010.8000000007451,
+        "duration": 16,
+        "processingStart": 1011,
+        "processingEnd": 1011.1000000014901,
+        "interactionId": 8205
+      },
+      {
+        "name": "keypress",
+        "startTime": 1010.8000000007451,
+        "duration": 16,
+        "processingStart": 1011.1000000014901,
+        "processingEnd": 1013.1000000014901,
+        "interactionId": 8205
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1011.1000000014901,
+        "duration": 16,
+        "processingStart": 1011.1000000014901,
+        "processingEnd": 1011.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1012.8000000007451,
+        "duration": 16,
+        "processingStart": 1013.1000000014901,
+        "processingEnd": 1013.1000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1053.1000000014901,
+        "duration": 16,
+        "processingStart": 1053.1000000014901,
+        "processingEnd": 1053.2000000011176,
+        "interactionId": 8212
+      },
+      {
+        "name": "keypress",
+        "startTime": 1053.1000000014901,
+        "duration": 16,
+        "processingStart": 1053.2000000011176,
+        "processingEnd": 1054.800000000745,
+        "interactionId": 8212
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1053.2000000011176,
+        "duration": 16,
+        "processingStart": 1053.2000000011176,
+        "processingEnd": 1053.300000000745,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1054.6000000014901,
+        "duration": 16,
+        "processingStart": 1054.800000000745,
+        "processingEnd": 1054.800000000745,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1094,
+        "duration": 16,
+        "processingStart": 1094.1000000014901,
+        "processingEnd": 1094.1000000014901,
+        "interactionId": 8219
+      },
+      {
+        "name": "keypress",
+        "startTime": 1094,
+        "duration": 16,
+        "processingStart": 1094.1000000014901,
+        "processingEnd": 1095.9000000003725,
+        "interactionId": 8219
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1094.1000000014901,
+        "duration": 16,
+        "processingStart": 1094.1000000014901,
+        "processingEnd": 1094.2000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1095.7000000011176,
+        "duration": 16,
+        "processingStart": 1095.9000000003725,
+        "processingEnd": 1095.9000000003725,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1136.4000000003725,
+        "duration": 16,
+        "processingStart": 1136.6000000014901,
+        "processingEnd": 1136.7000000011176,
+        "interactionId": 8226
+      },
+      {
+        "name": "keypress",
+        "startTime": 1136.4000000003725,
+        "duration": 16,
+        "processingStart": 1136.7000000011176,
+        "processingEnd": 1138.300000000745,
+        "interactionId": 8226
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1136.7000000011176,
+        "duration": 16,
+        "processingStart": 1136.7000000011176,
+        "processingEnd": 1136.7000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1138.1000000014901,
+        "duration": 16,
+        "processingStart": 1138.300000000745,
+        "processingEnd": 1138.300000000745,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1178.9000000003725,
+        "duration": 16,
+        "processingStart": 1179,
+        "processingEnd": 1179.1000000014901,
+        "interactionId": 8233
+      },
+      {
+        "name": "keypress",
+        "startTime": 1178.9000000003725,
+        "duration": 16,
+        "processingStart": 1179.1000000014901,
+        "processingEnd": 1181,
+        "interactionId": 8233
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1179.1000000014901,
+        "duration": 16,
+        "processingStart": 1179.1000000014901,
+        "processingEnd": 1179.2000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1180.800000000745,
+        "duration": 16,
+        "processingStart": 1180.9000000003725,
+        "processingEnd": 1180.9000000003725,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1218.300000000745,
+        "duration": 16,
+        "processingStart": 1218.5,
+        "processingEnd": 1218.5,
+        "interactionId": 8240
+      },
+      {
+        "name": "keypress",
+        "startTime": 1218.300000000745,
+        "duration": 16,
+        "processingStart": 1218.5,
+        "processingEnd": 1220.300000000745,
+        "interactionId": 8240
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1218.6000000014901,
+        "duration": 16,
+        "processingStart": 1218.6000000014901,
+        "processingEnd": 1218.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1220.1000000014901,
+        "duration": 16,
+        "processingStart": 1220.300000000745,
+        "processingEnd": 1220.300000000745,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1271.9000000003725,
+        "duration": 32,
+        "processingStart": 1282.5,
+        "processingEnd": 1282.5,
+        "interactionId": 8247
+      },
+      {
+        "name": "keypress",
+        "startTime": 1271.9000000003725,
+        "duration": 32,
+        "processingStart": 1282.5,
+        "processingEnd": 1284.2000000011176,
+        "interactionId": 8247
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1282.5,
+        "duration": 24,
+        "processingStart": 1282.5,
+        "processingEnd": 1282.6000000014901,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1283.9000000003725,
+        "duration": 24,
+        "processingStart": 1284.2000000011176,
+        "processingEnd": 1284.2000000011176,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 1333.6000000014901,
+        "duration": 16,
+        "processingStart": 1333.7000000011176,
+        "processingEnd": 1333.800000000745,
+        "interactionId": 8254
+      },
+      {
+        "name": "keypress",
+        "startTime": 1333.6000000014901,
+        "duration": 16,
+        "processingStart": 1333.800000000745,
+        "processingEnd": 1335.4000000003725,
+        "interactionId": 8254
+      },
+      {
+        "name": "beforeinput",
+        "startTime": 1333.800000000745,
+        "duration": 16,
+        "processingStart": 1333.800000000745,
+        "processingEnd": 1333.800000000745,
+        "interactionId": 0
+      },
+      {
+        "name": "input",
+        "startTime": 1335.1000000014901,
+        "duration": 16,
+        "processingStart": 1335.4000000003725,
+        "processingEnd": 1335.4000000003725,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 341097,
+        "duration": 24,
+        "processingStart": 341099.90000000224,
+        "processingEnd": 341099.90000000224,
+        "interactionId": 8303
+      },
+      {
+        "name": "keypress",
+        "startTime": 341097,
+        "duration": 24,
+        "processingStart": 341099.90000000224,
+        "processingEnd": 341099.90000000224,
+        "interactionId": 8303
+      },
+      {
+        "name": "keydown",
+        "startTime": 342144.69999999925,
+        "duration": 24,
+        "processingStart": 342144.80000000075,
+        "processingEnd": 342144.90000000224,
+        "interactionId": 8345
+      },
+      {
+        "name": "keypress",
+        "startTime": 342144.69999999925,
+        "duration": 24,
+        "processingStart": 342144.90000000224,
+        "processingEnd": 342144.90000000224,
+        "interactionId": 8345
+      },
+      {
+        "name": "keyup",
+        "startTime": 342145.80000000075,
+        "duration": 24,
+        "processingStart": 342145.90000000224,
+        "processingEnd": 342146.80000000075,
+        "interactionId": 8345
+      },
+      {
+        "name": "click",
+        "startTime": 342145.80000000075,
+        "duration": 24,
+        "processingStart": 342145.90000000224,
+        "processingEnd": 342146.80000000075,
+        "interactionId": 8345
+      },
+      {
+        "name": "pointerover",
+        "startTime": 342269.69999999925,
+        "duration": 24,
+        "processingStart": 342279.90000000224,
+        "processingEnd": 342279.90000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 342269.69999999925,
+        "duration": 24,
+        "processingStart": 342279.90000000224,
+        "processingEnd": 342279.90000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerout",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.30000000075,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerenter",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseenter",
+        "startTime": 342920.80000000075,
+        "duration": 16,
+        "processingStart": 342922.5,
+        "processingEnd": 342922.5,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 343003.80000000075,
+        "duration": 24,
+        "processingStart": 343015.40000000224,
+        "processingEnd": 343015.6000000015,
+        "interactionId": 8380
+      },
+      {
+        "name": "keypress",
+        "startTime": 343003.80000000075,
+        "duration": 24,
+        "processingStart": 343015.6000000015,
+        "processingEnd": 343015.6000000015,
+        "interactionId": 8380
+      },
+      {
+        "name": "pointerout",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.30000000075,
+        "processingEnd": 343017.30000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.30000000075,
+        "processingEnd": 343017.30000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.30000000075,
+        "processingEnd": 343017.30000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerenter",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.30000000075,
+        "processingEnd": 343017.30000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.30000000075,
+        "processingEnd": 343017.40000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.40000000224,
+        "processingEnd": 343017.40000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.40000000224,
+        "processingEnd": 343017.40000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseenter",
+        "startTime": 343015.80000000075,
+        "duration": 16,
+        "processingStart": 343017.40000000224,
+        "processingEnd": 343017.40000000224,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 343502,
+        "duration": 24,
+        "processingStart": 343512,
+        "processingEnd": 343512,
+        "interactionId": 8401
+      },
+      {
+        "name": "keypress",
+        "startTime": 343502,
+        "duration": 24,
+        "processingStart": 343512,
+        "processingEnd": 343512,
+        "interactionId": 8401
+      },
+      {
+        "name": "pointerout",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 343512.19999999925,
+        "duration": 16,
+        "processingStart": 343514.1000000015,
+        "processingEnd": 343514.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 343994.5,
+        "duration": 24,
+        "processingStart": 343994.90000000224,
+        "processingEnd": 343995,
+        "interactionId": 8422
+      },
+      {
+        "name": "keypress",
+        "startTime": 343994.5,
+        "duration": 24,
+        "processingStart": 343995,
+        "processingEnd": 343995,
+        "interactionId": 8422
+      },
+      {
+        "name": "keyup",
+        "startTime": 343995.90000000224,
+        "duration": 24,
+        "processingStart": 343996,
+        "processingEnd": 343996.6000000015,
+        "interactionId": 8422
+      },
+      {
+        "name": "click",
+        "startTime": 343995.90000000224,
+        "duration": 24,
+        "processingStart": 343996.1000000015,
+        "processingEnd": 343996.6000000015,
+        "interactionId": 8422
+      },
+      {
+        "name": "pointerover",
+        "startTime": 344164.19999999925,
+        "duration": 32,
+        "processingStart": 344174.90000000224,
+        "processingEnd": 344175,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 344164.19999999925,
+        "duration": 32,
+        "processingStart": 344175,
+        "processingEnd": 344175,
+        "interactionId": 0
+      },
+      {
+        "name": "keydown",
+        "startTime": 344511.5,
+        "duration": 24,
+        "processingStart": 344514.69999999925,
+        "processingEnd": 344514.69999999925,
+        "interactionId": 8443
+      },
+      {
+        "name": "keypress",
+        "startTime": 344511.5,
+        "duration": 24,
+        "processingStart": 344514.69999999925,
+        "processingEnd": 344514.69999999925,
+        "interactionId": 8443
+      },
+      {
+        "name": "pointerout",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.1000000015,
+        "processingEnd": 344742.1000000015,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.1000000015,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerenter",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseenter",
+        "startTime": 344740.6000000015,
+        "duration": 16,
+        "processingStart": 344742.19999999925,
+        "processingEnd": 344742.19999999925,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerout",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.69999999925,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerenter",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseenter",
+        "startTime": 344847.5,
+        "duration": 16,
+        "processingStart": 344855.80000000075,
+        "processingEnd": 344855.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerout",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerleave",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerover",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "pointerenter",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseout",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseleave",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseover",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      },
+      {
+        "name": "mouseenter",
+        "startTime": 345041.30000000075,
+        "duration": 16,
+        "processingStart": 345042.80000000075,
+        "processingEnd": 345042.80000000075,
+        "interactionId": 0
+      }
+    ]
+  },
+  "validationNote": "生产构建独立页面，真实字母键输入与 Space 激活复选框各 20 次。CPU 采样发现报告文本框更新会影响后续输入，已改为采样期间冻结 JSON，仅在停止后序列化。下一 rAF 并非最终像素呈现，不能据此宣称小于 16ms 的屏幕反馈达标。",
+  "artifact": {
+    "file": "browser-performance-BxDMDzcD.js",
+    "Hash": "E89E51DBCF1B208ACE300882DFB04E8D1AB734E02368C603C46F40A222F16015"
+  }
+}

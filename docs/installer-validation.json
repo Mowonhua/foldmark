@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "purpose": "最终 Windows NSIS 当前用户安装与卸载烟测",
+  "source_commit": "878b6b78b5cb07abd90c6a115e3762e311f0f80a",
+  "started_at_utc": "2026-09-06T06:56:31.6579002Z",
+  "completed_at_utc": "2026-09-06T07:12:09.3027563Z",
+  "build": {
+    "product": "Foldmark",
+    "version": "0.1.0",
+    "architecture": "x64",
+    "release_binary_written_at_utc": "2026-09-06T06:50:31.6489616Z",
+    "installer": {
+      "name": "Foldmark_0.1.0_x64-setup.exe",
+      "size_bytes": 3350856,
+      "sha256": "8b85ff82855902a9cd249ec9c61412cbe9f4d88916812774cefda30806fc76d6"
+    },
+    "main_binary": {
+      "size_bytes": 11951104,
+      "release_sha256": "8c7f1da8bdd2f958145cfbab3bc06e4313a2cc3090cac360e04bbe67eaef67f2",
+      "installed_sha256": "cf53c68224f2fa956734b1d740173ffd99b2d4e97a2abd67146839d57d866c86"
+    }
+  },
+  "preconditions": {
+    "existing_installation_detected": false,
+    "registry_checks": [
+      {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "key": "Software\\foldmark\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry32",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry32",
+        "key": "Software\\foldmark\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "key": "Software\\foldmark\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry32",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "existed": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry32",
+        "key": "Software\\foldmark\\Foldmark",
+        "existed": false
+      }
+    ],
+    "no_foldmark_process_before_install": true,
+    "new_destination_verified_within_workspace": true,
+    "install_directory": "src-tauri/target/install-smoke/run-878b6b7-20260906-145631",
+    "existing_reading_preferences_backed_up": true
+  },
+  "installer_script_review": {
+    "script": "src-tauri/target/release/nsis/x64/installer.nsi",
+    "sha256": "72e8c408fcbc0c1f29192edab7e4365d7ecc79d68ebb25e3e74a8491f3d9acba",
+    "install_mode": "currentUser",
+    "license_value": "",
+    "arguments": [
+      "/S",
+      "/NS",
+      "/D=<verified-new-directory>"
+    ],
+    "run_after_install_argument_present": false,
+    "file_associations_configured": false,
+    "webview2_mode": "downloadBootstrapper",
+    "webview2_installed_runtime_used": "152.0.4191.66",
+    "webview2_bootstrap_download_tested": false,
+    "uninstall_app_data_checkbox_selected": false
+  },
+  "installation": {
+    "exit_code": 0,
+    "installed_exe_present": true,
+    "current_user_uninstall_registration_verified": true,
+    "registered_install_location_matched_test_directory": true,
+    "config_hash_unchanged_after_install": true
+  },
+  "binary_verification": {
+    "raw_sha256_equal": false,
+    "differing_byte_count": 3,
+    "difference_start_offset": 9235040,
+    "difference_end_offset_exclusive": 9235043,
+    "release_marker": "__TAURI_BUNDLE_TYPE_VAR_UNK",
+    "installed_marker": "__TAURI_BUNDLE_TYPE_VAR_NSS",
+    "marker_offset": 9235016,
+    "normalized_installed_sha256": "8c7f1da8bdd2f958145cfbab3bc06e4313a2cc3090cac360e04bbe67eaef67f2",
+    "normalized_bytes_equal": true,
+    "normalization_performed_in_memory_only": true,
+    "explanation": "安装版只改变 Tauri 打包类型标记 UNK→NSS。官方 bundler 打包前修改标记，打包后还原 release 主程序；只还原这 3 字节后两文件逐字节相等，不能将原始 SHA256 宣称为相等。",
+    "evidence": [
+      {
+        "kind": "local_dependency_source",
+        "crate": "tauri-utils",
+        "version": "2.9.3",
+        "file": "src/platform.rs",
+        "lines": "345-360",
+        "finding": "打包标记默认 UNK，NSS 对应 BundleType::Nsis。"
+      },
+      {
+        "kind": "official_source",
+        "url": "https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-bundler/src/bundle.rs",
+        "finding": "patch_binary 替换类型标记；bundle_project 在每种包构建后恢复未修改的主程序。"
+      }
+    ]
+  },
+  "native_application": {
+    "launch_succeeded": true,
+    "welcome_page_readable": true,
+    "local_file_dialog_and_project_association_verified": true,
+    "normal_exit_requested_with": "Alt+F4 through Windows Computer Use",
+    "exit_observed": true,
+    "exit_code": null,
+    "exit_code_note": "进程监视确认已退出，但单独打开的监视句柄未返回退出码，未将其推定为 0。",
+    "forced_termination_used": false
+  },
+  "real_ime_validation": {
+    "status": "partial",
+    "real_system_candidate_window_observed": true,
+    "synthetic_composition_event_used": false,
+    "candidate_input": "n",
+    "enter_pressed_once": true,
+    "executed_context": "任务后的已有空行",
+    "committed_text_observed_on_disk": true,
+    "task_count_before": 1,
+    "task_count_after": 1,
+    "newline_count_before": 3,
+    "newline_count_after": 3,
+    "task_first_line_context_verified": false,
+    "note": "真实候选期间 Enter 仅提交输入，已执行场景没有增加任务或换行。任务首行定位期间收到用户输入检测，未把该场景算作通过；后续仅刷新并正常关闭。"
+  },
+  "uninstallation": {
+    "arguments": [
+      "/S"
+    ],
+    "exit_code": 0,
+    "no_foldmark_process_before_uninstall": true,
+    "target_revalidated_inside_install_smoke": true,
+    "main_exe_removed": true,
+    "installation_directory_removed": true,
+    "uninstall_registration_removed": true,
+    "residual_test_product_key_removed": true,
+    "new_empty_manufacturer_key_removed": true,
+    "residual_key_cleanup_guard": "只删除测试前不存在、默认值严格等于测试安装目录且无其他子键的 HKCU Software/foldmark/Foldmark；仅在测试新建父键为空时删除父键。",
+    "registry_after": [
+      {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry64",
+        "key": "Software\\foldmark\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry32",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "CurrentUser",
+        "view": "Registry32",
+        "key": "Software\\foldmark\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry64",
+        "key": "Software\\foldmark\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry32",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "exists": false
+      },
+      {
+        "hive": "LocalMachine",
+        "view": "Registry32",
+        "key": "Software\\foldmark\\Foldmark",
+        "exists": false
+      }
+    ],
+    "app_data_delete_option_selected": false
+  },
+  "configuration_preservation": {
+    "file": "%APPDATA%/app.foldmark.desktop/config.json",
+    "before_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+    "after_install_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+    "after_native_ui_before_restore_sha256": "92b1c6d69720828472b941e5a4ed98f00b0a1dc34d40331fcb325ceb8aff0236",
+    "after_test_association_restore_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+    "after_uninstall_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+    "restored_exactly": true,
+    "reading_preferences_preserved": true,
+    "fixture_retained": true,
+    "note": "测试项目仅关联工作区内隔离文件；正常退出后恢复原始配置字节，阅读偏好未变。隔离文档和其副本保留，未删除任何 Markdown 原文件。"
+  },
+  "not_tested": [
+    "缺少 WebView2 的新机器首次下载安装运行时",
+    "旧版升级、降级和企业策略环境安装",
+    "真实 IME 在任务首行末尾确认候选的完整场景",
+    "此安装烟测中的冷启动时延和性能预算"
+  ],
+  "portable_ime_supplement": {
+    "status": "passed",
+    "source_commit": "878b6b78b5cb07abd90c6a115e3762e311f0f80a",
+    "executable": "portable release/foldmark.exe",
+    "portable_sha256": "8c7f1da8bdd2f958145cfbab3bc06e4313a2cc3090cac360e04bbe67eaef67f2",
+    "same_source_as_installation_test": true,
+    "started_at_utc": "2026-09-06T07:19:36.7532617Z",
+    "completed_at_utc": "2026-09-06T07:25:26.182Z",
+    "view": "todo",
+    "source_mode_used": false,
+    "fixture": {
+      "encoding": "UTF-8",
+      "initial_bytes": 29,
+      "initial_tasks": 1,
+      "initial_newlines": 3,
+      "personal_content_included": false
+    },
+    "navigation": {
+      "requested_sequence": [
+        "Ctrl+Home",
+        "Down",
+        "Down",
+        "End"
+      ],
+      "observed_cursor_after_requested_sequence": 17,
+      "requested_sequence_landed_on": "已有末尾空行",
+      "correction": [
+        "Ctrl+End",
+        "Left"
+      ],
+      "task_first_line_end_visually_confirmed": true,
+      "note": "按实际预览导航结果校正到任务首行最后字符之后，再开始组合输入；未将空行场景当作任务首行测试。"
+    },
+    "candidate_enter": {
+      "real_candidate_observed": true,
+      "todo_view": true,
+      "task_first_line_end_confirmed": true,
+      "task_count": 1,
+      "newline_count": 3,
+      "task_line_ends_with_committed_n": true,
+      "matches_expected_exactly": true
+    },
+    "ordinary_enter_control": {
+      "composition_active": false,
+      "task_count": 2,
+      "newline_count": 4,
+      "matches_expected_exactly": true
+    },
+    "system_candidate_window_observed": true,
+    "synthetic_composition_events_used": false,
+    "global_input_method_configuration_changed": false,
+    "windows_key_used": false,
+    "normal_exit_observed": true,
+    "exit_method": "Computer Use Alt+F4",
+    "forced_termination_used": false,
+    "configuration": {
+      "before_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+      "after_restore_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
+      "restored_byte_for_byte": true,
+      "reading_preferences_preserved": true,
+      "test_fixture_and_copy_retained": true
+    },
+    "scope_note": "这是相同源码与同一 release 主程序的独立便携程序补充验收；保留前面的安装、卸载和当时未完成的输入法证据不变。它补完任务首行真实 IME Enter 与普通 Enter 的对照。"
+  }
+}

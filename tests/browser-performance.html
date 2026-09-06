@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Foldmark · 浏览器性能验收</title>
+  <style>
+    :root { --text: #303b33; --muted: #657569; --accent: #426a4d; --surface: #fffef9; --surface-alt: #eeefe7; --border: #d5ddcf; --editor-font: 'Segoe UI', 'Microsoft YaHei', sans-serif; --editor-font-size: 16px; --editor-width: 850px; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; color: var(--text); background: #f4f5ee; }
+    * { box-sizing: border-box; } body { margin: 0; } button, input { font: inherit; } button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); padding: 8px 12px; cursor: pointer; } button:hover { background: #e7ede2; } button:disabled { cursor: default; opacity: .5; } button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); background: var(--surface); } h1 { margin: 0 0 8px; font-size: 23px; } p { margin: 6px 0; line-height: 1.6; } .lead { color: var(--muted); font-size: 14px; } .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; } #load-scene { background: var(--accent); border-color: var(--accent); color: white; } #status { padding-left: 6px; font-size: 13px; } .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, 31%); height: calc(100vh - 218px); min-height: 430px; } #editor-host { min-width: 0; height: 100%; background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; } .empty { margin: 48px; color: var(--muted); } aside { padding: 18px; overflow: auto; } h2 { margin: 0 0 10px; font-size: 16px; } .stat { font-size: 13px; line-height: 1.65; padding: 10px 12px; margin: 10px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; white-space: pre-line; } details { margin: 12px 0; font-size: 12px; line-height: 1.7; } summary { cursor: pointer; font-weight: 600; } ul { padding-left: 20px; } #report-json { display: block; width: 100%; height: 310px; resize: vertical; padding: 12px; border: 1px solid var(--border); background: #fafbf7; border-radius: 6px; color: var(--text); font: 11px/1.55 ui-monospace, Consolas, monospace; } .report-actions { display: flex; gap: 8px; margin: 10px 0; } a { color: var(--accent); } #measurement-note { font-size: 12px; color: var(--muted); } @media (max-width: 850px) { .workspace { grid-template-columns: 1fr; height: auto; } #editor-host { height: 65vh; border-right: 0; border-bottom: 1px solid var(--border); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Foldmark 浏览器性能验收</h1>
+    <p class="lead">固定场景：当前文档 5,000 条任务；19 个后台项目各 250 条任务。仅挂载一个实际 EditorController。</p>
+    <p id="measurement-note">采集真实 beforeinput → 下一次 rAF、同步文档 dispatch。下一次 rAF 不是最终像素呈现；此页不测 Tauri 冷启动、WebView2 总内存或磁盘保存。</p>
+    <div class="toolbar">
+      <button id="load-scene">载入固定场景</button>
+      <button id="start-input" disabled>开始输入采样</button>
+      <button id="jump-end" disabled>定位末尾</button>
+      <button id="sample-checkbox" disabled>勾选采样</button>
+      <button id="stop-sampling" disabled>停止采样</button>
+      <span id="status" role="status">尚未载入</span>
+    </div>
+  </header>
+  <main class="workspace">
+    <section id="editor-host" aria-label="真实编辑器验收区"><p class="empty">点击“载入固定场景”，再在文档中逐次输入 20 个字符。</p></section>
+    <aside>
+      <h2>只读验收报告</h2>
+      <p class="lead">输入统计按事件计数，粘贴 20 个字只算一次。只将 isTrusted 且产生文档变化的样本纳入真实输入统计。</p>
+      <div id="scene-summary" class="stat">场景未加载</div>
+      <div id="sample-summary" class="stat">输入：0 / 20
+勾选：0 / 20</div>
+      <details>
+        <summary>测量边界与操作方法</summary>
+        <ul>
+          <li>载入后已开始输入采样，在编辑器中逐次键入 20 次；按需定位末尾再重新开始，以验证远处视口。</li>
+          <li>“勾选采样”单独记录真实 pointerup 或键盘激活，到下一次 rAF 以及同步完成事务的耗时。请单击未完成叶任务；整组确认、取消拖动等没有文档变化的事件会单独列出。</li>
+          <li>每次报告均保留原始样本。P95 使用排序后第 ceil(0.95 × N) 项，不丢弃慢样本。前 20 个有效事件完成一轮。</li>
+          <li>同步耗时包裹 EditorView 的公开 dispatch 方法，包含本次事务处理与同步 DOM 更新，不包含后续样式、布局、绘制。</li>
+          <li>beforeinput 到下一次 rAF 不等于最终像素呈现；同一帧多个事件可能共享一次文档事务，报告会标记 sharedDispatch。</li>
+          <li>PerformanceEventTiming 仅作辅助：请求最小 16ms 阈值，duration 按 8ms 量化，缺少记录不能解释为 0ms。<a href="https://www.w3.org/TR/event-timing/" target="_blank" rel="noopener">W3C 规范</a></li>
+          <li>页面没有自动输入；来自脚本且 isTrusted=false 的事件单独列为 syntheticExcluded，不计入真实 P95。</li>
+        </ul>
+      </details>
+      <div class="report-actions"><button id="copy-report">复制 JSON</button><button id="export-report">导出报告</button></div>
+      <textarea id="report-json" aria-label="性能报告 JSON" readonly spellcheck="false">{ "status": "not-loaded" }</textarea>
+    </aside>
+  </main>
+  <script type="module" src="./browser-performance.ts"></script>
+</body>
+</html>
