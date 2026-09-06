@@ -115,6 +115,12 @@ async function shortcut(key: string): Promise<void> {
   await tick();
 }
 
+/** 通过更多操作菜单新增任务，保留与用户操作相同的编辑事务。 */
+async function insertTask(): Promise<void> {
+  button('更多操作').click(); await tick();
+  button('新增任务').click(); await tick();
+}
+
 /** 等待可从文件端口重新读取的正文，避免将仅有 DOM 变化误判为已保存。 */
 async function savedText(project: Project, expected: string): Promise<void> {
   await vi.waitFor(async () => expect((await files.read(project.path)).text).toBe(expected), { timeout: 5000 });
@@ -128,7 +134,7 @@ describe('App 真实编辑与文件闭环', () => {
     const completed = original.replace('[ ] 完成并重开', '[x] 完成并重开');
     await savedText(firstProject, completed);
 
-    button('＋ 新任务').click(); await tick(); await paste('输入实际落盘');
+    await insertTask(); await paste('输入实际落盘');
     const finalText = `${completed}- [ ] 输入实际落盘`;
     await savedText(firstProject, finalText);
     await remount();
@@ -143,11 +149,11 @@ describe('App 真实编辑与文件闭环', () => {
     const first = '# 甲清单\n\n- [ ] 甲原始任务\n';
     const second = '# 乙清单\n\n- [ ] 乙原始任务\n';
     await start([first, second]);
-    button('＋ 新任务').click(); await tick(); await paste('甲的未保存草稿');
+    await insertTask(); await paste('甲的未保存草稿');
     await switchProject(secondProject);
     expect(documentInput().textContent).toContain('乙原始任务');
     expect(documentInput().textContent).not.toContain('甲的未保存草稿');
-    button('＋ 新任务').click(); await tick(); await paste('乙的未保存草稿');
+    await insertTask(); await paste('乙的未保存草稿');
     await shortcut('z');
     expect(documentInput().textContent).not.toContain('乙的未保存草稿');
     await shortcut('s');
@@ -196,7 +202,7 @@ describe('项目操作失败与聚合视图边界', () => {
     const original = '# 甲清单\n\n- [ ] 原始任务\n';
     await start([original]);
     vi.spyOn(BrowserFilePort.prototype, 'saveRecovery').mockRejectedValue(new Error('FILE_PERMISSION: 恢复目录不可写'));
-    button('＋ 新任务').click(); await tick(); await paste('只能保存在内存中的草稿');
+    await insertTask(); await paste('只能保存在内存中的草稿');
     button('更多操作').click(); await tick(); button('移除项目关联').click(); await tick();
     button('移除关联').click();
     await new Promise(resolve => setTimeout(resolve, 0)); await tick();
@@ -245,7 +251,7 @@ describe('跨项目反馈和搜索范围', () => {
     const second = '# 乙清单\n\n- [ ] 保留乙任务\n';
     await start([first, second]);
     await switchProject(secondProject);
-    button('＋ 新任务').click(); await tick(); await paste('乙项目必须保留的编辑');
+    await insertTask(); await paste('乙项目必须保留的编辑');
     await shortcut('s');
     const savedSecond = `${second}- [ ] 乙项目必须保留的编辑`;
     await savedText(secondProject, savedSecond);
@@ -326,7 +332,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     await start([original]);
     await files.create(secondProject.path,destination);
     vi.spyOn(BrowserFilePort.prototype,'chooseFile').mockResolvedValue(secondProject.path);
-    button('＋ 新任务').click(); await tick(); await paste('迁移时不能丢的草稿');
+    await insertTask(); await paste('迁移时不能丢的草稿');
     const draft = `${original}- [ ] 迁移时不能丢的草稿`;
     localStorage.removeItem(`foldmark:file:${firstProject.path}`);
     await shortcut('s');

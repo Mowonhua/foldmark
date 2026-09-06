@@ -6,7 +6,8 @@
 .cm-cursor { border-left-color: var(--accent, #4d725a); }
 .cm-selectionBackground, .cm-editor.cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent, #4d725a) 22%, transparent) !important; }
 .cm-placeholder { color: var(--muted, #878c84); }
-.fm-heading { color: var(--text, #343b36); font-weight: 650; letter-spacing: -.025em; margin-top: 1.3em; margin-bottom: .55em; line-height: 1.45; }
+/* CodeMirror 按行边框盒计算鼠标命中高度；标题间距必须计入盒内，外边距会使后续行的左键定位偏移。 */
+.cm-editor .fm-heading { color: var(--text, #343b36); font-weight: 650; letter-spacing: -.025em; padding-top: 1.3em; padding-bottom: .55em; line-height: 1.45; }
 .cm-editor .fm-heading span { text-decoration: none; }
 .fm-h1 { font-size: 1.8em; }.fm-h2 { font-size: 1.45em; }.fm-h3 { font-size: 1.18em; }
 .fm-em { font-style: italic; }.fm-strong { font-weight: 650; }.fm-strike { text-decoration: line-through; }

@@ -397,8 +397,7 @@
           <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id} onclick={() => openProject(project)} title={project.path}><span class="project-mark" aria-hidden="true">{project.name.slice(0, 1)}</span><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
-      <button class="add-project" onclick={() => openDialog('project')}>＋ 新增项目</button>
-      <div class="sidebar-bottom"><span class="offline-dot"></span> 本地 · 离线可用 <button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
+      <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
     </aside>
   {/if}
 
@@ -430,7 +429,7 @@
     {/if}
 
     {#if screen === 'project'}
-      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive],['source','完整源码',null]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div><button class="new-task" disabled={!active} onclick={() => { setMode('todo'); editor?.insertTask(); }}>＋ 新任务</button></div>
+      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive],['source','完整源码',null]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}

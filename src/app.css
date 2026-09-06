@@ -40,10 +40,8 @@ button svg{flex-shrink:0}
 .project-list .nav-item{margin-bottom:4px}
 .project-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .project-mark{font-size:10px;border:1px solid currentColor;width:20px;height:20px;display:grid;place-items:center;border-radius:4px;opacity:.7}
-.add-project{font-size:12px;padding:11px;text-align:left;color:var(--muted);margin:10px 0;border-radius:5px}
-.sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted)}
+.sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
 .sidebar-bottom .icon-button{margin-left:auto;font-size:18px}
-.offline-dot{height:5px;width:5px;background:var(--accent);border-radius:50%}
 .main-pane{min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .topbar{height:67px;min-height:67px;display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--line);gap:15px}
 .breadcrumb{display:flex;align-items:center;gap:13px;font-size:12px;white-space:nowrap;overflow:hidden}
@@ -57,7 +55,6 @@ button svg{flex-shrink:0}
 .tabs button{font-size:12px;color:var(--muted);border-radius:4px;padding:7px 12px;white-space:nowrap}
 .tabs button span{font-size:10px;padding-left:7px;opacity:.8}
 .tabs .tab-active{background:var(--accent-soft);color:var(--accent)}
-.new-task{font-size:12px;color:var(--accent);padding:6px 10px;border-radius:4px;white-space:nowrap}
 .editor-region{flex:1;min-height:0;overflow:hidden;padding:17px 0 0}
 .offscreen{display:none!important}
 .statusbar{height:30px;flex-shrink:0;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:10px;color:var(--muted);gap:10px}
@@ -151,7 +148,6 @@ button svg{flex-shrink:0}
 .compare textarea{height:160px}
 .modal{padding:28px 22px}
 .aggregate{padding:32px 23px}
-.new-task{font-size:11px}
 .shortcuts{grid-template-columns:125px 1fr;gap:7px}
 }
 
