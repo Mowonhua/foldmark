@@ -103,6 +103,30 @@ class EmptyCodeWidget extends WidgetType {
   ignoreEvent(): boolean { return true; }
 }
 
+/** 独立块间距计入 CodeMirror 的高度测量，不能用文本行外边距，否则鼠标定位会偏移。 */
+class BlockGapWidget extends WidgetType {
+  eq(): boolean { return true; }
+  toDOM(): HTMLElement {
+    const element = document.createElement('div');
+    element.className = 'fm-block-gap';
+    element.setAttribute('aria-hidden', 'true');
+    return element;
+  }
+}
+
+/** 块控件沿用所属列表的布局；坐标和事件仍由原控件负责，缩进不写回源文。 */
+class IndentedWidget extends WidgetType {
+  constructor(readonly widget: WidgetType, readonly margin: string) { super(); }
+  eq(other: IndentedWidget): boolean { return this.margin === other.margin && this.widget.constructor === other.widget.constructor && this.widget.eq(other.widget); }
+  toDOM(view: EditorView): HTMLElement {
+    const element = this.widget.toDOM(view);
+    element.style.marginLeft = this.margin;
+    return element;
+  }
+  ignoreEvent(event: Event): boolean { return this.widget.ignoreEvent(event); }
+  destroy(dom: HTMLElement): void { this.widget.destroy(dom); }
+}
+
 const mathCache = new Map<string, string>();
 class MathWidget extends WidgetType {
   constructor(readonly expression: string, readonly block: boolean, readonly from: number, readonly valid: boolean) { super(); }
@@ -416,10 +440,58 @@ function buildPreview(state: EditorState): DecorationSet {
     structureCache.set(model, cached);
     ranges.length = 0;
   }
+  // CodeMirror 的行和块控件是平级 DOM，不能依赖列表祖先的 CSS 继承缩进。
+  // 深层条目覆盖父项的行归属；仅隐藏容器要求的前导空白，代码自身缩进必须保留。
+  const layout = new Map<number, { margin: string; prefixTo: number }>();
+  for (const item of model.items) {
+    if (item.from > window.to) break;
+    if (item.to < window.from) continue;
+    const opening = state.doc.lineAt(item.from);
+    const markerEnd = item.markerTo - opening.from;
+    const continuation = markerEnd + (opening.text.slice(markerEnd).match(/^[ \t]+/)?.[0].length ?? 0);
+    const first = state.doc.lineAt(Math.max(item.from, window.from)).number;
+    const last = state.doc.lineAt(Math.min(item.to, window.to)).number;
+    for (let number = first; number <= last; number++) {
+      const line = state.doc.line(number);
+      const heading = number === opening.number;
+      const whitespace = line.text.match(/^[ \t]*/)?.[0].length ?? 0;
+      const depth = item.depth + (heading ? 0 : 1);
+      layout.set(line.from, { margin: `calc(var(--editor-font-size, 16px) * ${depth * 1.5})`, prefixTo: line.from + Math.min(whitespace, heading ? item.markerFrom - line.from : continuation) });
+    }
+  }
+  const replacedBlocks: { from: number; to: number }[] = [];
+  const blockReplacement = (node: SyntaxNode, widget: WidgetType): void => {
+    const line = state.doc.lineAt(node.from);
+    // 吃掉缩进空白所在的整行，避免在块控件前残留一个有行高的文本片段。
+    // 同行存在列表标记时保留该片段，任务控件仍必须可操作。
+    const from = /^[ \t]*$/.test(model.text.slice(line.from, node.from)) ? line.from : node.from;
+    if (overlapsHidden(from, node.to)) return;
+    const margin = layout.get(line.from)?.margin ?? '';
+    ranges.push(Decoration.replace({ widget: new IndentedWidget(widget, margin), block: true }).range(from, node.to));
+    replacedBlocks.push({ from, to: node.to });
+  };
+  const spacedLines = new Set<number>();
+  const separateBlock = (node: SyntaxNode): void => {
+    if (!/^(FencedCode|CodeBlock|Blockquote|MathBlock|Table|Paragraph|Task)$/.test(node.name)) return;
+    const line = state.doc.lineAt(node.from);
+    if (line.number === 1 || spacedLines.has(line.from)) return;
+    const previous = state.doc.line(line.number - 1);
+    // 容器首行与其内容是同一块；列表标题、引用首段不能各加一次间距。
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (/^(ListItem|Blockquote)$/.test(parent.name) && state.doc.lineAt(parent.from).from === line.from) return;
+      // 同一引用内只有容器标记的行在预览中也是空行，不能再次补间距。
+      if (parent.name === 'Blockquote' && parent.from <= previous.to && /^[ \t]*(?:>[ \t]*)+$/.test(previous.text)) return;
+    }
+    // 源文空行已经提供可编辑的间隔，不再叠加。被过滤的前块也不产生额外留白。
+    if (!previous.text.trim() || overlapsHidden(previous.from, line.from) || overlapsHidden(line.from, line.from + 1)) return;
+    spacedLines.add(line.from);
+    ranges.push(Decoration.widget({ widget: new BlockGapWidget(), block: true, side: -1 }).range(line.from));
+  };
   const visit = (node: SyntaxNode): void => {
     if (node.to < window.from || node.from > window.to) return;
     const hiddenRange = overlappingRange(node.from, node.to);
     if (hiddenRange && node.from >= hiddenRange.from && node.to <= hiddenRange.to) return;
+    separateBlock(node);
     const name = node.name;
     const source = model.text.slice(node.from, node.to);
     const editing = active(node.from, node.to);
@@ -462,11 +534,13 @@ function buildPreview(state: EditorState): DecorationSet {
         const block = name === 'MathBlock'; const delimiter = block ? '$$' : '$';
         const trimmed = source.trim(); const valid = name !== 'InlineMathUnclosed' && trimmed.length > delimiter.length && trimmed.endsWith(delimiter);
         const expression = trimmed.slice(delimiter.length, valid ? -delimiter.length : undefined).trim();
-        ranges.push(Decoration.replace({ widget: new MathWidget(expression, block, node.from, valid), block }).range(node.from, node.to));
+        const widget = new MathWidget(expression, block, node.from, valid);
+        if (block) blockReplacement(node, widget);
+        else ranges.push(Decoration.replace({ widget }).range(node.from, node.to));
       }
       return;
     }
-    if (name === 'Table' && !editing && !overlapsHidden(node.from, node.to)) { ranges.push(Decoration.replace({ widget: new TableWidget(source, node.from, node), block: true }).range(node.from, node.to)); return; }
+    if (name === 'Table' && !editing && !overlapsHidden(node.from, node.to)) { blockReplacement(node, new TableWidget(source, node.from, node)); return; }
     if (name === 'Blockquote') for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-quote'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
     if (name === 'QuoteMark' && !active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.from).to)) hide(node.from, Math.min(node.to + 1, state.doc.length));
     if (name === 'FencedCode' || name === 'CodeBlock') {
@@ -487,7 +561,7 @@ function buildPreview(state: EditorState): DecorationSet {
         if (fenceLines.includes(lastLine)) lastLine--;
       }
       if (emptyClosed) {
-        ranges.push(Decoration.replace({ widget: new EmptyCodeWidget(node.from), block: true }).range(node.from, node.to));
+        blockReplacement(node, new EmptyCodeWidget(node.from));
       } else {
         for (let number = firstLine; number <= lastLine; number++) {
           lineStyle(state.doc.line(number).from, `fm-code-line${number === firstLine ? ' fm-code-start' : ''}${number === lastLine ? ' fm-code-end' : ''}`);
@@ -506,6 +580,12 @@ function buildPreview(state: EditorState): DecorationSet {
     for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child);
   };
   visit(model.tree.topNode);
+  for (const [from, entry] of layout) {
+    if (overlapsHidden(from, from + 1) || replacedBlocks.some(block => from >= block.from && from < block.to)) continue;
+    ranges.push(Decoration.line({ attributes: { style: `margin-left: ${entry.margin}` } }).range(from));
+    // 围栏已整行隐藏；重复覆盖会破坏替换装饰的边界。
+    if (!lines.has(`${from}:fm-code-fence`)) hide(from, entry.prefixTo);
+  }
   return cached.decorations.update({ add: ranges, sort: true });
 }
 
