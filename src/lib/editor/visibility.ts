@@ -6,6 +6,7 @@ import { EditorSelection, EditorState, Prec, Transaction, type Extension } from 
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { getHiddenRanges, type DocumentModel } from '../markdown';
 import { completionField, documentField, foldsField, modeFacet } from './state';
+import { codeFenceEditing } from './code-fence-editing';
 
 /**
  * 结构职责：表示预览和键盘行为共同采用的隐藏内容区间。
@@ -146,6 +147,7 @@ export function visibleSelection(state: EditorState): EditorSelection | null {
  * 约束条件：显式选择删除、复制粘贴、撤销与源码编辑维持正常语义。
  */
 export const contentVisibility: Extension = [
+  codeFenceEditing,
   EditorView.atomicRanges.of(view=>hiddenContentAtoms(view.state)),
   Prec.highest(keymap.of([
     { key: 'Backspace', run: view=>protectHiddenDelete(view,-1), shift: view=>protectHiddenDelete(view,-1) },

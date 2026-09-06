@@ -1,5 +1,6 @@
 /* 文件职责：定义暖白纸面与炭灰主题、应用布局及可访问的交互状态。 */
-:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#343b35;background:#faf9f6;font-synthesis:none;--canvas:#faf9f6;--sidebar:#f1f0eb;--surface:#fffefa;--ink:#343b35;--muted:#666e62;--line:#e6e6df;--accent:#4f6b54;--accent-soft:#e4eadd;--hover:#ebeee4;--danger:#9a4b35;--code:#eeeee7;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
+/* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调，同时保持字重使用字体原生字形。 */
+:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#343b35;background:#faf9f6;font-synthesis:style;--canvas:#faf9f6;--sidebar:#f1f0eb;--surface:#fffefa;--ink:#343b35;--muted:#666e62;--line:#e6e6df;--accent:#4f6b54;--accent-soft:#e4eadd;--hover:#ebeee4;--danger:#9a4b35;--code:#eeeee7;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
 
 :root[data-theme=dark]{color-scheme:dark;--canvas:#252925;--sidebar:#20241f;--surface:#2b302a;--ink:#e0e3d9;--muted:#a1aa9b;--line:#3b4338;--accent:#b0c5a0;--accent-soft:#3b4b35;--hover:#333c2f;--danger:#f0ad96;--code:#30382d}
 

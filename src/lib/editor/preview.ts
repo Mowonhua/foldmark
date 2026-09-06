@@ -10,6 +10,19 @@ import { getHiddenRanges, type DocumentModel, type ListItem } from '../markdown'
 import { hiddenContentRanges } from './visibility';
 import { actionsFacet, completionField, documentField, foldsField, modeFacet, resourcesFacet } from './state';
 import { previewWindowField } from './viewport';
+import type { EditorOptions } from './types';
+import { CodeLanguageWidget } from './code-language';
+
+/** 共享行内排版只依赖源文和资源端口；无 focusAt 时生成可嵌入整行按钮的只读内容。 */
+interface InlineContext {
+  model: DocumentModel;
+  resources: Pick<EditorOptions, 'resolveResource' | 'openLink'>;
+  focusAt?: (from: number) => void;
+}
+
+function inlineContext(view: EditorView): InlineContext {
+  return { model: view.state.field(documentField), resources: view.state.facet(resourcesFacet), focusAt: from => view.state.facet(actionsFacet).focusAt(from) };
+}
 
 class ItemWidget extends WidgetType {
   constructor(readonly item: ListItem, readonly folded: boolean, readonly label: string) { super(); }
@@ -66,11 +79,36 @@ class NoteWidget extends WidgetType {
   ignoreEvent(): boolean { return true; }
 }
 
+/** 已闭合但没有正文行的围栏显示空框；用户首次激活时才插入可编辑空行，读取预览不改写文件。 */
+class EmptyCodeWidget extends WidgetType {
+  constructor(readonly from: number) { super(); }
+  eq(other: EmptyCodeWidget): boolean { return this.from === other.from; }
+  toDOM(view: EditorView): HTMLElement {
+    const element = document.createElement('div');
+    element.className = 'fm-code-line fm-code-start fm-code-end fm-empty-code';
+    element.setAttribute('aria-label', '空代码块');
+    if (view.state.readOnly) return element;
+    element.tabIndex = 0; element.setAttribute('role', 'button');
+    const activate = (event: Event): void => {
+      event.preventDefault();
+      const line = view.state.doc.lineAt(this.from);
+      const prefix = line.text.slice(0, this.from - line.from);
+      view.dispatch({ changes: { from: line.to, insert: `\n${prefix}` }, selection: { anchor: line.to + 1 + prefix.length }, userEvent: 'input' });
+      view.focus();
+    };
+    element.addEventListener('mousedown', activate);
+    element.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') activate(event); });
+    return element;
+  }
+  ignoreEvent(): boolean { return true; }
+}
+
 const mathCache = new Map<string, string>();
 class MathWidget extends WidgetType {
   constructor(readonly expression: string, readonly block: boolean, readonly from: number, readonly valid: boolean) { super(); }
   eq(other: MathWidget): boolean { return this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid; }
-  toDOM(view: EditorView): HTMLElement {
+  toDOM(view: EditorView): HTMLElement { return this.render(inlineContext(view)); }
+  render(context: InlineContext): HTMLElement {
     const element = document.createElement(this.block ? 'div' : 'span');
     element.className = this.block ? 'fm-math-block' : 'fm-math-inline';
     element.setAttribute('aria-label', this.expression);
@@ -90,7 +128,7 @@ class MathWidget extends WidgetType {
       element.textContent = `${this.block ? '$$' : '$'}${this.expression}${this.valid ? (this.block ? '$$' : '$') : ''}`;
       element.title = error instanceof Error ? error.message : '公式无法排版';
     }
-    element.addEventListener('mousedown', event => { event.preventDefault(); view.state.facet(actionsFacet).focusAt(this.from + (this.block ? 2 : 1)); });
+    if (context.focusAt) element.addEventListener('mousedown', event => { event.preventDefault(); context.focusAt!(this.from + (this.block ? 2 : 1)); });
     return element;
   }
   ignoreEvent(): boolean { return true; }
@@ -182,25 +220,29 @@ function linkWidget(node: SyntaxNode, model: DocumentModel): LinkWidget | null {
 class LinkWidget extends WidgetType {
   constructor(readonly label: string, readonly url: string, readonly from: number, readonly image: boolean, readonly title = '', readonly inline?: InlineLabel) { super(); }
   eq(other: LinkWidget): boolean { return this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image && this.title === other.title; }
-  toDOM(view: EditorView): HTMLElement {
-    const resources = view.state.facet(resourcesFacet);
+  toDOM(view: EditorView): HTMLElement { return this.render(inlineContext(view)); }
+  render(context: InlineContext, from = this.inline?.from, to = this.inline?.to): HTMLElement {
+    const resources = context.resources;
     const original = safeUrl(this.url, this.image) ?? (resources.resolveResource && !/[\u0000-\u001f\u007f]/.test(this.url) && /^(?:[a-z]:[\\/]|file:)/i.test(this.url) ? this.url : null);
     const url = original === null ? null : resources.resolveResource?.(original) ?? original;
     if (this.image && url) {
       const image = document.createElement('img');
-      image.src = url; image.alt = this.inline ? inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, view, this.inline.from, this.inline.to).textContent ?? this.label : this.label; image.loading = 'lazy'; image.className = 'fm-image';
+      image.src = url; image.alt = this.inline ? inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, context, Math.max(from!, this.inline.from), Math.min(to!, this.inline.to)).textContent ?? this.label : this.label; image.loading = 'lazy'; image.className = 'fm-image';
       if (this.title) image.title = this.title;
-      image.addEventListener('click', () => view.state.facet(actionsFacet).focusAt(this.from + 2));
+      if (context.focusAt) image.addEventListener('click', () => context.focusAt!(this.from + 2));
       return image;
     }
-    const link = document.createElement('a');
-    if (this.inline) link.append(inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, view, this.inline.from, this.inline.to));
+    const link: HTMLElement = document.createElement(context.focusAt ? 'a' : 'span');
+    link.className = 'fm-link';
+    if (this.inline) link.append(inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, context, Math.max(from!, this.inline.from), Math.min(to!, this.inline.to)));
     else link.textContent = this.label || this.url;
-    if (url) link.href = url;
+    // 聚合任务的整行按钮负责定位，内部链接不生成第二个可交互目标。
+    if (!context.focusAt) { if (this.title) link.title = this.title; return link; }
+    if (url) link.setAttribute('href', url);
     link.title = this.title ? `${this.title} · 点击编辑；Ctrl + 点击打开链接` : '点击编辑；Ctrl + 点击打开链接';
-    link.rel = 'noopener noreferrer'; link.target = '_blank';
+    link.setAttribute('rel', 'noopener noreferrer'); link.setAttribute('target', '_blank');
     link.addEventListener('click', event => {
-      if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); view.state.facet(actionsFacet).focusAt(this.from + 1); return; }
+      if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); context.focusAt!(this.from + 1); return; }
       if (original && resources.openLink) { event.preventDefault(); void resources.openLink(original); }
     });
     return link;
@@ -214,7 +256,7 @@ class LinkWidget extends WidgetType {
  * 输出说明：只创建安全 DOM；链接与公式复用正文预览的资源和错误处理契约。
  * 实现思路：保留子节点之间的文字，省略语法标记，并递归渲染语义子节点。
  */
-function inlineContent(node: SyntaxNode, source: string, sourceFrom: number, view: EditorView, from = node.from, to = node.to): DocumentFragment {
+function inlineContent(node: SyntaxNode, source: string, sourceFrom: number, context: InlineContext, from = node.from, to = node.to): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const text = (start: number, end: number): string => source.slice(start - sourceFrom, end - sourceFrom);
   let position = from;
@@ -222,19 +264,21 @@ function inlineContent(node: SyntaxNode, source: string, sourceFrom: number, vie
     if (child.to <= from || child.from >= to) continue;
     if (child.from > position) fragment.append(document.createTextNode(text(position, child.from)));
     if (/Mark$/.test(child.name)) { position = child.to; continue; }
-    const raw = text(child.from, child.to);
+    const raw = text(Math.max(from, child.from), Math.min(to, child.to));
     const tag = ({ Emphasis: 'em', StrongEmphasis: 'strong', Strikethrough: 'del', InlineCode: 'code' } as Record<string, string>)[child.name];
     if (tag) {
       const element = document.createElement(tag);
       if (tag === 'code') element.className = 'fm-code';
-      element.append(inlineContent(child, source, sourceFrom, view));
+      element.append(inlineContent(child, source, sourceFrom, context, Math.max(from, child.from), Math.min(to, child.to)));
       fragment.append(element);
     } else if (child.name === 'InlineMath' || child.name === 'InlineMathUnclosed') {
+      // 首行摘要截断公式时保留可见原文，不能把后续任务正文一并排入标题。
+      if (child.to > to) { fragment.append(document.createTextNode(raw)); position = to; continue; }
       const valid = child.name === 'InlineMath';
-      fragment.append(new MathWidget(raw.slice(1, valid ? -1 : undefined), false, child.from, valid).toDOM(view));
+      fragment.append(new MathWidget(raw.slice(1, valid ? -1 : undefined), false, child.from, valid).render(context));
     } else if (child.name === 'Link' || child.name === 'Image' || child.name === 'Autolink' || child.name === 'URL') {
-      const widget = linkWidget(child, view.state.field(documentField));
-      fragment.append(widget ? widget.toDOM(view) : document.createTextNode(raw));
+      const widget = linkWidget(child, context.model);
+      fragment.append(widget ? widget.render(context, from, to) : document.createTextNode(raw));
     } else if (child.name === 'Escape') fragment.append(document.createTextNode(raw.slice(1)));
     else if (child.name === 'Entity') fragment.append(document.createTextNode(decodeLinkText(raw)));
     else fragment.append(document.createTextNode(raw));
@@ -242,6 +286,21 @@ function inlineContent(node: SyntaxNode, source: string, sourceFrom: number, vie
   }
   if (position < to) fragment.append(document.createTextNode(text(position, to)));
   return fragment;
+}
+
+/**
+ * 按任务所属文档的语法快照排版首行，保留全文引用定义及资源解析上下文。
+ * item 必须来自 model；只生成展示 DOM，不挂载编辑器或改变原文及任务定位坐标。
+ */
+export function renderTaskTitle(model: DocumentModel, item: ListItem, resources: InlineContext['resources'] = {}): DocumentFragment {
+  let node: SyntaxNode | null = model.tree.resolveInner(item.contentFrom, 1);
+  while (node && node.name !== 'Task' && node.name !== 'Paragraph') node = node.parent;
+  if (!node) {
+    const fragment = document.createDocumentFragment();
+    fragment.append(document.createTextNode(model.text.slice(item.contentFrom, item.firstLineTo)));
+    return fragment;
+  }
+  return inlineContent(node, model.text, 0, { model, resources }, item.contentFrom, item.firstLineTo);
 }
 
 class TableWidget extends WidgetType {
@@ -271,7 +330,7 @@ class TableWidget extends WidgetType {
         cell.dataset.sourceFrom = String(cellNode?.from ?? rowNode.from);
         const alignment = delimiter[column]?.trim() ?? '';
         if (alignment.endsWith(':')) cell.style.textAlign = alignment.startsWith(':') ? 'center' : 'right';
-        if (cellNode) cell.append(inlineContent(cellNode, this.source, this.from, view));
+        if (cellNode) cell.append(inlineContent(cellNode, this.source, this.from, inlineContext(view)));
         row.append(cell);
       }
       table.append(row);
@@ -411,12 +470,36 @@ function buildPreview(state: EditorState): DecorationSet {
     if (name === 'Blockquote') for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-quote'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
     if (name === 'QuoteMark' && !active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.from).to)) hide(node.from, Math.min(node.to + 1, state.doc.length));
     if (name === 'FencedCode' || name === 'CodeBlock') {
-      for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-code-line'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
-      if (name === 'FencedCode' && !editing) for (let child = node.firstChild; child; child = child.nextSibling) {
-        if (child.name !== 'CodeMark') continue;
-        const line = state.doc.lineAt(child.from);
-        const to = Math.min(state.doc.length, line.to + 1);
-        if (line.from < to && !overlapsHidden(line.from, to)) ranges.push(Decoration.replace({ block: true }).range(line.from, to));
+      let firstLine = state.doc.lineAt(node.from).number;
+      let lastLine = state.doc.lineAt(node.to).number;
+      // 代码正文直接使用原编辑器行；进入编辑也不展开围栏，完整源码模式在入口统一跳过预览。
+      const fenceLines = name === 'FencedCode' ? node.getChildren('CodeMark').map(mark => state.doc.lineAt(mark.from).number) : [];
+      const visibleLines = lastLine - firstLine + 1 - fenceLines.length;
+      const emptyClosed = visibleLines === 0 && fenceLines.length === 2;
+      if (visibleLines > 0) {
+        // 围栏单独作为零高行隐藏，不能替换到下一行起点；否则 CodeMirror 会吞掉代码首行的行装饰。
+        for (const number of fenceLines) {
+          const line = state.doc.line(number);
+          lineStyle(line.from, 'fm-code-fence');
+          hide(line.from, line.to);
+        }
+        if (fenceLines.includes(firstLine)) firstLine++;
+        if (fenceLines.includes(lastLine)) lastLine--;
+      }
+      if (emptyClosed) {
+        ranges.push(Decoration.replace({ widget: new EmptyCodeWidget(node.from), block: true }).range(node.from, node.to));
+      } else {
+        for (let number = firstLine; number <= lastLine; number++) {
+          lineStyle(state.doc.line(number).from, `fm-code-line${number === firstLine ? ' fm-code-start' : ''}${number === lastLine ? ' fm-code-end' : ''}`);
+        }
+      }
+      if (name === 'FencedCode' && editing && (visibleLines > 0 || emptyClosed)) {
+        const info = node.getChild('CodeInfo');
+        const language = info ? model.text.slice(info.from, info.to).match(/^\S*/)?.[0] ?? '' : '';
+        if (!overlapsHidden(node.from, node.to)) {
+          // 使用独立块控件排在闭围栏之后，语言标记不占用代码边框内部或覆盖最后一行。
+          ranges.push(Decoration.widget({ widget: new CodeLanguageWidget(node.from, language), block: true, side: 1 }).range(node.to));
+        }
       }
       return;
     }

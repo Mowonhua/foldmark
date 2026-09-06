@@ -3,12 +3,13 @@
   import { onMount, tick } from 'svelte';
   import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
+  import { renderTaskTitle } from './lib/editor/preview';
   import { BrowserFilePort, defaultPreferences, welcomeText } from './lib/browser-files';
   import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, RecoveryDraft, ViewMode } from './lib/contracts';
   import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
   import type { ProjectSession, TaskResult } from './lib/session/types';
   import { parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
-  import type { DocumentModel } from './lib/markdown';
+  import type { DocumentModel, ListItem } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
 
@@ -35,7 +36,9 @@
   let includeArchived = $state(false);
   let results = $state<TaskResult[]>([]);
   let resultLimit = $state(100);
-  let aggregateResults = $state<TaskResult[]>([]);
+  // 每条聚合结果保留生成它的语法快照，异步刷新时标题与引用定义不会跨版本混用。
+  type AggregateResult = TaskResult & { model: DocumentModel; item: ListItem; path: string };
+  let aggregateResults = $state.raw<AggregateResult[]>([]);
   let aggregateLimits = $state<Record<string, number>>({});
   let indexing = $state(false);
   let indexGeneration = 0;
@@ -170,6 +173,16 @@
     editor.setMode(next); active.ui.mode = next; active.state = editor.state; version += 1; scheduleConfig();
   }
   async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; toast = ''; await updateIndex(); }
+  /** Svelte 只管理挂载点；内容由正文共享渲染器生成，更新时整体替换只读 DOM。 */
+  function taskTitle(node: HTMLElement, result: AggregateResult): { update: (next: AggregateResult) => void } {
+    const update = (next: AggregateResult): void => {
+      node.replaceChildren(renderTaskTitle(next.model, next.item, {
+        resolveResource: url => resolveDocumentResource(next.path, url, path => desktop ? convertFileSrc(path) : path),
+      }));
+    };
+    update(result);
+    return { update };
+  }
   function scheduleIndex(): void { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void updateIndex(); }, 350); }
   /** 查询缓存只持有不可编辑语法投影；正文变化才重建，保存反馈不触发重复解析。 */
   function modelForProject(projectId: string, text: string): DocumentModel {
@@ -182,7 +195,7 @@
   async function updateIndex(): Promise<void> {
     const generation = ++indexGeneration; indexing = true;
     const found: TaskResult[] = [];
-    const allFound: TaskResult[] = [];
+    const allFound: AggregateResult[] = [];
     for (const project of config.projects) {
       if (generation !== indexGeneration) return;
       try {
@@ -192,7 +205,7 @@
           found.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: result.archived });
         }
         if (screen === 'all') for (const result of searchTasks(model, '', false)) {
-          allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: false });
+          allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: false, model, item: result.item, path: project.path });
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
       // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
@@ -446,7 +459,7 @@
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
         {#each config.projects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
-          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span>{result.title}<small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}{#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}</section>{/if}
+          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span><small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}{#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}</section>{/if}
         {/each}
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>

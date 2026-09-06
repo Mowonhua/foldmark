@@ -82,11 +82,12 @@ describe('唯一文档编辑事务', () => {
     expect(instance.text).toBe('- [ ] 中文');
   });
   it('未激活 Markdown 显示语义排版，源码切换不改写原文', () => {
-    const source = '# 标题\n\n**强调** 与 ~~删除~~、`代码`、[链接](https://example.com)\n\n$x^2$\n\n$$x+y$$\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n末尾';
+    const source = '# 标题\n\n**强调** 与 *中文斜体*、_italic_、~~删除~~、`代码`、[链接](https://example.com)\n\n$x^2$\n\n$$x+y$$\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n末尾';
     const instance = editor(source);
     instance.focusAt(source.length);
     expect(instance.view.dom.querySelector('.fm-h1')).not.toBeNull();
     expect(instance.view.dom.querySelector('.fm-strong')).not.toBeNull();
+    expect(Array.from(instance.view.dom.querySelectorAll('.fm-em'), node => node.textContent)).toEqual(['中文斜体', 'italic']);
     expect(instance.view.dom.querySelector('.fm-math-inline .katex')).not.toBeNull();
     expect(instance.view.dom.querySelector('.fm-math-block .katex')).not.toBeNull();
     expect(instance.view.dom.querySelector('table')).not.toBeNull();
@@ -135,8 +136,28 @@ describe('唯一文档编辑事务', () => {
     expect(instance.view.dom.querySelector('.fm-math-error')?.getAttribute('title')).toContain('未闭合');
     expect(instance.view.contentDOM.textContent).toContain('const x = 1;');
     expect(instance.view.contentDOM.textContent).not.toContain('```');
+    const code = instance.view.contentDOM.querySelector('.fm-code-line')!;
+    expect(code.classList.contains('fm-code-start')).toBe(true);
+    expect(code.classList.contains('fm-code-end')).toBe(true);
     instance.setMode('source');
     expect(instance.text).toBe(source);
+  });
+  it('多行、缩进及未闭合代码块保持正文边框，进入编辑也不展开围栏', () => {
+    const source = '```ts\nconst a = 1;\nconst b = 2;\n```\n\n正文\n\n    indented\n    code\n\n末尾';
+    const instance = editor(source); instance.focusAt(source.length);
+    const starts = [...instance.view.contentDOM.querySelectorAll('.fm-code-start')];
+    const ends = [...instance.view.contentDOM.querySelectorAll('.fm-code-end')];
+    expect(starts.map(node => node.textContent)).toEqual(['const a = 1;', '    indented']);
+    expect(ends.map(node => node.textContent)).toEqual(['const b = 2;', '    code']);
+    instance.focusAt(1);
+    expect(instance.view.contentDOM.querySelector('.fm-code-start')?.textContent).toBe('const a = 1;');
+    expect(instance.view.contentDOM.querySelector('.fm-code-end')?.textContent).toBe('const b = 2;');
+    expect(instance.view.contentDOM.textContent).not.toContain('```');
+    instance.setMode('source');
+    expect(instance.view.contentDOM.textContent).toContain('```ts');
+    const unclosed = editor('正文\n\n```\nfirst\nlast');
+    expect(unclosed.view.contentDOM.querySelector('.fm-code-start')?.textContent).toBe('first');
+    expect(unclosed.view.contentDOM.querySelector('.fm-code-end')?.textContent).toBe('last');
   });
   it('Setext 标题与表格单元格组合语法按同一语法树排版', () => {
     const source = '主标题\n======\n\n| **重点** | [*链接*](https://example.com/a(b)) | $x^2$ |\n| --- | :---: | ---: |\n| ~~删除~~ | `代码` | 转义 \\| 竖线 |\n\n末尾';

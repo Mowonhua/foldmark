@@ -127,6 +127,50 @@ async function savedText(project: Project, expected: string): Promise<void> {
 }
 
 describe('App 真实编辑与文件闭环', () => {
+  it('围栏回车补全和语言输入通过真实保存路径持久化', async () => {
+    const source = '# 代码\n\n```';
+    await start([source], { [firstProject.id]: { mode: 'todo', cursor: source.length, scrollTop: 0, folded: [] } });
+    documentInput().focus();
+    documentInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await tick(); await paste('console.log(1)');
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="代码块语言"]')!;
+    expect(input).not.toBeNull();
+    input.focus(); input.value = 'javascript';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+    const expected = '# 代码\n\n```javascript\nconsole.log(1)\n```';
+    await savedText(firstProject, expected);
+    await remount();
+    expect((await files.read(firstProject.path)).text).toBe(expected);
+    expect(documentInput().textContent).toContain('console.log(1)');
+  });
+
+  it('全部待办渲染组合 Markdown 和文档引用，点击样式文字仍定位原文', async () => {
+    const source = '# 清单\n\n- [ ] **粗体与 *斜体*** ~~删除~~ `代码` [链接][ref] $x^2$ ![示意](./image.png)\n\n[ref]: https://example.com\n';
+    await start([source]);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.aggregate-task strong')?.textContent).toBe('粗体与 斜体'));
+    const row = document.querySelector<HTMLButtonElement>('.aggregate-task')!;
+    expect(row.querySelector('strong em')?.textContent).toBe('斜体');
+    expect(row.querySelector('del')?.textContent).toBe('删除');
+    expect(row.querySelector('code')?.textContent).toBe('代码');
+    expect(row.querySelector('.fm-link')?.textContent).toBe('链接');
+    expect(row.querySelector('.katex')).not.toBeNull();
+    expect(row.querySelector('img')?.getAttribute('src')).toBe('/浏览器/image.png');
+    expect(row.querySelector('a, button, input')).toBeNull();
+    row.querySelector('em')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name));
+    expect((await files.read(firstProject.path)).text).toBe(source);
+  });
+  it('聚合标题限制在首行，转义 HTML 且不激活危险链接和图片', async () => {
+    await start(['- [ ] [首行\n  后续正文](https://example.com)\n- [ ] <img src=x onerror=alert(1)> [危险](javascript:alert) ![危险图片](javascript:alert)\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(2));
+    const titles = [...document.querySelectorAll('.aggregate-title')];
+    expect(titles[0].textContent).toBe('首行');
+    expect(titles[1].textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(titles[1].querySelector('img, a, script')).toBeNull();
+  });
+
   it('勾选和文本输入实际保存，重启后从原文件恢复任务与归档', async () => {
     const original = '# 甲清单\n\n- [ ] 完成并重开\n- [ ] 持续编辑\n';
     await start([original]);

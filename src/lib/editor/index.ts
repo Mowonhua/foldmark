@@ -52,7 +52,8 @@ export class EditorController {
    */
   createState(text: string, mode: ViewMode): EditorState {
     return EditorState.create({ doc: text, extensions: [
-      markdown({ extensions: markdownExtensions }),
+      // Markdown 默认会以高优先级注册 Enter；键盘顺序统一由下方组合，保证围栏自动闭合先执行。
+      markdown({ extensions: markdownExtensions, addKeymap: false }),
       history(), drawSelection(), bracketMatching(), indentOnInput(), syntaxHighlighting(defaultHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
@@ -123,6 +124,8 @@ export class EditorController {
     finally { this.setMode(mode); }
   }
   private historyKey = (event: KeyboardEvent): void => {
+    // 嵌入语言输入框使用浏览器自己的文本历史，不能把其撤销快捷键送给正文。
+    if (event.target instanceof Element && event.target.closest('.fm-code-language')) return;
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing || this.view.composing) return;
     const key = event.key.toLowerCase();
     if (key !== 'z' && key !== 'y') return;
