@@ -6,11 +6,11 @@ import { GFM, type MarkdownConfig, type MarkdownExtension } from '@lezer/markdow
 
 /**
  * 结构职责：定义公式节点及美元定界规则。
- * 字段说明：MathBlock 覆盖整块，InlineMath 覆盖行内定界符。
- * 约束条件：未闭合块延续至所属容器结束；公式内不再解析 Markdown 列表。
+ * 字段说明：MathBlock 覆盖整块，InlineMath 覆盖行内定界符，InlineMathUnclosed 保存未闭合行内源码。
+ * 约束条件：未闭合块延续至所属容器结束，未闭合行内公式只到当前行末；公式内不再解析 Markdown 列表。
  */
 export const mathExtension: MarkdownConfig = {
-  defineNodes: [{ name: 'MathBlock', block: true }, 'InlineMath'],
+  defineNodes: [{ name: 'MathBlock', block: true }, 'InlineMath', 'InlineMathUnclosed'],
   parseBlock: [{
     name: 'MathBlock', before: 'FencedCode',
     parse(cx, line) {
@@ -36,13 +36,13 @@ export const mathExtension: MarkdownConfig = {
   parseInline: [{
     name: 'InlineMath', before: 'Emphasis',
     parse(cx, next, pos) {
-      if (next !== 36 || cx.char(pos + 1) === 36) return -1;
+      if (next !== 36 || cx.char(pos + 1) === 36 || cx.char(pos - 1) === 36) return -1;
       for (let end = pos + 1; end < cx.end; end++) {
-        if (cx.char(end) === 10) return -1;
+        if (cx.char(end) === 10) return cx.addElement(cx.elt('InlineMathUnclosed', pos, end));
         if (cx.char(end) === 92) { end++; continue; }
         if (cx.char(end) === 36) return cx.addElement(cx.elt('InlineMath', pos, end + 1));
       }
-      return -1;
+      return cx.addElement(cx.elt('InlineMathUnclosed', pos, cx.end));
     },
   }],
 };

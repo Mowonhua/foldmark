@@ -26,6 +26,15 @@ describe('shared syntax model', () => {
     expect(text.slice(0,m.items[0].firstLineTo)).toBe('- [ ] ~~still open~~');
     expect(m.items[0].task?.checked).toBe(false);expect(m.items[1].task?.checked).toBe(true);
   });
+  it('marks unclosed inline math locally without consuming later lines or code', () => {
+    const text = '公式 $x + y\n下一行\n\n`$code` 与 \\$escaped\n\n- [ ] 任务';
+    const model = parseDocument(text);
+    const incomplete: string[] = [];
+    model.tree.iterate({ enter: node => { if (node.name === 'InlineMathUnclosed') incomplete.push(text.slice(node.from, node.to)); } });
+    expect(incomplete).toEqual(['$x + y']);
+    expect(model.tasks).toHaveLength(1);
+    expect(model.text).toBe(text);
+  });
 });
 describe('task transactions', () => {
   it('requires explicit group completion and only edits checkbox characters', () => {

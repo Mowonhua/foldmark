@@ -1,6 +1,6 @@
 /** 文件职责：验证真实编辑器事务、历史隔离与投影交互。 */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorController } from './index';
+import { EditorController, type EditorOptions } from './index';
 import { indentTask, taskEnter } from './commands';
 import { foldsField } from './state';
 
@@ -9,10 +9,10 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 
 const editors: EditorController[] = [];
-function editor(text: string): EditorController {
+function editor(text: string, options: Partial<EditorOptions> = {}): EditorController {
   const parent = document.createElement('div');
   document.body.append(parent);
-  const instance = new EditorController(parent, { text, mode: 'todo', onChange: () => {} });
+  const instance = new EditorController(parent, { text, mode: 'todo', onChange: () => {}, ...options });
   editors.push(instance);
   return instance;
 }
@@ -115,6 +115,72 @@ describe('唯一文档编辑事务', () => {
     expect(checkbox?.getAttribute('aria-checked')).toBe('true');
     checkbox?.click();
     expect(instance.text).toBe('- [ ] 完成\n- [ ] 待办');
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe('- [x] 完成\n- [ ] 待办');
+    expect(instance.state.readOnly).toBe(true);
+  });
+  it('归档上下文菜单恢复不会误执行完成整组', () => {
+    const instance = editor('- [x] 完成\n  - [x] 子项');
+    instance.setMode('archive');
+    const marker = instance.view.dom.querySelector('[role=checkbox]')!;
+    marker.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    const restore = [...document.querySelectorAll<HTMLButtonElement>('.fm-item-menu button')].find(button => button.textContent === '恢复任务');
+    restore?.click();
+    expect(instance.text).toBe('- [ ] 完成\n  - [x] 子项');
+  });
+  it('未闭合公式提供局部提示，代码围栏就地预览后源码仍完整', () => {
+    const source = '公式 $x + y\n\n```ts\nconst x = 1;\n```\n\n末尾';
+    const instance = editor(source);
+    instance.focusAt(source.length);
+    expect(instance.view.dom.querySelector('.fm-math-error')?.getAttribute('title')).toContain('未闭合');
+    expect(instance.view.contentDOM.textContent).toContain('const x = 1;');
+    expect(instance.view.contentDOM.textContent).not.toContain('```');
+    instance.setMode('source');
+    expect(instance.text).toBe(source);
+  });
+  it('Setext 标题与表格单元格组合语法按同一语法树排版', () => {
+    const source = '主标题\n======\n\n| **重点** | [*链接*](https://example.com/a(b)) | $x^2$ |\n| --- | :---: | ---: |\n| ~~删除~~ | `代码` | 转义 \\| 竖线 |\n\n末尾';
+    const instance = editor(source); instance.focusAt(source.length);
+    expect(instance.view.dom.querySelector('.fm-h1')?.textContent).toContain('主标题');
+    const table = instance.view.dom.querySelector('table')!;
+    expect(table.querySelector('strong')?.textContent).toBe('重点');
+    expect(table.querySelector('a em')?.textContent).toBe('链接');
+    expect(table.querySelector('a')?.getAttribute('href')).toBe('https://example.com/a(b)');
+    expect(table.querySelector('.katex')).not.toBeNull();
+    expect(table.querySelector('del')?.textContent).toBe('删除');
+    expect(table.querySelector('code')?.textContent).toBe('代码');
+    expect(table.textContent).toContain('转义 | 竖线');
+    instance.setMode('source'); expect(instance.text).toBe(source);
+  });
+  it('引用式链接与图片解析规范化标签并优先使用首个定义，源码保持完整', () => {
+    const source = '[**完整**][Foo Bar] [foo bar][] [foo bar] ![图片][pic]\n\n[foo   BAR]: <https://example.com/a?x=1&amp;y=2> "说明"\n[foo bar]: https://wrong.example\n[pic]: images/a.png\n\n末尾';
+    const instance = editor(source, { resolveResource: url => url.startsWith('images/') ? `https://assets.example/${url}` : url });
+    instance.focusAt(source.length);
+    const links = [...instance.view.dom.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links).toHaveLength(3);
+    expect(links.every(link => link.getAttribute('href') === 'https://example.com/a?x=1&y=2')).toBe(true);
+    expect(links[0].querySelector('strong')?.textContent).toBe('完整');
+    expect(links[0].title).toContain('说明');
+    expect(instance.view.dom.querySelector('img.fm-image')?.getAttribute('src')).toBe('https://assets.example/images/a.png');
+    expect(instance.view.contentDOM.textContent).not.toContain('wrong.example');
+    instance.setMode('source'); expect(instance.text).toBe(source);
+  });
+  it('自动链接、GFM裸URL与表格引用共用打开端口，危险协议不能激活', () => {
+    const source = '<https://example.com> <a@example.com> https://example.org/a www.example.net b@example.org\n\n| 链接 | 公式 |\n| --- | --- |\n| [*表内*][ref] | $x$ |\n\n[ref]: https://table.example\n[bad]: javascript:alert(1)\n\n[危险][bad] 与 `https://code.example`\n\n末尾';
+    const openLink = vi.fn();
+    const instance = editor(source, { openLink }); instance.focusAt(source.length);
+    const links = [...instance.view.dom.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links.map(link => link.getAttribute('href'))).toEqual(expect.arrayContaining(['https://example.com', 'mailto:a@example.com', 'https://example.org/a', 'http://www.example.net', 'mailto:b@example.org', 'https://table.example']));
+    expect(instance.view.dom.querySelector('table a em')?.textContent).toBe('表内');
+    const automatic = links.find(link => link.getAttribute('href') === 'mailto:a@example.com')!;
+    automatic.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(openLink).toHaveBeenCalledWith('mailto:a@example.com');
+    const dangerous = links.find(link => link.textContent === '危险')!;
+    expect(dangerous.hasAttribute('href')).toBe(false);
+    dangerous.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(openLink).toHaveBeenCalledTimes(1);
+    expect(links.some(link => link.href === 'https://code.example/')).toBe(false);
+    expect(instance.text).toBe(source);
   });
   it('复选框按下不完成，原控件松开才完成，拖动取消不能触发单击', () => {
     const instance = editor('- [ ] 甲\n- [ ] 乙');
@@ -141,5 +207,18 @@ describe('唯一文档编辑事务', () => {
       instance.undo();
       expect(instance.text).toBe('- [ ] 甲\n- [ ] 乙');
     } finally { vi.useRealTimers(); }
+  });
+  it('丢失指针捕获会取消拖动，松开不能把任务误完成', () => {
+    const instance = editor('- [ ] 甲\n- [ ] 乙');
+    const marker = instance.view.dom.querySelector<HTMLButtonElement>('[role=checkbox]')!;
+    marker.setPointerCapture = vi.fn(); marker.hasPointerCapture = () => true; marker.releasePointerCapture = vi.fn();
+    const down = new MouseEvent('pointerdown', { bubbles: true, button: 0 });
+    Object.defineProperty(down, 'pointerId', { value: 7 });
+    marker.dispatchEvent(down);
+    expect(marker.setPointerCapture).toHaveBeenCalledWith(7);
+    marker.dispatchEvent(new Event('lostpointercapture'));
+    const up = new MouseEvent('pointerup'); Object.defineProperty(up, 'pointerId', { value: 7 }); window.dispatchEvent(up);
+    expect(instance.text).toBe('- [ ] 甲\n- [ ] 乙');
+    expect(marker.releasePointerCapture).toHaveBeenCalledWith(7);
   });
 });

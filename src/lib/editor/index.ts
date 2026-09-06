@@ -12,6 +12,8 @@ import { actionsFacet, completionField, documentField, foldHistory, foldsField, 
 import { previewField } from './preview';
 import { markerGestures } from './gestures';
 import { taskKeymap } from './commands';
+import { contentVisibility } from './visibility';
+import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
 import './editor.css';
@@ -36,6 +38,7 @@ export class EditorController {
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
+    this.view.dom.addEventListener('keydown', this.historyKey, true);
   }
   get state(): EditorState { return this.view.state; }
   get text(): string { return this.state.doc.toString(); }
@@ -54,7 +57,7 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, completionField, foldHistory, previewField, markerGestures,
+      documentField, foldsField, completionField, foldHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       placeholder('写下第一件事，或输入 - [ ] 创建任务…'),
@@ -94,7 +97,9 @@ export class EditorController {
     const anchor = Math.max(0, Math.min(pos, this.state.doc.length));
     const model = this.state.field(documentField);
     const folds = [...this.state.field(foldsField)].filter(from => { const item = model.items.find(item => item.from === from); return !item || anchor <= item.firstLineTo || anchor > item.to; });
-    this.view.dispatch({ selection: { anchor }, effects: [setFolds.of(folds), EditorView.scrollIntoView(anchor, { y: 'center' })], annotations: Transaction.addToHistory.of(false) });
+    const window = this.state.field(previewWindowField);
+    const viewportEffect = anchor < window.from || anchor > window.to ? [setPreviewWindow.of({ from: Math.max(0, anchor - 3000), to: Math.min(this.state.doc.length, anchor + 3000) })] : [];
+    this.view.dispatch({ selection: { anchor }, effects: [setFolds.of(folds), ...viewportEffect, EditorView.scrollIntoView(anchor, { y: 'center' })], annotations: Transaction.addToHistory.of(false) });
     this.view.focus();
   }
   insertTask(): void {
@@ -105,8 +110,25 @@ export class EditorController {
     this.view.dispatch({ changes: { from: end, insert }, selection: { anchor: end + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
     this.view.focus();
   }
-  undo(): boolean { return undo(this.view); }
-  redo(): boolean { return redo(this.view); }
+  undo(): boolean { return this.runHistory(undo); }
+  redo(): boolean { return this.runHistory(redo); }
+
+  /** 归档禁止自由编辑，但恢复命令已有文本历史，撤销必须仍可达。 */
+  private runHistory(command: (view: EditorView) => boolean): boolean {
+    const mode = this.state.facet(modeFacet);
+    if (mode !== 'archive') return command(this.view);
+    // 临时可写仅覆盖同步历史命令，DOM 始终不可编辑，并在返回前恢复只读契约。
+    this.view.dispatch({ effects: this.mode.reconfigure([modeFacet.of(mode), EditorState.readOnly.of(false), EditorView.editable.of(false)]), annotations: Transaction.addToHistory.of(false) });
+    try { return command(this.view); }
+    finally { this.setMode(mode); }
+  }
+  private historyKey = (event: KeyboardEvent): void => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing || this.view.composing) return;
+    const key = event.key.toLowerCase();
+    if (key !== 'z' && key !== 'y') return;
+    event.preventDefault(); event.stopPropagation();
+    if (key === 'y' || event.shiftKey) this.redo(); else this.undo();
+  };
 
   toggleTask(itemFrom: number, group = false): void {
     const model = this.state.field(documentField);
@@ -197,5 +219,5 @@ export class EditorController {
     this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
   }
   private clearCompletionTimers(): void { for (const timer of this.completionTimers) clearTimeout(timer); this.completionTimers.clear(); }
-  destroy(): void { this.groupPrompt?.remove(); this.clearCompletionTimers(); this.view.destroy(); }
+  destroy(): void { this.groupPrompt?.remove(); this.clearCompletionTimers(); this.view.dom.removeEventListener('keydown', this.historyKey, true); this.view.destroy(); }
 }

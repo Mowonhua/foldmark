@@ -6,8 +6,10 @@ import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import katex from 'katex';
-import { getHiddenRanges, type ListItem } from '../markdown';
+import { getHiddenRanges, type DocumentModel, type ListItem } from '../markdown';
+import { hiddenContentRanges } from './visibility';
 import { actionsFacet, completionField, documentField, foldsField, modeFacet, resourcesFacet } from './state';
+import { previewWindowField } from './viewport';
 
 class ItemWidget extends WidgetType {
   constructor(readonly item: ListItem, readonly folded: boolean, readonly label: string) { super(); }
@@ -97,28 +99,105 @@ class MathWidget extends WidgetType {
 /** 只允许可安全显示的链接协议，原文本始终可通过进入编辑或源码视图修改。 */
 function safeUrl(value: string, image: boolean): string | null {
   const clean = value.trim();
+  if (/[\u0000-\u001f\u007f]/.test(clean)) return null;
   if (/^(https?:|mailto:|#|\.\.?\/|\/)/i.test(clean) || !/^[a-z][a-z\d+.-]*:/i.test(clean)) return clean;
   if (image && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(clean)) return clean;
   return null;
 }
 
+interface LinkTarget { url: string; title: string }
+interface InlineLabel { node: SyntaxNode; source: string; sourceFrom: number; from: number; to: number }
+const referenceCache = new WeakMap<DocumentModel, ReadonlyMap<string, LinkTarget>>();
+const entityCache = new Map<string, string>();
+
+/** 标签只做大小写与空白归一，不能反转义后匹配，否则不同引用标签会错误合并。 */
+function normalizeLabel(label: string): string { return label.trim().replace(/[ \t\r\n]+/g, ' ').toUpperCase().toLowerCase(); }
+
+/** 只把已匹配的单个字符引用交给 DOM 解码，源文不能作为 HTML 标签进入 DOM。 */
+function decodeLinkText(value: string): string {
+  return value.replace(/\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g, '$1').replace(/&(?:#[xX][\da-fA-F]+|#\d+|[a-zA-Z][a-zA-Z\d]*);/g, entity => {
+    const cached = entityCache.get(entity);
+    if (cached !== undefined) return cached;
+    const decoder = document.createElement('textarea'); decoder.innerHTML = entity;
+    if (entityCache.size >= 128) entityCache.delete(entityCache.keys().next().value!);
+    entityCache.set(entity, decoder.value);
+    return decoder.value;
+  });
+}
+
+function linkDestination(raw: string): string { return decodeLinkText(raw.startsWith('<') && raw.endsWith('>') ? raw.slice(1, -1) : raw); }
+
+/** 引用定义来自同一棵完整语法树；同名定义保留第一次出现者，并按文档快照缓存。 */
+function linkReferences(model: DocumentModel): ReadonlyMap<string, LinkTarget> {
+  const cached = referenceCache.get(model);
+  if (cached) return cached;
+  const references = new Map<string, LinkTarget>();
+  model.tree.iterate({ enter: cursor => {
+    if (cursor.name !== 'LinkReference') return;
+    const node = cursor.node;
+    const label = node.getChild('LinkLabel'); const url = node.getChild('URL'); const title = node.getChild('LinkTitle');
+    if (label && url) {
+      const key = normalizeLabel(model.text.slice(label.from + 1, label.to - 1));
+      if (!references.has(key)) references.set(key, { url: linkDestination(model.text.slice(url.from, url.to)), title: title ? decodeLinkText(model.text.slice(title.from + 1, title.to - 1)) : '' });
+    }
+    return false;
+  } });
+  referenceCache.set(model, references);
+  return references;
+}
+
+/**
+ * 函数职责：统一解析正文和表格中的行内、引用式及自动链接。
+ * 输入说明：节点和模型必须属于同一源文快照；不存在引用定义时返回 null 以保留原文。
+ * 输出说明：控件共享资源解析与安全协议校验，源码始终不修改。
+ * 实现思路：优先采用语法 URL 节点，引用式回查标签，自动邮件和 www 补足协议。
+ */
+function linkWidget(node: SyntaxNode, model: DocumentModel): LinkWidget | null {
+  const text = (from: number, to: number): string => model.text.slice(from, to);
+  if (node.name === 'Autolink' || node.name === 'URL') {
+    const urlNode = node.name === 'URL' ? node : node.getChild('URL');
+    if (!urlNode) return null;
+    const label = text(urlNode.from, urlNode.to);
+    const destination = /^www\./i.test(label) ? `http://${label}` : !/^[a-z][a-z\d+.-]*:/i.test(label) && /^[^\s@]+@[^\s@]+$/.test(label) ? `mailto:${label}` : label;
+    return new LinkWidget(label, destination, node.from, false);
+  }
+  if (node.name !== 'Link' && node.name !== 'Image') return null;
+  const opening = node.firstChild;
+  let closing = opening?.nextSibling ?? null;
+  while (closing && !(closing.name === 'LinkMark' && text(closing.from, closing.to) === ']')) closing = closing.nextSibling;
+  if (!opening || !closing) return null;
+  const label = text(opening.to, closing.from);
+  const url = node.getChild('URL'); const title = node.getChild('LinkTitle');
+  let target: LinkTarget | undefined;
+  if (url) target = { url: linkDestination(text(url.from, url.to)), title: title ? decodeLinkText(text(title.from + 1, title.to - 1)) : '' };
+  else {
+    const reference = node.getChild('LinkLabel');
+    const referenceLabel = reference ? text(reference.from + 1, reference.to - 1) : '';
+    target = linkReferences(model).get(normalizeLabel(referenceLabel || label));
+  }
+  if (!target) return null;
+  return new LinkWidget(label, target.url, node.from, node.name === 'Image', target.title, { node, source: model.text, sourceFrom: 0, from: opening.to, to: closing.from });
+}
+
 class LinkWidget extends WidgetType {
-  constructor(readonly label: string, readonly url: string, readonly from: number, readonly image: boolean) { super(); }
-  eq(other: LinkWidget): boolean { return this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image; }
+  constructor(readonly label: string, readonly url: string, readonly from: number, readonly image: boolean, readonly title = '', readonly inline?: InlineLabel) { super(); }
+  eq(other: LinkWidget): boolean { return this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image && this.title === other.title; }
   toDOM(view: EditorView): HTMLElement {
     const resources = view.state.facet(resourcesFacet);
     const original = safeUrl(this.url, this.image) ?? (resources.resolveResource && /^[a-z]:[\\/]/i.test(this.url) ? this.url : null);
     const url = original === null ? null : resources.resolveResource?.(original) ?? original;
     if (this.image && url) {
       const image = document.createElement('img');
-      image.src = url; image.alt = this.label; image.loading = 'lazy'; image.className = 'fm-image';
+      image.src = url; image.alt = this.inline ? inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, view, this.inline.from, this.inline.to).textContent ?? this.label : this.label; image.loading = 'lazy'; image.className = 'fm-image';
+      if (this.title) image.title = this.title;
       image.addEventListener('click', () => view.state.facet(actionsFacet).focusAt(this.from + 2));
       return image;
     }
     const link = document.createElement('a');
-    link.textContent = this.label || this.url;
+    if (this.inline) link.append(inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, view, this.inline.from, this.inline.to));
+    else link.textContent = this.label || this.url;
     if (url) link.href = url;
-    link.title = '点击编辑；Ctrl + 点击打开链接';
+    link.title = this.title ? `${this.title} · 点击编辑；Ctrl + 点击打开链接` : '点击编辑；Ctrl + 点击打开链接';
     link.rel = 'noopener noreferrer'; link.target = '_blank';
     link.addEventListener('click', event => {
       if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); view.state.facet(actionsFacet).focusAt(this.from + 1); return; }
@@ -129,29 +208,96 @@ class LinkWidget extends WidgetType {
   ignoreEvent(): boolean { return true; }
 }
 
+/**
+ * 函数职责：按共享语法节点渲染表格单元格及链接文字中的行内组合语法。
+ * 输入说明：source 为源文切片，sourceFrom 把节点绝对坐标映射到该原文。
+ * 输出说明：只创建安全 DOM；链接与公式复用正文预览的资源和错误处理契约。
+ * 实现思路：保留子节点之间的文字，省略语法标记，并递归渲染语义子节点。
+ */
+function inlineContent(node: SyntaxNode, source: string, sourceFrom: number, view: EditorView, from = node.from, to = node.to): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  const text = (start: number, end: number): string => source.slice(start - sourceFrom, end - sourceFrom);
+  let position = from;
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.to <= from || child.from >= to) continue;
+    if (child.from > position) fragment.append(document.createTextNode(text(position, child.from)));
+    if (/Mark$/.test(child.name)) { position = child.to; continue; }
+    const raw = text(child.from, child.to);
+    const tag = ({ Emphasis: 'em', StrongEmphasis: 'strong', Strikethrough: 'del', InlineCode: 'code' } as Record<string, string>)[child.name];
+    if (tag) {
+      const element = document.createElement(tag);
+      if (tag === 'code') element.className = 'fm-code';
+      element.append(inlineContent(child, source, sourceFrom, view));
+      fragment.append(element);
+    } else if (child.name === 'InlineMath' || child.name === 'InlineMathUnclosed') {
+      const valid = child.name === 'InlineMath';
+      fragment.append(new MathWidget(raw.slice(1, valid ? -1 : undefined), false, child.from, valid).toDOM(view));
+    } else if (child.name === 'Link' || child.name === 'Image' || child.name === 'Autolink' || child.name === 'URL') {
+      const widget = linkWidget(child, view.state.field(documentField));
+      fragment.append(widget ? widget.toDOM(view) : document.createTextNode(raw));
+    } else if (child.name === 'Escape') fragment.append(document.createTextNode(raw.slice(1)));
+    else if (child.name === 'Entity') fragment.append(document.createTextNode(decodeLinkText(raw)));
+    else fragment.append(document.createTextNode(raw));
+    position = child.to;
+  }
+  if (position < to) fragment.append(document.createTextNode(text(position, to)));
+  return fragment;
+}
+
 class TableWidget extends WidgetType {
-  constructor(readonly source: string, readonly from: number) { super(); }
+  constructor(readonly source: string, readonly from: number, readonly node: SyntaxNode) { super(); }
   eq(other: TableWidget): boolean { return this.source === other.source && this.from === other.from; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div'); wrapper.className = 'fm-table-wrap';
     const table = document.createElement('table');
-    const rows = this.source.split(/\r?\n/);
-    for (let index = 0; index < rows.length; index++) {
-      if (index === 1) continue;
+    const delimiterNode = this.node.getChild('TableDelimiter');
+    const delimiter = delimiterNode ? this.source.slice(delimiterNode.from - this.from, delimiterNode.to - this.from).trim().replace(/^\||\|$/g, '').split('|') : [];
+    let columnCount = 0;
+    for (let rowNode = this.node.firstChild; rowNode; rowNode = rowNode.nextSibling) {
+      if (rowNode.name !== 'TableHeader' && rowNode.name !== 'TableRow') continue;
       const row = document.createElement('tr');
-      for (const value of rows[index].trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/)) {
-        const cell = document.createElement(index === 0 ? 'th' : 'td');
-        cell.textContent = value.trim().replace(/\\\|/g, '|');
+      const cells: (SyntaxNode | null)[] = [];
+      let pending: SyntaxNode | null = null;
+      // 空单元格没有 TableCell 节点，必须以语法分隔符补齐列，不能让后列左移。
+      for (let child = rowNode.firstChild; child; child = child.nextSibling) {
+        if (child.name === 'TableCell') pending = child;
+        if (child.name === 'TableDelimiter' && child.from !== rowNode.from) { cells.push(pending); pending = null; }
+      }
+      if (pending || rowNode.lastChild?.name !== 'TableDelimiter') cells.push(pending);
+      if (rowNode.name === 'TableHeader') columnCount = cells.length;
+      for (let column = 0; column < columnCount; column++) {
+        const cellNode = cells[column];
+        const cell = document.createElement(rowNode.name === 'TableHeader' ? 'th' : 'td');
+        cell.dataset.sourceFrom = String(cellNode?.from ?? rowNode.from);
+        const alignment = delimiter[column]?.trim() ?? '';
+        if (alignment.endsWith(':')) cell.style.textAlign = alignment.startsWith(':') ? 'center' : 'right';
+        if (cellNode) cell.append(inlineContent(cellNode, this.source, this.from, view));
         row.append(cell);
       }
       table.append(row);
     }
-    table.addEventListener('mousedown', event => { event.preventDefault(); view.state.facet(actionsFacet).focusAt(this.from + 1); });
+    table.addEventListener('mousedown', event => {
+      if (event.defaultPrevented || ((event.ctrlKey || event.metaKey) && (event.target as Element).closest('a'))) return;
+      event.preventDefault();
+      const cell = (event.target as Element).closest<HTMLElement>('[data-source-from]');
+      view.state.facet(actionsFacet).focusAt(cell ? Number(cell.dataset.sourceFrom) : this.from + 1);
+    });
     wrapper.append(table);
     return wrapper;
   }
   ignoreEvent(): boolean { return true; }
 }
+
+interface PreviewStructure {
+  mode: string;
+  folds: ReadonlySet<number>;
+  completions: ReadonlyMap<number, number>;
+  window: { from: number; to: number };
+  hidden: { from: number; to: number; widget: NoteWidget | undefined; block: boolean }[];
+  decorations: DecorationSet;
+}
+/** 选区变化不改变列表结构，复用整份文档的过滤和控件装饰。 */
+const structureCache = new WeakMap<DocumentModel, PreviewStructure>();
 
 /**
  * 函数职责：构造与当前源文一致的预览装饰。
@@ -165,17 +311,20 @@ function buildPreview(state: EditorState): DecorationSet {
   const model = state.field(documentField);
   const folds = state.field(foldsField);
   const ranges: Range<Decoration>[] = [];
-  const completing = new Set(state.field(completionField).values());
-  const hidden = getHiddenRanges(model, mode).filter(range => mode !== 'todo' || ![...completing].some(from => from >= range.from && from < range.to)).map(range => ({ from: range.from, to: range.to, widget: range.parentFrom !== null && range.count ? new NoteWidget(`已完成 ${range.count} 项`) : undefined, block: true }));
-  for (const item of model.items) if (folds.has(item.from) && item.to > item.firstLineTo) hidden.push({ from: item.firstLineTo, to: item.to, widget: new NoteWidget(' … 已折叠', item.from), block: false });
-  hidden.sort((a, b) => a.from - b.from || b.to - a.to);
-  const merged: typeof hidden = [];
-  for (const range of hidden) {
-    const last = merged.at(-1);
-    if (last && range.from < last.to) { last.to = Math.max(last.to, range.to); continue; }
-    if (range.from < range.to) merged.push({ ...range });
+  const completions = state.field(completionField);
+  const completing = new Set(completions.values());
+  const window = state.field(previewWindowField);
+  let cached = structureCache.get(model);
+  if (cached?.mode !== mode || cached.folds !== folds || cached.completions !== completions || cached.window !== window) cached = undefined;
+  const merged: PreviewStructure['hidden'] = cached?.hidden ?? [];
+  if (!cached) {
+    for (const range of hiddenContentRanges(state)) {
+      const widget = range.kind === 'fold' ? new NoteWidget(' … 已折叠',range.itemFrom)
+        : range.itemFrom !== null && range.count ? new NoteWidget(`已完成 ${range.count} 项`) : undefined;
+      merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
+    }
+    for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block }).range(range.from, range.to));
   }
-  for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block }).range(range.from, range.to));
   // 隐藏区间已排序且不重叠，二分定位避免大清单装饰与已完成项形成平方级扫描。
   const overlappingRange = (from: number, to: number): typeof merged[number] | undefined => {
     let low = 0; let high = merged.length;
@@ -193,16 +342,23 @@ function buildPreview(state: EditorState): DecorationSet {
     if (overlapsHidden(start, start + 1) || lines.has(`${start}:${className}`)) return;
     lines.add(`${start}:${className}`); ranges.push(Decoration.line({ class: className }).range(start));
   };
-  const orderedCounters = new Map<number, number>();
-  for (const item of model.items) {
-    const marker = model.text.slice(item.markerFrom, item.markerTo);
-    let label = '•';
-    if (/^\d/.test(marker)) { const number = orderedCounters.get(item.listFrom) ?? Number.parseInt(marker); orderedCounters.set(item.listFrom, number + 1); label = `${number}.`; }
-    if (overlapsHidden(item.from, item.firstLineTo)) continue;
-    ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.task.to : item.markerTo));
-    lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}${completing.has(item.from) ? ' fm-completing-line' : ''}`);
+  if (!cached) {
+    const orderedCounters = new Map<number, number>();
+    for (const item of model.items) {
+      if (item.from > window.to) break;
+      const marker = model.text.slice(item.markerFrom, item.markerTo);
+      let label = '•';
+      if (/^\d/.test(marker)) { const number = orderedCounters.get(item.listFrom) ?? Number.parseInt(marker); orderedCounters.set(item.listFrom, number + 1); label = `${number}.`; }
+      if (item.firstLineTo < window.from || overlapsHidden(item.from, item.firstLineTo)) continue;
+      ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.task.to : item.markerTo));
+      lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}${completing.has(item.from) ? ' fm-completing-line' : ''}`);
+    }
+    cached = { mode, folds, completions, window, hidden: merged, decorations: Decoration.set(ranges, true) };
+    structureCache.set(model, cached);
+    ranges.length = 0;
   }
   const visit = (node: SyntaxNode): void => {
+    if (node.to < window.from || node.from > window.to) return;
     const hiddenRange = overlappingRange(node.from, node.to);
     if (hiddenRange && node.from >= hiddenRange.from && node.to <= hiddenRange.to) return;
     const name = node.name;
@@ -212,34 +368,62 @@ function buildPreview(state: EditorState): DecorationSet {
       lineStyle(node.from, `fm-heading fm-h${name.at(-1)}`);
       if (!editing && node.firstChild?.name === 'HeaderMark') hide(node.firstChild.from, Math.min(node.firstChild.to + 1, node.to));
     }
+    if (/^SetextHeading[12]$/.test(name)) {
+      lineStyle(node.from, `fm-heading fm-h${name.at(-1)}`);
+      const mark = node.getChild('HeaderMark');
+      if (mark && !editing) {
+        const line = state.doc.lineAt(mark.from);
+        const to = Math.min(state.doc.length, line.to + 1);
+        if (!overlapsHidden(line.from, to)) ranges.push(Decoration.replace({ block: true }).range(line.from, to));
+      }
+    }
     if (name === 'Emphasis' || name === 'StrongEmphasis' || name === 'Strikethrough' || name === 'InlineCode') {
       addMark(node.from, node.to, ({ Emphasis: 'fm-em', StrongEmphasis: 'fm-strong', Strikethrough: 'fm-strike', InlineCode: 'fm-code' } as Record<string, string>)[name]);
       if (!editing) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
     }
-    if ((name === 'Link' || name === 'Image') && !editing && !overlapsHidden(node.from, node.to)) {
-      const match = source.match(/^!?\[([^]*)\]\(([^\s)]*)(?:\s+[^]*)?\)$/);
-      if (match) { ranges.push(Decoration.replace({ widget: new LinkWidget(match[1], match[2], node.from, name === 'Image') }).range(node.from, node.to)); return; }
+    if (name === 'LinkReference') {
+      if (!editing && !overlapsHidden(node.from, node.to)) {
+        const from = state.doc.lineAt(node.from).from;
+        const to = Math.min(state.doc.length, state.doc.lineAt(node.to).to + 1);
+        if (!overlapsHidden(from, to)) ranges.push(Decoration.replace({ block: true }).range(from, to));
+      }
+      return;
     }
-    if (name === 'MathBlock' || name === 'InlineMath') {
+    if (name === 'Link' || name === 'Image' || name === 'Autolink' || name === 'URL') {
+      if (!editing && !overlapsHidden(node.from, node.to)) {
+        const widget = linkWidget(node, model);
+        if (widget) { ranges.push(Decoration.replace({ widget }).range(node.from, node.to)); return; }
+      }
+      // 链接内部 URL 属于同一个编辑结构，不能在其源码露出时再单独替换目标字符串。
+      if (name !== 'URL') return;
+    }
+    if (name === 'MathBlock' || name === 'InlineMath' || name === 'InlineMathUnclosed') {
+      if (name === 'InlineMathUnclosed' && editing && !overlapsHidden(node.from, node.to)) ranges.push(Decoration.mark({ class: 'fm-math-error', attributes: { title: '公式尚未闭合，请补充 $' } }).range(node.from, node.to));
       if (!editing && !overlapsHidden(node.from, node.to)) {
         const block = name === 'MathBlock'; const delimiter = block ? '$$' : '$';
-        const trimmed = source.trim(); const valid = trimmed.length > delimiter.length && trimmed.endsWith(delimiter);
+        const trimmed = source.trim(); const valid = name !== 'InlineMathUnclosed' && trimmed.length > delimiter.length && trimmed.endsWith(delimiter);
         const expression = trimmed.slice(delimiter.length, valid ? -delimiter.length : undefined).trim();
         ranges.push(Decoration.replace({ widget: new MathWidget(expression, block, node.from, valid), block }).range(node.from, node.to));
       }
       return;
     }
-    if (name === 'Table' && !editing && !overlapsHidden(node.from, node.to)) { ranges.push(Decoration.replace({ widget: new TableWidget(source, node.from), block: true }).range(node.from, node.to)); return; }
+    if (name === 'Table' && !editing && !overlapsHidden(node.from, node.to)) { ranges.push(Decoration.replace({ widget: new TableWidget(source, node.from, node), block: true }).range(node.from, node.to)); return; }
     if (name === 'Blockquote') for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-quote'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
     if (name === 'QuoteMark' && !active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.from).to)) hide(node.from, Math.min(node.to + 1, state.doc.length));
     if (name === 'FencedCode' || name === 'CodeBlock') {
       for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-code-line'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
+      if (name === 'FencedCode' && !editing) for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.name !== 'CodeMark') continue;
+        const line = state.doc.lineAt(child.from);
+        const to = Math.min(state.doc.length, line.to + 1);
+        if (line.from < to && !overlapsHidden(line.from, to)) ranges.push(Decoration.replace({ block: true }).range(line.from, to));
+      }
       return;
     }
-    for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
+    for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child);
   };
   visit(model.tree.topNode);
-  return Decoration.set(ranges, true);
+  return cached.decorations.update({ add: ranges, sort: true });
 }
 
 export const previewField = StateField.define<DecorationSet>({

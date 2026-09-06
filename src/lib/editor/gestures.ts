@@ -17,6 +17,7 @@ class MarkerGestures {
   private session: DragSession | null = null;
   private frame = 0;
   private lastClick: { time: number; x: number; y: number; marker: HTMLElement } | null = null;
+  private closeMenu: (() => void) | null = null;
   constructor(private readonly view: EditorView) {
     view.dom.addEventListener('pointerdown', this.down, true);
     view.dom.addEventListener('contextmenu', this.context, true);
@@ -26,9 +27,10 @@ class MarkerGestures {
     window.addEventListener('keydown', this.key);
     window.addEventListener('blur', this.cancel);
   }
-  update(update: ViewUpdate): void { if (update.docChanged) this.cancel(); }
+  update(update: ViewUpdate): void { if (update.docChanged) { this.cancel(); this.closeMenu?.(); } }
   destroy(): void {
     this.cancel();
+    this.closeMenu?.();
     this.view.dom.removeEventListener('pointerdown', this.down, true);
     this.view.dom.removeEventListener('contextmenu', this.context, true);
     window.removeEventListener('pointermove', this.move);
@@ -49,10 +51,14 @@ class MarkerGestures {
     if (recent && recent.marker !== marker && performance.now() - recent.time < 360 && Math.hypot(event.clientX - recent.x, event.clientY - recent.y) < 5) return;
     this.cancel();
     this.session = { from: Number(marker.dataset.listMarker), pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, marker, started: false, boundary: undefined, preview: null, line: null };
+    marker.addEventListener('lostpointercapture', this.cancel);
+    // 捕获保证拖出窗口后仍可收尾；无真实活动指针的测试事件允许回退到 window 监听。
+    try { marker.setPointerCapture?.(event.pointerId); } catch { /* 浏览器拒绝非活动指针时，现有全局取消路径仍有效。 */ }
   };
   private move = (event: PointerEvent): void => {
     const session = this.session;
     if (!session || event.pointerId !== session.pointerId) return;
+    if (event.isTrusted && event.buttons === 0) { this.cancel(); return; }
     session.x = event.clientX; session.y = event.clientY;
     if (!session.started && Math.hypot(session.x - session.startX, session.y - session.startY) > 6) {
       session.started = true;
@@ -124,14 +130,20 @@ class MarkerGestures {
   private key = (event: KeyboardEvent): void => { if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
   private cancel = (): void => {
     cancelAnimationFrame(this.frame);
-    this.session?.preview?.remove(); this.session?.line?.remove(); this.session = null;
+    const session = this.session;
+    this.session = null;
+    session?.preview?.remove(); session?.line?.remove();
+    if (session) {
+      session.marker.removeEventListener('lostpointercapture', this.cancel);
+      try { if (session.marker.hasPointerCapture?.(session.pointerId)) session.marker.releasePointerCapture(session.pointerId); } catch { /* 控件被事务移除时捕获可能已由浏览器释放。 */ }
+    }
     document.body.classList.remove('fm-dragging');
   };
   private context = (event: MouseEvent): void => {
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
     if (!marker) return;
     event.preventDefault();
-    document.querySelector('.fm-item-menu')?.remove();
+    this.closeMenu?.();
     const from = Number(marker.dataset.listMarker);
     const actions = this.view.state.facet(actionsFacet);
     const menu = document.createElement('div'); menu.className = 'fm-item-menu'; menu.setAttribute('role', 'menu');
@@ -139,12 +151,15 @@ class MarkerGestures {
     const entries: [string, () => void][] = [['折叠 / 展开', () => actions.toggleFold(from)]];
     if (this.view.state.facet(modeFacet) === 'todo') entries.push(['上移', () => actions.moveItem(from, 'up')], ['下移', () => actions.moveItem(from, 'down')]);
     const item = this.view.state.field(documentField).items.find(item => item.from === from);
-    if (item?.task) entries.push([item.task.checked ? '恢复任务' : '完成整组', () => actions.toggleTask(from, true)]);
-    for (const [label, action] of entries) { const button = document.createElement('button'); button.textContent = label; button.setAttribute('role', 'menuitem'); button.onclick = () => { menu.remove(); action(); }; menu.append(button); }
-    menu.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.remove(); marker.focus(); } });
+    if (item?.task) entries.push([item.task.checked ? '恢复任务' : '完成整组', () => actions.toggleTask(from, !item.task?.checked)]);
+    if (item?.task?.checked && this.view.state.field(documentField).tasks.some(child => child.from > item.from && child.to <= item.to && !child.task?.checked)) entries.push(['完成整组', () => actions.toggleTask(from, true)]);
+    const close = (): void => { menu.remove(); window.removeEventListener('pointerdown', outside, true); this.closeMenu = null; };
+    const outside = (event: Event): void => { if (!menu.contains(event.target as Node)) close(); };
+    this.closeMenu = close;
+    for (const [label, action] of entries) { const button = document.createElement('button'); button.textContent = label; button.setAttribute('role', 'menuitem'); button.onclick = () => { close(); action(); }; menu.append(button); }
+    menu.addEventListener('keydown', event => { if (event.key === 'Escape') { close(); marker.focus(); } });
     document.body.append(menu); (menu.firstElementChild as HTMLElement).focus();
-    const close = (event: Event): void => { if (!menu.contains(event.target as Node)) { menu.remove(); window.removeEventListener('pointerdown', close, true); } };
-    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('pointerdown', outside, true);
   };
 }
 
