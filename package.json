@@ -8,6 +8,8 @@
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
+    "test:app": "vitest run --config vitest.app.config.ts",
+    "benchmark:core": "vite-node scripts/benchmark-core.ts",
     "test:e2e": "playwright test",
     "tauri": "tauri"
   },

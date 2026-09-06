@@ -1,5 +1,6 @@
 //! 文件职责：连接桌面命令与文件基础设施。
 //! 定义范围：Tauri 启动入口和平台命令适配。
+mod external_link;
 mod storage;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
@@ -13,6 +14,7 @@ use std::{
 };
 use storage::{FileError, FileSnapshot};
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 /// 结构职责：保持进程内磁盘操作顺序并持有监听生命周期。
 /// 字段说明：gate 只在后台阻塞线程使用；watchers 由订阅编号显式移除。
@@ -63,6 +65,30 @@ fn recovery_path(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, FileErro
 #[tauri::command]
 async fn read_file(path: String, state: State<'_, FileState>) -> Result<FileSnapshot, FileError> {
     disk(state.gate.clone(), move || storage::read(Path::new(&path))).await
+}
+
+#[tauri::command]
+async fn canonical_file_path(
+    path: String,
+    create: bool,
+    state: State<'_, FileState>,
+) -> Result<String, FileError> {
+    disk(state.gate.clone(), move || {
+        storage::canonical_path(Path::new(&path), create)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn open_external_link(url: String, app: tauri::AppHandle) -> Result<(), FileError> {
+    let validated = external_link::validated_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.opener()
+            .open_url(validated, None::<&str>)
+            .map_err(|error| FileError::new("LINK_OPEN", error.to_string()))
+    })
+    .await
+    .map_err(|error| FileError::new("LINK_OPEN", error.to_string()))?
 }
 
 #[tauri::command]
@@ -217,9 +243,12 @@ fn unwatch_file(watch_id: u64, state: State<'_, FileState>) -> Result<(), FileEr
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(FileState::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
+            canonical_file_path,
+            open_external_link,
             write_file,
             create_file,
             load_config,

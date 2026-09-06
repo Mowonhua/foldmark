@@ -24,6 +24,38 @@ pub struct FileError {
     pub message: String,
 }
 
+/// 函数职责：把用户选择的文件归一为不含目录别名的稳定绝对路径。
+/// 输入说明：新文件仅允许最终文件名缺失，父目录必须已存在。
+/// 输出说明：Windows 返回普通盘符或 UNC 路径，避免扩展路径前缀产生重复关联。
+/// 实现思路：现存文件解析目标；新文件解析父目录后拼接最终文件名。
+pub fn canonical_path(path: &Path, create: bool) -> Result<String, FileError> {
+    let resolved = match fs::canonicalize(path) {
+        Ok(resolved) => resolved,
+        Err(error) if create && error.kind() == std::io::ErrorKind::NotFound => {
+            let name = path
+                .file_name()
+                .ok_or_else(|| FileError::new("FILE_PATH", "文件名无效。"))?;
+            let parent = path
+                .parent()
+                .filter(|value| !value.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            fs::canonicalize(parent).map_err(FileError::io)?.join(name)
+        }
+        Err(error) => return Err(FileError::io(error)),
+    };
+    let identity = resolved.to_string_lossy().into_owned();
+    #[cfg(windows)]
+    {
+        if let Some(unc) = identity.strip_prefix(r"\\?\UNC\") {
+            return Ok(format!(r"\\{unc}"));
+        }
+        if let Some(local) = identity.strip_prefix(r"\\?\") {
+            return Ok(local.to_owned());
+        }
+    }
+    Ok(identity)
+}
+
 impl FileError {
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
@@ -56,6 +88,42 @@ fn snapshot(path: &Path, bytes: &[u8]) -> Result<FileSnapshot, FileError> {
         text: text.replace("\r\n", "\n"),
         revision: fingerprint(bytes),
     })
+}
+
+/// 编辑器使用 LF；磁盘的未改动行必须保留各自换行，不能因保存而重排混合 CRLF/LF 的原文。
+/// 替换行沿用对应旧行的换行，新插入行采用邻近旧行；正文没有末尾换行时不补换行。
+fn preserve_newlines(original: &str, normalized: &str) -> String {
+    if !original.contains("\r\n") {
+        return normalized.to_owned();
+    }
+    let old_normalized = original.replace("\r\n", "\n");
+    if !original.replace("\r\n", "").contains('\n') {
+        return normalized.replace('\n', "\r\n");
+    }
+    let old_lines: Vec<&str> = original.split_inclusive('\n').collect();
+    let new_lines: Vec<&str> = normalized.split_inclusive('\n').collect();
+    let diff = similar::TextDiff::from_lines(old_normalized.as_str(), normalized);
+    let mut output = String::with_capacity(normalized.len() + old_lines.len());
+    for operation in diff.ops() {
+        let old_range = operation.old_range();
+        for (offset, new_index) in operation.new_range().enumerate() {
+            let old_index = (old_range.start + offset)
+                .min(old_range.end.saturating_sub(1))
+                .min(old_lines.len().saturating_sub(1));
+            let old_line = old_lines.get(old_index).copied().unwrap_or("");
+            if operation.tag() == similar::DiffTag::Equal {
+                output.push_str(old_line);
+                continue;
+            }
+            let new_line = new_lines[new_index];
+            if old_line.ends_with("\r\n") {
+                output.push_str(&new_line.replace('\n', "\r\n"));
+                continue;
+            }
+            output.push_str(new_line);
+        }
+    }
+    output
 }
 
 /// 临时文件必须与目标同目录，写完先刷新内容再替换，避免跨卷重命名和部分正文可见。
@@ -104,12 +172,12 @@ pub fn write(path: &Path, text: &str, expected_revision: &str) -> Result<FileSna
     let original_text = std::str::from_utf8(&original)
         .map_err(|error| FileError::new("FILE_ENCODING", error.to_string()))?;
     let normalized = text.replace("\r\n", "\n");
-    let crlf = original_text.contains("\r\n") && !original_text.replace("\r\n", "").contains('\n');
-    let body = if crlf {
-        normalized.replace('\n', "\r\n")
-    } else {
-        normalized
-    };
+    let body = preserve_newlines(
+        original_text
+            .strip_prefix('\u{feff}')
+            .unwrap_or(original_text),
+        &normalized,
+    );
     let mut bytes = Vec::with_capacity(body.len() + 3);
     if original.starts_with(&[0xef, 0xbb, 0xbf]) {
         bytes.extend_from_slice(&[0xef, 0xbb, 0xbf]);
@@ -175,6 +243,22 @@ pub fn load_json(path: &Path) -> Result<Option<serde_json::Value>, FileError> {
 mod tests {
     use super::*;
     #[test]
+    fn canonical_identity_resolves_parent_segments_for_existing_and_new_files() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::create_dir(directory.path().join("nested")).unwrap();
+        let path = directory.path().join("tasks.md");
+        let alias = directory.path().join("nested").join("..").join("tasks.md");
+        assert_eq!(
+            canonical_path(&path, true).unwrap(),
+            canonical_path(&alias, true).unwrap()
+        );
+        create(&path, "tasks").unwrap();
+        assert_eq!(
+            canonical_path(&path, false).unwrap(),
+            canonical_path(&alias, false).unwrap()
+        );
+    }
+    #[test]
     fn save_preserves_bom_crlf_and_returns_lf_snapshot() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("中文清单.md");
@@ -188,6 +272,25 @@ mod tests {
             "\u{feff}- [x] 完成\r\n".as_bytes()
         );
         assert_ne!(saved.revision, original.revision);
+    }
+    #[test]
+    fn saving_a_mixed_newline_document_only_changes_the_edited_line() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("mixed.md");
+        std::fs::write(&path, "# 标题\r\n- [ ] one\n- [ ] two\r\nend").unwrap();
+        let original = read(&path).unwrap();
+        let unchanged = write(&path, &original.text, &original.revision).unwrap();
+        assert_eq!(unchanged.revision, original.revision);
+        write(
+            &path,
+            "# 标题\n- [x] one\n- [ ] two\nend",
+            &unchanged.revision,
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "# 标题\r\n- [x] one\n- [ ] two\r\nend"
+        );
     }
     #[test]
     fn stale_snapshot_and_external_edit_never_overwrite_disk() {

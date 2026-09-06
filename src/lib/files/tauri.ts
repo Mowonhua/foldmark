@@ -16,6 +16,9 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   }
 }
 
+/** 使用系统默认程序打开网页或邮件链接；Rust 再次校验协议，文档内容不能请求任意本地程序。 */
+export function openExternalLink(url: string): Promise<void> { return command('open_external_link', { url }); }
+
 /**
  * 接口职责：提供异步桌面文件访问能力。
  * 调用方：应用保存协调器与项目会话。
@@ -32,9 +35,11 @@ export class TauriFilePort implements FilePort {
   clearRecovery(path: string): Promise<void> { return command('clear_recovery', { path }); }
   async chooseFile(create: boolean): Promise<string | null> {
     const filters = [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }];
-    if (create) return save({ title: '创建 Markdown 清单', defaultPath: '清单.md', filters });
-    const path = await open({ title: '关联 Markdown 清单', multiple: false, directory: false, filters });
-    return typeof path === 'string' ? path : null;
+    const path = create
+      ? await save({ title: '创建 Markdown 清单', defaultPath: '清单.md', filters })
+      : await open({ title: '关联 Markdown 清单', multiple: false, directory: false, filters });
+    // 对话框路径可能包含目录别名；返回统一绝对路径后，项目层可以可靠判断重复关联。
+    return typeof path === 'string' ? command('canonical_file_path', { path, create }) : null;
   }
   async watch(path: string, onChange: () => void): Promise<() => void> {
     let watchId: number | undefined;

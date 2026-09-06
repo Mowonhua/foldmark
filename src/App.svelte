@@ -1,0 +1,462 @@
+<script lang="ts">
+  /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
+  import { onMount, tick } from 'svelte';
+  import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+  import { EditorController, getDocumentModel } from './lib/editor';
+  import { BrowserFilePort, defaultPreferences, welcomeText } from './lib/browser-files';
+  import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, ViewMode } from './lib/contracts';
+  import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
+  import type { ProjectSession, TaskResult } from './lib/session/types';
+  import { parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
+  import type { DocumentModel } from './lib/markdown';
+  import { resolveDocumentResource } from './lib/resource-paths';
+
+  const desktop = isTauri();
+  let files: FilePort;
+  let editor: EditorController | undefined;
+  let resourceDocumentPath = '';
+  let editorHost: HTMLDivElement;
+  const sessions = new Map<string, ProjectSession>();
+  // 会话必须与 Map、保存闭包共享同一对象；深层代理会让保存器读到代理前的旧 EditorState。
+  let active = $state.raw<ProjectSession | null>(null);
+  let config = $state<AppConfig>({ projects: [], activeProjectId: null, preferences: { ...defaultPreferences }, projectViews: {} });
+  let ready = $state(false);
+  let switching = false;
+  let openGeneration = 0;
+  let version = $state(0);
+  let screen = $state<'project' | 'all'>('project');
+  let sidebar = $state(true);
+  let projectFilter = $state('');
+  let query = $state('');
+  let searchOpen = $state(false);
+  let includeArchived = $state(false);
+  let results = $state<TaskResult[]>([]);
+  let indexing = $state(false);
+  let indexGeneration = 0;
+  const indexCache = new Map<string, { text: string; model: DocumentModel }>();
+  let searchTimer: ReturnType<typeof setTimeout>;
+  let configTimer: ReturnType<typeof setTimeout>;
+  let configQueue: Promise<void> = Promise.resolve();
+  let toast = $state('');
+  let toastUndo = $state(false);
+  let toastTimer: ReturnType<typeof setTimeout>;
+  let fatal = $state('');
+  let missing = $state<Project | null>(null);
+  let menuOpen = $state(false);
+  let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | null>(null);
+  let projectName = $state('');
+  let projectPath = $state('');
+  let createFile = $state(false);
+  let dialogError = $state('');
+  let recovery = $state<{ project: Project; disk: FileSnapshot; text: string } | null>(null);
+  const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
+  const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
+  const saveStatus = $derived.by(() => { void version; return active?.status; });
+  const counts = $derived.by(() => {
+    void version;
+    if (!active) return { todo: 0, archive: 0 };
+    const model = getDocumentModel(active.state);
+    const archived = model.tasks.filter(item => taskIsArchived(model, item)).length;
+    return { todo: model.tasks.length - archived, archive: archived };
+  });
+
+  $effect(() => {
+    const p = config.preferences;
+    document.documentElement.dataset.theme = p.theme;
+    document.documentElement.style.setProperty('--document-font', p.fontFamily);
+    document.documentElement.style.setProperty('--document-size', `${p.fontSize}px`);
+    document.documentElement.style.setProperty('--document-width', `${p.contentWidth}px`);
+    if (ready) scheduleConfig();
+  });
+  $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+
+  function notify(message: string, undoable = false): void {
+    toast = message; toastUndo = undoable; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast = ''; }, 6000);
+  }
+
+  /** 配置保存独立排队，保证较旧的界面快照不能覆盖新配置。 */
+  function scheduleConfig(): void {
+    clearTimeout(configTimer);
+    configTimer = setTimeout(() => { void persistConfig(); }, 250);
+  }
+  async function persistConfig(): Promise<void> {
+    if (!files) return;
+    captureUI();
+    const snapshot = JSON.parse(JSON.stringify(config)) as AppConfig;
+    configQueue = configQueue.catch(() => {}).then(() => files.saveConfig(snapshot));
+    try { await configQueue; } catch (error) { notify(`配置保存失败：${errorMessage(error)}`); }
+  }
+  function captureUI(): void {
+    if (!active || !editor || switching) return;
+    active.state = editor.state; active.ui = editor.getUIState();
+    config.projectViews[active.project.id] = active.ui;
+  }
+  function documentChanged(): void {
+    if (switching || !active || !editor) return;
+    active.state = editor.state; active.ui = editor.getUIState();
+    active.saver.changed(); version += 1;
+    if (searchOpen || screen === 'all') scheduleIndex();
+  }
+  function freshUI(project: Project): ProjectView {
+    return config.projectViews[project.id] ?? { mode: 'todo', cursor: 0, scrollTop: 0, folded: [] };
+  }
+
+  /** 异步读文件使用代次检查，快速切换时较早的读取不能抢回当前项目。 */
+  async function openProject(project: Project, position?: number): Promise<void> {
+    const generation = ++openGeneration;
+    captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false;
+    try {
+      let session = sessions.get(project.id);
+      if (!session) {
+        const disk = await files.read(project.path);
+        const draft = await files.loadRecovery(project.path);
+        if (generation !== openGeneration) return;
+        const ui = freshUI(project);
+        resourceDocumentPath = project.path;
+        switching = true;
+        if (!editor) editor = new EditorController(editorHost, {
+          text: disk.text, mode: ui.mode, onChange: documentChanged,
+          onStatus: message => notify(message, message.includes('可撤销')),
+          resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
+          openLink: openDocumentLink,
+        });
+        else editor.setText(disk.text, true);
+        editor.setMode(ui.mode); editor.setUIState(ui);
+        const current: ProjectSession = {
+          project, state: editor.state, ui, stopWatch: () => {}, status: { kind: 'saved', message: '所有更改已保存' },
+          saver: undefined as unknown as SaveCoordinator,
+        };
+        current.saver = new SaveCoordinator({
+          files, snapshot: disk, getText: () => current.state.doc.toString(),
+          reload: text => {
+            if (active?.project.id === project.id && editor) {
+              switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
+            } else if (editor) current.state = editor.createState(text, current.ui.mode);
+            version += 1; scheduleIndex();
+          },
+          onStatus: status => { current.status = status; version += 1; },
+        });
+        sessions.set(project.id, current); session = current;
+        void files.watch(project.path, () => { void current.saver.checkExternal(); indexCache.delete(project.id); })
+          .then(stop => { if (sessions.has(project.id)) current.stopWatch = stop; else stop(); })
+          .catch(error => notify(`文件监听暂不可用：${errorMessage(error)}`));
+        if (draft && draft.text !== disk.text) { recovery = { project, disk, text: draft.text }; dialog = 'recovery'; }
+      }
+      if (generation !== openGeneration) { switching = false; return; }
+      switching = true; active = session; config.activeProjectId = project.id;
+      resourceDocumentPath = project.path;
+      editor!.restoreState(session.state, session.ui); switching = false;
+      version += 1; scheduleConfig();
+      if (position !== undefined) { searchOpen = false; await tick(); editor!.focusAt(position); }
+      else editor!.view.focus();
+    } catch (error) { switching = false; fatal = errorMessage(error); missing = project; }
+  }
+
+  function setMode(next: ViewMode): void {
+    if (!active || !editor) return;
+    editor.setMode(next); active.ui.mode = next; active.state = editor.state; version += 1; scheduleConfig();
+  }
+  async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; await updateIndex(); }
+  function scheduleIndex(): void { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void updateIndex(); }, 350); }
+  /** 查询缓存只持有不可编辑语法投影；正文变化才重建，保存反馈不触发重复解析。 */
+  function modelForProject(projectId: string, text: string): DocumentModel {
+    const session = sessions.get(projectId);
+    if (session) return getDocumentModel(session.state);
+    const previous = indexCache.get(projectId);
+    if (previous?.text === text) return previous.model;
+    const model = parseDocument(text); indexCache.set(projectId, { text, model }); return model;
+  }
+  async function updateIndex(): Promise<void> {
+    const generation = ++indexGeneration; indexing = true;
+    const found: TaskResult[] = [];
+    for (const project of config.projects) {
+      if (generation !== indexGeneration) return;
+      try {
+        const text = sessions.get(project.id)?.state.doc.toString() ?? (await files.read(project.path)).text;
+        for (const result of searchTasks(modelForProject(project.id, text), query, includeArchived && screen !== 'all')) {
+          found.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: result.archived });
+        }
+      } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
+      // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    if (generation === indexGeneration) { results = found; indexing = false; }
+  }
+  async function locate(result: TaskResult): Promise<void> {
+    const project = config.projects.find(item => item.id === result.projectId);
+    if (project) {
+      await openProject(project);
+      setMode(result.checked ? 'archive' : 'todo');
+      searchOpen = false; await tick(); editor?.focusAt(result.from);
+    }
+  }
+
+  function openDialog(next: typeof dialog): void {
+    menuOpen = false; dialogError = ''; dialog = next;
+    if (next === 'project') { projectName = ''; projectPath = ''; createFile = false; }
+    if (next === 'rename') projectName = active?.project.name ?? '';
+  }
+  /** 对话框将键盘焦点限制在当前操作内，关闭时恢复触发控件。 */
+  function modalFocus(node: HTMLElement) {
+    const previous = document.activeElement as HTMLElement | null;
+    const focusable = () => [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, textarea, [tabindex="0"]')];
+    (node.querySelector<HTMLElement>('input, select, textarea') ?? focusable()[0] ?? node).focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const elements = focusable(); const first = elements[0]; const last = elements.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    node.addEventListener('keydown', trap);
+    return { destroy() { node.removeEventListener('keydown', trap); previous?.focus(); } };
+  }
+  async function choosePath(create: boolean): Promise<void> {
+    try {
+      const path = await files.chooseFile(create);
+      if (path) { projectPath = path; createFile = create; if (!projectName) projectName = path.split(/[\\/]/).pop()?.replace(/\.(md|markdown|txt)$/i, '') ?? '新项目'; }
+    } catch (error) { dialogError = errorMessage(error); }
+  }
+  async function addProject(): Promise<void> {
+    if (!projectName.trim() || !projectPath) { dialogError = '填写项目名称并选择 Markdown 文件。'; return; }
+    try {
+      if (config.projects.some(item => item.path.replace(/\\/g, '/').toLocaleLowerCase() === projectPath.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到项目。');
+      if (createFile) await files.create(projectPath, `# ${projectName.trim()}\n\n- [ ] \n`);
+      else await files.read(projectPath);
+      const project = { id: crypto.randomUUID(), name: projectName.trim(), path: projectPath };
+      config.projects = [...config.projects, project]; dialog = null; await openProject(project); scheduleConfig(); scheduleIndex();
+    } catch (error) { dialogError = errorMessage(error); }
+  }
+  function renameProject(): void {
+    if (!active || !projectName.trim()) return;
+    const project = config.projects.find(item => item.id === active!.project.id)!;
+    project.name = projectName.trim(); active.project = project; version += 1; dialog = null; scheduleConfig();
+  }
+  async function removeProject(): Promise<void> {
+    if (!active) return;
+    const session = active;
+    if (!await session.saver.flush()) { dialogError = '仍有未保存内容，请先处理保存失败或冲突，再移除关联。'; return; }
+    session.stopWatch(); session.saver.dispose();
+    sessions.delete(session.project.id); config.projects = config.projects.filter(item => item.id !== session.project.id);
+    delete config.projectViews[session.project.id]; active = null; config.activeProjectId = null; dialog = null;
+    if (config.projects[0]) await openProject(config.projects[0]);
+    else { editor?.destroy(); editor = undefined; }
+    scheduleConfig(); scheduleIndex();
+  }
+  async function relocate(): Promise<void> {
+    if (!missing) return;
+    try {
+      const path = await files.chooseFile(false); if (!path) return;
+      if (config.projects.some(project => project.id !== missing!.id && project.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到另一个项目。');
+      const project = missing; project.path = path; sessions.get(project.id)?.stopWatch(); sessions.get(project.id)?.saver.dispose(); sessions.delete(project.id);
+      await openProject(project); scheduleConfig();
+    } catch (error) { fatal = errorMessage(error); }
+  }
+  async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify('已保存'); } }
+  async function exportMarkdown(text = active?.state.doc.toString() ?? '', name = `${active?.project.name ?? '清单'}.md`): Promise<void> {
+    if (desktop) {
+      try { const path = await files.chooseFile(true); if (path) { await files.create(path, text); notify('副本已保存'); } }
+      catch (error) { notify(errorMessage(error)); }
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url);
+  }
+  async function resolveConflict(keepLocal: boolean): Promise<void> {
+    const external = active?.status.external; if (!active || !external) return;
+    try {
+      if (keepLocal) await active.saver.keepLocal(external);
+      else await active.saver.acceptExternal(external);
+      dialog = null;
+    } catch (error) { dialogError = errorMessage(error); }
+  }
+  async function recoverDraft(): Promise<void> {
+    if (!recovery || !active || !editor) return;
+    if (recovery.project.id !== active.project.id) { dialogError = '请先切换到草稿所属项目再恢复。'; return; }
+    editor.setText(recovery.text); active.state = editor.state;
+    // 恢复操作来自已展示双方全文的对话框，表示采用草稿作为当前编辑内容。
+    active.saver.changed(); dialog = null; recovery = null; version += 1;
+  }
+  function currentItemAction(action: 'fold' | 'up' | 'down' | 'group'): void {
+    if (!editor || screen !== 'project') return;
+    const position = editor.state.selection.main.head;
+    const item = parseDocument(editor.text).items.filter(item => item.from <= position && item.to >= position).at(-1);
+    if (!item) { notify('请先将光标放在列表项中'); return; }
+    if (action === 'fold') editor.toggleFold(item.from);
+    else if (action === 'group') editor.toggleTask(item.from, true);
+    else editor.moveItem(item.from, action);
+    menuOpen = false;
+  }
+  async function openDocumentLink(url: string): Promise<void> {
+    try {
+      if (url.startsWith('#') && editor) {
+        const slug = decodeURIComponent(url.slice(1)).toLocaleLowerCase();
+        const heading = editor.model.headings.find(item => item.text.toLocaleLowerCase().replace(/\s+/g, '-') === slug);
+        if (heading) editor.focusAt(heading.from);
+        else notify('未找到链接对应的章节');
+        return;
+      }
+      if (desktop) { await (await import('./lib/files/tauri')).openExternalLink(url); return; }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) { notify(errorMessage(error)); }
+  }
+  function keydown(event: KeyboardEvent): void {
+    if (event.isComposing) return;
+    if (event.key === 'Escape') { dialog = null; searchOpen = false; menuOpen = false; return; }
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
+    if (event.key.toLowerCase() === 'p') { event.preventDefault(); sidebar = true; void tick().then(() => document.getElementById('project-filter')?.focus()); }
+    if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
+  }
+
+  onMount(() => {
+    let unlistenClose = () => {};
+    let disposed = false;
+    const initialize = async () => {
+      try {
+        files = desktop ? new (await import('./lib/files/tauri')).TauriFilePort() : new BrowserFilePort();
+        const loaded = await files.loadConfig();
+        if (loaded) config = { ...loaded, preferences: { ...defaultPreferences, ...loaded.preferences }, projectViews: loaded.projectViews ?? {} };
+        else if (!desktop) {
+          const path = '浏览器/开始.md';
+          try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
+          config.projects = [{ id: 'welcome', name: '开始', path }]; config.activeProjectId = 'welcome';
+        }
+        if (disposed) return; ready = true;
+        const project = config.projects.find(item => item.id === config.activeProjectId) ?? config.projects[0];
+        if (project) await openProject(project);
+        if (desktop) {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window');
+          unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
+            event.preventDefault(); captureUI();
+            const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
+            await persistConfig();
+            if (saved.every(Boolean)) await getCurrentWindow().destroy();
+            else notify('仍有未保存修改，请处理文件冲突或保存失败后关闭。恢复草稿已保留。');
+          });
+        }
+      } catch (error) { fatal = errorMessage(error); ready = true; }
+    };
+    void initialize();
+    const beforeUnload = () => { captureUI(); void persistConfig(); for (const session of sessions.values()) void session.saver.flush(); };
+    const focus = () => { for (const session of sessions.values()) void session.saver.checkExternal(); };
+    window.addEventListener('beforeunload', beforeUnload); window.addEventListener('focus', focus);
+    return () => {
+      disposed = true; unlistenClose(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
+      clearTimeout(searchTimer); clearTimeout(configTimer); clearTimeout(toastTimer);
+      for (const session of sessions.values()) { session.stopWatch(); session.saver.dispose(); } editor?.destroy();
+    };
+  });
+</script>
+
+<svelte:window onkeydown={keydown} />
+
+<div class="app-shell" class:sidebar-hidden={!sidebar}>
+  {#if sidebar}
+    <aside class="sidebar" aria-label="项目导航">
+      <div class="brand"><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航">‹</button></div>
+      <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
+      <div class="sidebar-section"><span>项目</span><button class="icon-button" aria-label="新增项目" onclick={() => openDialog('project')}>+</button></div>
+      <input id="project-filter" class="project-filter" aria-label="快速查找项目" placeholder="查找项目…  Ctrl P" bind:value={projectFilter} />
+      <nav class="project-list">
+        {#each visibleProjects as project (project.id)}
+          <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id} onclick={() => openProject(project)} title={project.path}><span class="project-mark" aria-hidden="true">{project.name.slice(0, 1)}</span><span class="project-name">{project.name}</span></button>
+        {/each}
+      </nav>
+      <button class="add-project" onclick={() => openDialog('project')}>＋ 新增项目</button>
+      <div class="sidebar-bottom"><span class="offline-dot"></span> 本地 · 离线可用 <button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
+    </aside>
+  {/if}
+
+  <main class="main-pane">
+    <header class="topbar">
+      <div class="breadcrumb">{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong></div>
+      <div class="top-actions"><button class="search-button" onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button></div>
+      {#if menuOpen}<div class="dropdown" role="menu">
+        {#if screen === 'project' && active}
+        <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
+        <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>新增任务</button>
+        <button role="menuitem" onclick={() => currentItemAction('group')}>完成整组任务</button>
+        <button role="menuitem" onclick={() => currentItemAction('fold')}>折叠 / 展开当前项</button>
+        <button role="menuitem" onclick={() => currentItemAction('up')}>同级上移</button>
+        <button role="menuitem" onclick={() => currentItemAction('down')}>同级下移</button>
+        <hr/><button role="menuitem" onclick={() => openDialog('rename')}>重命名项目</button>
+        <button role="menuitem" onclick={() => exportMarkdown()}>另存 Markdown 副本</button>
+        <button role="menuitem" onclick={() => openDialog('remove')}>移除项目关联</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
+      </div>{/if}
+    </header>
+
+    {#if searchOpen}
+      <section class="search-panel" aria-label="跨项目搜索">
+        <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}>×</button></div>
+        <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> 包含归档</label>
+        <div class="search-results">{#each results.slice(0, 100) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}</div>
+      </section>
+    {/if}
+
+    {#if screen === 'project'}
+      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive],['source','完整源码',null]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div><button class="new-task" disabled={!active} onclick={() => { setMode('todo'); editor?.insertTask(); }}>＋ 新任务</button></div>
+    {/if}
+
+    {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
+    {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">磁盘文件有新的修改，你的编辑已保留。<button onclick={() => openDialog('conflict')}>比较并处理</button></div>{/if}
+    {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">保存失败：{saveStatus.message}<button onclick={save}>重试保存</button><button onclick={() => exportMarkdown()}>另存副本</button></div>{/if}
+
+    <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
+    {#if !active && screen === 'project' && !fatal}
+      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>了解编辑方式 →</button></section>
+    {/if}
+    {#if screen === 'all'}
+      <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{results.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
+        {#each config.projects as project}
+          {@const projectResults = results.filter(result => result.projectId === project.id)}
+          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span>{result.title}<small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}</section>{/if}
+        {/each}
+        {#if !results.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
+      </section>
+    {/if}
+    <footer class="statusbar"><span>{desktop ? saveStatus?.message ?? '本地 Markdown 文件' : '浏览器预览 · 数据保存在此浏览器，可另存 Markdown'}</span><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
+  </main>
+</div>
+
+{#if toast}<div class="toast" role="status"><span>{toast}</span>{#if toastUndo}<button onclick={() => { editor?.undo(); toast = ''; }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}>×</button></div>{/if}
+
+{#if dialog}
+  <div class="modal-backdrop" role="presentation">
+    <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
+      <button class="modal-close icon-button" aria-label="关闭对话框" onclick={() => dialog = null}>×</button>
+      {#if dialog === 'project'}
+        <p class="eyebrow">项目</p><h2 id="dialog-title">给一份清单一个位置</h2><p class="muted">关联已有 Markdown，或选择位置新建文件。</p>
+        <label>项目名称<input placeholder="例如：工作、阅读、生活" bind:value={projectName}/></label>
+        <div class="file-buttons"><button onclick={() => choosePath(false)}>选择已有文件</button><button onclick={() => choosePath(true)}>新建清单文件</button></div>
+        {#if projectPath}<p class="file-path">{projectPath}</p>{/if}
+        {#if !desktop}<p class="small muted">浏览器模式会导入文件副本。桌面应用直接关联本地原文件。</p>{/if}
+        <button class="primary" onclick={addProject}>添加项目</button>
+      {:else if dialog === 'rename'}
+        <h2 id="dialog-title">重命名项目</h2><label>项目名称<input bind:value={projectName}/></label><button class="primary" onclick={renameProject}>保存名称</button>
+      {:else if dialog === 'remove'}
+        <h2 id="dialog-title">移除「{active?.project.name}」的关联？</h2><p>Markdown 文件会保留在原位置。你可以随时重新关联。</p><div class="modal-actions"><button onclick={() => dialog = null}>取消</button><button class="primary" onclick={removeProject}>移除关联</button></div>
+      {:else if dialog === 'settings'}
+        <p class="eyebrow">阅读与外观</p><h2 id="dialog-title">让文字读起来更舒适</h2>
+        <label>主题<select bind:value={config.preferences.theme}><option value="system">跟随系统</option><option value="light">浅色 · 暖白纸面</option><option value="dark">深色 · 炭灰</option></select></label>
+        <label>正文字体<input bind:value={config.preferences.fontFamily}/></label>
+        <label>字号 <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
+        <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
+        <p class="small muted">外观自动保存。动画遵循系统的减少动态效果设置。</p>
+      {:else if dialog === 'help'}
+        <p class="eyebrow">连续写作</p><h2 id="dialog-title">文字在原位，事情慢慢完成。</h2>
+        <dl class="shortcuts"><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>
+        <p>单击复选框完成任务；按住复选框、圆点或编号拖动同级排序。左侧三角折叠正文。父项仍有未完成子项时，在菜单选择“完成整组任务”。</p><p>归档保留原文位置。完整源码可编辑所有 Markdown，包括暂不支持的语法。公式支持 KaTeX 数学语法。</p>
+      {:else if dialog === 'conflict'}
+        <p class="eyebrow">外部修改</p><h2 id="dialog-title">选择要保留的内容</h2><p class="muted">可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。</p>
+        <div class="compare"><label>当前编辑<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>磁盘版本<textarea readonly value={active?.status.external?.text}></textarea></label></div>
+        <div class="modal-actions"><button onclick={() => exportMarkdown()}>另存当前副本</button><button onclick={() => resolveConflict(false)}>选用磁盘版本</button><button class="primary" onclick={() => resolveConflict(true)}>保留当前编辑</button></div>
+      {:else if dialog === 'recovery'}
+        <p class="eyebrow">编辑恢复</p><h2 id="dialog-title">发现一份未写入文件的草稿</h2><p>草稿与磁盘内容均保留。恢复后可继续编辑，也可先另存草稿副本。</p>
+        <div class="compare"><label>恢复草稿<textarea readonly value={recovery?.text}></textarea></label><label>磁盘内容<textarea readonly value={recovery?.disk.text}></textarea></label></div>
+        <div class="modal-actions"><button onclick={() => exportMarkdown(recovery?.text)}>另存草稿副本</button><button onclick={() => { dialog = null; }}>暂不恢复</button><button class="primary" onclick={recoverDraft}>恢复草稿继续编辑</button></div>
+      {/if}
+      {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
+    </div>
+  </div>
+{/if}
