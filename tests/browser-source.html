@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>来源视图源码切换验收</title>
+<style>
+  :root { --text:#263027; --ink:#263027; --muted:#74806f; --accent:#537146; --surface:#fff; --surface-alt:#f0f3ed; --border:#d6ded1; --selection:#d8e7ca; --danger:#a53d3d; }
+  body { margin:20px; color:var(--text); background:#fafbf9; font-family:system-ui,sans-serif; }
+  #editor { width:800px; height:600px; border:1px solid var(--border); background:var(--surface); }
+  button { margin-bottom:12px; padding:8px 16px; cursor:pointer; }
+  #result { max-width:1000px; white-space:pre-wrap; overflow-wrap:anywhere; }
+</style>
+<h1>来源视图源码切换验收</h1>
+<p>在真实编辑器中检查待办与归档的源码范围、阅读行像素位置和返回光标。可重复运行。</p>
+<button id="verify">验证源码切换</button>
+<span id="status" role="status">等待运行</span>
+<div id="editor"></div>
+<pre id="result" aria-live="polite"></pre>
+<script type="module" src="./browser-source.ts"></script>
+</html>

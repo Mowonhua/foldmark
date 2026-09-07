@@ -4,6 +4,7 @@
  */
 import type { DocumentModel, HiddenRange, ListItem, TaskSearchResult } from './types';
 import { afterLine } from './parse';
+import { archiveSections } from './archive';
 
 const archiveStates = new WeakMap<DocumentModel, Map<number, boolean>>();
 /** 外部源文可以包含已勾父项和未完成后代；此时只归档真正完成的子树。 */
@@ -44,7 +45,15 @@ export function getHiddenRanges(model: DocumentModel, mode: 'todo' | 'archive' |
   if (mode === 'source') return [];
   const archived = archivedItems(model);
   const completedRoots = model.tasks.filter(item => archived.get(item.from) && (item.parentFrom === null || !archived.get(item.parentFrom)));
-  if (mode === 'todo') return completedRoots.map(item => ({ from: item.moveFrom, to: item.moveTo, parentFrom: item.parentFrom, count: 1 }));
+  if (mode === 'todo') return mergeRanges([
+    ...completedRoots.map(item => ({ from: item.moveFrom, to: item.moveTo, parentFrom: item.parentFrom, count: 1 })),
+    // 已整理的归档章节整体隐藏，包括备注；尚未整理的未完成任务仍须可达。
+    ...archiveSections(model).map(section => ({
+      from: section.from,
+      to: model.tasks.some(item => item.from >= section.headingTo && item.to <= section.to && !archived.get(item.from)) ? section.headingTo : section.to,
+      parentFrom: null, count: 0,
+    })),
+  ]);
   const byFrom = new Map(model.items.map(item => [item.from,item]));
   const visible: HiddenRange[] = [];
   const keep = (from: number, to: number): void => { visible.push({ from, to, parentFrom: null, count: 0 }); };

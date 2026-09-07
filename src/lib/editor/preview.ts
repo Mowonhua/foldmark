@@ -8,7 +8,7 @@ import type { SyntaxNode } from '@lezer/common';
 import katex from 'katex';
 import { getHiddenRanges, type DocumentModel, type ListItem } from '../markdown';
 import { hiddenContentRanges } from './visibility';
-import { actionsFacet, completionField, documentField, foldsField, modeFacet, resourcesFacet } from './state';
+import { actionsFacet, documentField, foldsField, modeFacet, resourcesFacet } from './state';
 import { previewWindowField } from './viewport';
 import type { EditorOptions } from './types';
 import { CodeLanguageWidget } from './code-language';
@@ -374,7 +374,6 @@ class TableWidget extends WidgetType {
 interface PreviewStructure {
   mode: string;
   folds: ReadonlySet<number>;
-  completions: ReadonlyMap<number, number>;
   window: { from: number; to: number };
   hidden: { from: number; to: number; widget: NoteWidget | undefined; block: boolean }[];
   decorations: DecorationSet;
@@ -390,15 +389,13 @@ const structureCache = new WeakMap<DocumentModel, PreviewStructure>();
  */
 function buildPreview(state: EditorState): DecorationSet {
   const mode = state.facet(modeFacet);
-  if (mode === 'source') return Decoration.none;
+  if (mode === 'source') return Decoration.set(hiddenContentRanges(state).map(range => Decoration.replace({ block: true, inclusiveEnd: false }).range(range.from, range.to)), true);
   const model = state.field(documentField);
   const folds = state.field(foldsField);
   const ranges: Range<Decoration>[] = [];
-  const completions = state.field(completionField);
-  const completing = new Set(completions.values());
   const window = state.field(previewWindowField);
   let cached = structureCache.get(model);
-  if (cached?.mode !== mode || cached.folds !== folds || cached.completions !== completions || cached.window !== window) cached = undefined;
+  if (cached?.mode !== mode || cached.folds !== folds || cached.window !== window) cached = undefined;
   const merged: PreviewStructure['hidden'] = cached?.hidden ?? [];
   if (!cached) {
     for (const range of hiddenContentRanges(state)) {
@@ -435,9 +432,9 @@ function buildPreview(state: EditorState): DecorationSet {
       if (/^\d/.test(marker)) { const number = orderedCounters.get(item.listFrom) ?? Number.parseInt(marker); orderedCounters.set(item.listFrom, number + 1); label = `${number}.`; }
       if (item.firstLineTo < window.from || overlapsHidden(item.from, item.firstLineTo)) continue;
       ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.task.to : item.markerTo));
-      lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}${completing.has(item.from) ? ' fm-completing-line' : ''}`);
+      lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}`);
     }
-    cached = { mode, folds, completions, window, hidden: merged, decorations: Decoration.set(ranges, true) };
+    cached = { mode, folds, window, hidden: merged, decorations: Decoration.set(ranges, true) };
     structureCache.set(model, cached);
     ranges.length = 0;
   }

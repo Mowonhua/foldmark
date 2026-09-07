@@ -20,6 +20,37 @@ function key(instance: EditorController, name: string): void {
 afterEach(() => { instances.splice(0).forEach(instance => instance.destroy()); document.body.replaceChildren(); });
 
 describe('隐藏正文的导航与删除', () => {
+  it.each(['待办正文', '- [ ] 最后一项', '- [ ] 最后一项\n  任务正文'])('待办末尾连续 Delete 不带出归档标题：%s', active => {
+    const source = active + '\n\n# 归档\n\n- [x] 完成项\n  归档正文\n';
+    const instance = editor(source);
+    instance.focusAt(active.length);
+    for (let index = 0; index < 4; index++) key(instance, 'Delete');
+    expect(instance.text).toBe(source);
+    expect(instance.view.contentDOM.textContent).not.toContain('# 归档');
+    expect(instance.view.contentDOM.textContent).not.toContain('归档正文');
+    expect(instance.state.selection.main.head).toBeLessThan(instance.text.indexOf('# 归档'));
+    expect(instance.undo()).toBe(false);
+  });
+  it.each(['\n', '\n\n', '\n\n\n', '\n\n\n\n', '\r\n\r\n'])('归档前分隔 %j 经连续 Delete 后仍保留章节边界', separator => {
+    const archive = '# 归档\n\n- [x] 保留任务\n  保留正文\n';
+    const instance = editor('待办末尾' + separator + archive);
+    instance.focusAt('待办末尾'.length);
+    for (let index = 0; index < 8; index++) key(instance, 'Delete');
+    expect(instance.text).toMatch(/^待办末尾\n+# 归档/);
+    expect(instance.text.endsWith(archive)).toBe(true);
+    expect(instance.model.headings.filter(heading => heading.text === '归档')).toHaveLength(1);
+    expect(instance.view.contentDOM.textContent).not.toContain('归档');
+    expect(instance.state.selection.main.head).toBe('待办末尾'.length);
+  });
+  it('空归档章节之前 Delete 不拉出标题，仍能继续输入待办', () => {
+    const source = '末尾\n\n# 归档\n';
+    const instance = editor(source); instance.focusAt(2);
+    key(instance, 'Delete'); key(instance, 'Delete');
+    expect(instance.text).toBe(source);
+    const cursor = instance.state.selection.main.head;
+    instance.view.dispatch({ changes: { from: cursor, insert: '继续输入' } });
+    expect(instance.text).toBe('末尾继续输入\n\n# 归档\n');
+  });
   it('折叠后左右箭头跳过整段隐藏正文，不进入后代', () => {
     const instance = editor('- [ ] 父任务\n  长正文\n  - [ ] 子任务\n- [ ] 下一项');
     const parent = instance.model.items[0];
@@ -76,21 +107,22 @@ describe('隐藏正文的导航与删除', () => {
     expect(instance.undo()).toBe(true); expect(instance.text).toBe(source);
   });
 
-  it('源码模式对已完成任务保留普通单字符删除', () => {
+  it('从归档进入源码后对已完成任务保留普通单字符删除', () => {
     const source = '- [x] 已完成任务\n  正文';
-    const instance = editor(source); instance.setMode('source');
+    const instance = editor(source); instance.setMode('archive'); instance.setMode('source');
     const position = source.indexOf('完成') + 1;
     instance.focusAt(position); key(instance, 'Backspace');
     expect(instance.text).toBe(source.slice(0,position-1)+source.slice(position));
   });
 
-  it('源码切回待办后将不可见光标收拢到可见边界，不改原文历史', () => {
+  it('源码切回待办后整理布局并收拢不可见光标，撤销可恢复原文', () => {
     const source = '- [ ] 前一项\n- [x] 已完成任务\n  隐藏正文\n- [ ] 后一项';
     const instance = editor(source); instance.setMode('source'); instance.focusAt(source.indexOf('隐藏正文')+2);
     instance.setMode('todo');
     const hidden = hiddenContentRanges(instance.state);
     expect(hidden.every(range=>instance.state.selection.main.head <= range.from || instance.state.selection.main.head >= range.to)).toBe(true);
-    expect(instance.text).toBe(source); expect(instance.undo()).toBe(false);
+    expect(instance.text).toContain('# 归档'); expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(source);
   });
 });
 

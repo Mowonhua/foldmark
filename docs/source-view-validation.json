@@ -1,0 +1,295 @@
+{
+  "date": "2026-09-07",
+  "environment": "Codex In-app Browser / Vite development server",
+  "boundary": "真实 CodeMirror 文档与 DOM 行矩形；非性能计时，非 Windows WebView2 安装版验收",
+  "pass": true,
+  "dimensions": {
+    "width": 800,
+    "height": 600
+  },
+  "documentUnchanged": true,
+  "scenarios": [
+    {
+      "mode": "todo",
+      "label": "待办任务 055",
+      "pass": true,
+      "sourceOffsetDifference": -0.1458282470703125,
+      "returnedOffsetDifference": -0.072906494140625,
+      "scopeMatches": true,
+      "sourceContainsOtherPartition": false,
+      "sourceContainsExpectedTask": true,
+      "from": {
+        "mode": "todo",
+        "sourceView": null,
+        "anchor": 5318,
+        "line": 259,
+        "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "cursor": 5332,
+        "scrollTop": 6528.66650390625,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.375,
+          "bottom": 193.16666793823242,
+          "height": 28.791667938232422
+        },
+        "offset": -7.1666717529296875,
+        "topVisible": {
+          "from": 5318,
+          "line": 259,
+          "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+          "top": 164.375,
+          "bottom": 193.16666793823242,
+          "offset": -7.1666717529296875
+        }
+      },
+      "source": {
+        "mode": "source",
+        "sourceView": "todo",
+        "anchor": 5318,
+        "line": 259,
+        "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "cursor": 5332,
+        "scrollTop": 7486,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.2291717529297,
+          "bottom": 193.0208396911621,
+          "height": 28.791667938232422
+        },
+        "offset": -7.3125,
+        "topVisible": {
+          "from": 5318,
+          "line": 259,
+          "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+          "top": 164.2291717529297,
+          "bottom": 193.0208396911621,
+          "offset": -7.3125
+        }
+      },
+      "scrolledSource": {
+        "scrollTop": 8917.3330078125,
+        "cursor": 5332,
+        "topVisible": {
+          "from": 6345,
+          "line": 308,
+          "text": "",
+          "top": 143.6875,
+          "bottom": 172.47916793823242,
+          "offset": -27.854171752929688
+        }
+      },
+      "returned": {
+        "mode": "todo",
+        "sourceView": null,
+        "anchor": 5318,
+        "line": 259,
+        "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "cursor": 5332,
+        "scrollTop": 7001.33349609375,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.30209350585938,
+          "bottom": 193.0937614440918,
+          "height": 28.791667938232422
+        },
+        "offset": -7.2395782470703125,
+        "topVisible": {
+          "from": 5318,
+          "line": 259,
+          "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+          "top": 164.30209350585938,
+          "bottom": 193.0937614440918,
+          "offset": -7.2395782470703125
+        }
+      }
+    },
+    {
+      "mode": "archive",
+      "label": "归档任务 055",
+      "pass": true,
+      "sourceOffsetDifference": -0.25,
+      "returnedOffsetDifference": 0.2916717529296875,
+      "scopeMatches": true,
+      "sourceContainsOtherPartition": false,
+      "sourceContainsExpectedTask": true,
+      "from": {
+        "mode": "archive",
+        "sourceView": null,
+        "anchor": 15227,
+        "line": 739,
+        "lineText": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+        "cursor": 15241,
+        "scrollTop": 6516.66650390625,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.2916717529297,
+          "bottom": 193.0833396911621,
+          "height": 28.791667938232422
+        },
+        "offset": -7.25,
+        "topVisible": {
+          "from": 15227,
+          "line": 739,
+          "text": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+          "top": 164.2916717529297,
+          "bottom": 193.0833396911621,
+          "offset": -7.25
+        }
+      },
+      "source": {
+        "mode": "source",
+        "sourceView": "archive",
+        "anchor": 15227,
+        "line": 739,
+        "lineText": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+        "cursor": 15241,
+        "scrollTop": 7529.33349609375,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.0416717529297,
+          "bottom": 192.8333396911621,
+          "height": 28.791667938232422
+        },
+        "offset": -7.5,
+        "topVisible": {
+          "from": 15227,
+          "line": 739,
+          "text": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+          "top": 164.0416717529297,
+          "bottom": 192.8333396911621,
+          "offset": -7.5
+        }
+      },
+      "scrolledSource": {
+        "scrollTop": 8960.6669921875,
+        "cursor": 15241,
+        "topVisible": {
+          "from": 16254,
+          "line": 788,
+          "text": "",
+          "top": 143.5,
+          "bottom": 172.29166793823242,
+          "offset": -28.041671752929688
+        }
+      },
+      "returned": {
+        "mode": "archive",
+        "sourceView": null,
+        "anchor": 15227,
+        "line": 739,
+        "lineText": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+        "cursor": 15241,
+        "scrollTop": 6430,
+        "viewportTop": 171.5416717529297,
+        "rect": {
+          "top": 164.58334350585938,
+          "bottom": 193.3750114440918,
+          "height": 28.791667938232422
+        },
+        "offset": -6.9583282470703125,
+        "topVisible": {
+          "from": 15227,
+          "line": 739,
+          "text": "- [x] 归档任务 055 **核对正文** 与 *强调*",
+          "top": 164.58334350585938,
+          "bottom": 193.3750114440918,
+          "offset": -6.9583282470703125
+        }
+      }
+    }
+  ],
+  "archiveAboveAnchor": {
+    "name": "源码完成上方任务后返回并整理归档",
+    "pass": true,
+    "returnedOffsetDifference": 0.09375,
+    "expectedCursor": 5258,
+    "editedTaskStayedInSource": true,
+    "archivedAbove": true,
+    "expectedLayoutChanged": true,
+    "anchorShift": -74,
+    "from": {
+      "mode": "todo",
+      "sourceView": null,
+      "anchor": 5318,
+      "line": 259,
+      "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+      "cursor": 5332,
+      "scrollTop": 6514,
+      "viewportTop": 171.5416717529297,
+      "rect": {
+        "top": 164.6041717529297,
+        "bottom": 193.3958396911621,
+        "height": 28.791667938232422
+      },
+      "offset": -6.9375,
+      "topVisible": {
+        "from": 5318,
+        "line": 259,
+        "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "top": 164.6041717529297,
+        "bottom": 193.3958396911621,
+        "offset": -6.9375
+      }
+    },
+    "source": {
+      "mode": "source",
+      "sourceView": "todo",
+      "anchor": 5318,
+      "line": 259,
+      "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+      "cursor": 5332,
+      "scrollTop": 7471.33349609375,
+      "viewportTop": 171.5416717529297,
+      "rect": {
+        "top": 164.45834350585938,
+        "bottom": 193.2500114440918,
+        "height": 28.791667938232422
+      },
+      "offset": -7.0833282470703125,
+      "topVisible": {
+        "from": 5318,
+        "line": 259,
+        "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "top": 164.45834350585938,
+        "bottom": 193.2500114440918,
+        "offset": -7.0833282470703125
+      }
+    },
+    "scrolledSource": {
+      "scrollTop": 8903.3330078125,
+      "cursor": 5332,
+      "topVisible": {
+        "from": 6346,
+        "line": 309,
+        "text": "- [ ] 待办任务 065 **核对正文** 与 *强调*",
+        "top": 172.0416717529297,
+        "bottom": 200.8333396911621,
+        "offset": 0.5
+      }
+    },
+    "returned": {
+      "mode": "todo",
+      "sourceView": null,
+      "anchor": 5244,
+      "line": 256,
+      "lineText": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+      "cursor": 5258,
+      "scrollTop": 6410.66650390625,
+      "viewportTop": 171.5416717529297,
+      "rect": {
+        "top": 164.6979217529297,
+        "bottom": 193.4895896911621,
+        "height": 28.791667938232422
+      },
+      "offset": -6.84375,
+      "topVisible": {
+        "from": 5244,
+        "line": 256,
+        "text": "- [ ] 待办任务 055 **核对正文** 与 *强调*",
+        "top": 164.6979217529297,
+        "bottom": 193.4895896911621,
+        "offset": -6.84375
+      }
+    }
+  }
+}

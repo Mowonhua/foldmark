@@ -19,10 +19,10 @@ function editor(text: string, options: Partial<EditorOptions> = {}): EditorContr
 afterEach(() => { for (const instance of editors.splice(0)) instance.destroy(); document.body.replaceChildren(); });
 
 describe('唯一文档编辑事务', () => {
-  it('完成与撤销只修改任务标记并恢复投影', () => {
+  it('完成移动正文到文末归档，撤销恢复任务标记和布局', () => {
     const instance = editor('- [ ] 写作\n  正文\n- [ ] 校对');
     instance.toggleTask(0);
-    expect(instance.text).toBe('- [x] 写作\n  正文\n- [ ] 校对');
+    expect(instance.text).toBe('- [ ] 校对\n\n# 归档\n\n- [x] 写作\n  正文\n');
     expect(instance.undo()).toBe(true);
     expect(instance.text).toBe('- [ ] 写作\n  正文\n- [ ] 校对');
   });
@@ -54,7 +54,7 @@ describe('唯一文档编辑事务', () => {
     instance.toggleTask(0);
     expect(instance.text).toBe('- [ ] 父\n  - [ ] 子');
     instance.toggleTask(0, true);
-    expect(instance.text).toBe('- [x] 父\n  - [x] 子');
+    expect(instance.text).toBe('# 归档\n\n- [x] 父\n  - [x] 子');
     instance.undo();
     expect(instance.text).toBe('- [ ] 父\n  - [ ] 子');
   });
@@ -127,7 +127,7 @@ describe('唯一文档编辑事务', () => {
     marker.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
     const restore = [...document.querySelectorAll<HTMLButtonElement>('.fm-item-menu button')].find(button => button.textContent === '恢复任务');
     restore?.click();
-    expect(instance.text).toBe('- [ ] 完成\n  - [x] 子项');
+    expect(instance.text).toBe('- [ ] 完成\n\n# 归档\n\n- [x] 子项');
   });
   it('未闭合公式提供局部提示，代码围栏就地预览后源码仍完整', () => {
     const source = '公式 $x + y\n\n```ts\nconst x = 1;\n```\n\n末尾';
@@ -216,13 +216,14 @@ describe('唯一文档编辑事务', () => {
     window.dispatchEvent(new MouseEvent('pointerup'));
     expect(instance.text).toContain('- [x] 甲');
   });
-  it('完成立即提交文本并保留勾选反馈，过渡结束才隐藏且不增加撤销步骤', async () => {
+  it('完成立即移入归档且后续时间流逝不增加撤销步骤', async () => {
     vi.useFakeTimers();
     try {
       const instance = editor('- [ ] 甲\n- [ ] 乙');
       instance.toggleTask(0);
       expect(instance.text).toContain('- [x] 甲');
-      expect(instance.view.dom.querySelector('[aria-checked=true]')).not.toBeNull();
+      expect(instance.text).toContain('# 归档');
+      expect(instance.view.dom.querySelector('[aria-checked=true]')).toBeNull();
       await vi.advanceTimersByTimeAsync(150);
       expect(instance.view.dom.querySelector('[aria-checked=true]')).toBeNull();
       instance.undo();

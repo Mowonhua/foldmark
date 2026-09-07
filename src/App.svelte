@@ -9,7 +9,7 @@
   import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, RecoveryDraft, ViewMode } from './lib/contracts';
   import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
   import type { ProjectSession, TaskResult } from './lib/session/types';
-  import { parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
+  import { archiveSections, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel, ListItem } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
@@ -42,7 +42,7 @@
   // 每条聚合结果保留生成它的语法快照，异步刷新时标题与引用定义不会跨版本混用。
   type AggregateResult = TaskResult & {
     model: DocumentModel; item: ListItem; path: string;
-    /** 最近章节在同一文档中的起点；无章节为 null，同名章节通过位置区分。 */
+    /** 最近章节在同一文档中的起点；无章节或系统归档标题为 null，同名用户章节通过位置区分。 */
     sectionFrom: number | null;
   };
   let aggregateResults = $state.raw<AggregateResult[]>([]);
@@ -73,6 +73,7 @@
   let recovery = $state<{ project: Project; disk: FileSnapshot; text: string } | null>(null);
   const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
   const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
+  const previewMode = $derived.by(() => { void version; return mode === 'source' ? active?.ui.sourceView ?? 'todo' : mode; });
   const saveStatus = $derived.by(() => { void version; return active?.status; });
   // 按正文与磁盘基线比较，避免撤销回原文或仅恢复数据清理失败时误报未保存。
   const hasUnsavedChanges = $derived.by(() => { void version; return active?.saver.hasLocalChanges ?? false; });
@@ -174,8 +175,11 @@
     return config.projectViews[project.id] ?? { mode: 'todo', cursor: 0, scrollTop: 0, folded: [] };
   }
 
-  /** 异步读文件使用代次检查，快速切换时较早的读取不能抢回当前项目。 */
-  async function openProject(project: Project, position?: number): Promise<void> {
+  /**
+   * 异步读文件使用代次检查，快速切换时较早的读取不能抢回当前项目。
+   * 归档整理必须在当前会话与保存器就绪后执行；查询坐标属于整理前快照，须先定位再让事务映射选区。
+   */
+  async function openProject(project: Project, position?: number, targetMode?: ViewMode): Promise<void> {
     const generation = ++openGeneration;
     captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = '';
     try {
@@ -196,17 +200,18 @@
           resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
           openLink: openDocumentLink,
         });
-        else editor.setText(disk.text, true);
-        editor.setMode(ui.mode); editor.setUIState(ui);
+        else editor.restoreState(editor.createState(disk.text, ui.mode));
+        editor.setUIState(ui);
         const current: ProjectSession = {
           project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: '所有更改已保存' },
           saver: undefined as unknown as SaveCoordinator,
         };
         current.saver = new SaveCoordinator({
           files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
-          reload: text => {
+          reload: (text, reason) => {
             if (active?.project.id === project.id && editor) {
               switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
+              if (reason === 'external' && !current.saver.hasProtectedRecovery) editor.normalizeArchive();
             } else if (editor) current.state = editor.createState(text, current.ui.mode);
             version += 1; scheduleIndex();
           },
@@ -221,10 +226,13 @@
       if (generation !== openGeneration) { switching = false; return; }
       switching = true; active = session; config.activeProjectId = project.id;
       resourceDocumentPath = project.path;
-      editor!.restoreState(session.state, session.ui); switching = false;
+      editor!.restoreState(session.state, targetMode ? { ...session.ui, mode: targetMode } : session.ui); switching = false;
       version += 1; scheduleConfig();
       if (position !== undefined) { searchOpen = false; await tick(); editor!.focusAt(position); }
       else editor!.view.focus();
+      if (!session.saver.hasProtectedRecovery) editor!.normalizeArchive();
+      // 仅切换模式或定位不会触发正文回调，仍须同步会话，供标签状态和下次恢复使用。
+      captureUI(); version += 1;
     } catch (error) {
       if (generation !== openGeneration) return;
       switching = false; fatal = errorMessage(error); missing = project;
@@ -233,7 +241,13 @@
 
   function setMode(next: ViewMode): void {
     if (!active || !editor) return;
-    editor.setMode(next); active.ui.mode = next; active.state = editor.state; version += 1; scheduleConfig();
+    editor.setMode(next, !active.saver.hasProtectedRecovery); captureUI(); version += 1; scheduleConfig();
+  }
+  /** 切换当前分区的源码与预览；定位恢复由编辑器负责，应用只同步持久化界面状态。 */
+  function toggleSource(): void {
+    if (!active || !editor) return;
+    editor.toggleSource(!active.saver.hasProtectedRecovery);
+    captureUI(); version += 1; scheduleConfig();
   }
   async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; toast = ''; await updateIndex(); }
   /** Svelte 只管理挂载点；内容由正文共享渲染器生成，更新时整体替换只读 DOM。 */
@@ -269,10 +283,14 @@
         }
         if (screen === 'all') {
           let headingIndex = -1;
+          const archiveHeadingStarts = new Set(archiveSections(model).map(section => section.from));
           // 任务与章节均按原文位置排序，单次推进游标保留同名章节身份，避免逐任务扫描整篇文档。
           for (const result of searchTasks(model, '', false)) {
             while (headingIndex + 1 < model.headings.length && model.headings[headingIndex + 1].from < result.from) headingIndex++;
-            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, sectionFrom: model.headings[headingIndex]?.from ?? null, checked: false, model, item: result.item, path: project.path });
+            const heading = model.headings[headingIndex];
+            // 一级归档标题只表示文件存储分区，不作为待办分组；归档内用户创建的子标题仍保留。
+            const sectionFrom = heading && !archiveHeadingStarts.has(heading.from) ? heading.from : null;
+            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: sectionFrom === null ? '' : result.heading, sectionFrom, checked: false, model, item: result.item, path: project.path });
           }
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
@@ -284,9 +302,7 @@
   async function locate(result: TaskResult): Promise<void> {
     const project = config.projects.find(item => item.id === result.projectId);
     if (project) {
-      await openProject(project);
-      setMode(result.checked ? 'archive' : 'todo');
-      searchOpen = false; await tick(); editor?.focusAt(result.from);
+      await openProject(project, result.from, result.checked ? 'archive' : 'todo');
     }
   }
 
@@ -381,6 +397,7 @@
     editor.setText(recovery.text); active.state = editor.state;
     // 恢复操作来自已展示双方全文的对话框，表示采用草稿作为当前编辑内容。
     active.saver.changed(); dialog = null; recovery = null; version += 1;
+    editor.normalizeArchive();
   }
   function currentItemAction(action: 'fold' | 'up' | 'down' | 'group'): void {
     if (!editor || screen !== 'project') return;
@@ -541,7 +558,7 @@
     {/if}
 
     {#if screen === 'project'}
-      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive]] as tab}<button class:tab-active={mode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
+      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive]] as tab}<button class:tab-active={previewMode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
@@ -574,7 +591,7 @@
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
     {/if}
-    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label="完整源码" title="完整源码" aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={() => setMode(mode === 'source' ? 'todo' : 'source')}>&lt;/&gt;</button><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
+    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
   </main>
 </div>
 
@@ -606,9 +623,9 @@
         <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
         <p class="small muted">外观自动保存。动画遵循系统的减少动态效果设置。</p>
       {:else if dialog === 'help'}
-        <p class="eyebrow">连续写作</p><h2 id="dialog-title">文字在原位，事情慢慢完成。</h2>
+        <p class="eyebrow">连续写作</p><h2 id="dialog-title">写下任务，逐件完成。</h2>
         <dl class="shortcuts"><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>
-        <p>单击复选框完成任务；按住复选框、圆点或编号拖动同级排序。左侧三角折叠正文。父项仍有未完成子项时，在菜单选择“完成整组任务”。</p><p>归档保留原文位置。完整源码可编辑所有 Markdown，包括暂不支持的语法。公式支持 KaTeX 数学语法。</p>
+        <p>单击复选框完成任务；按住复选框、圆点或编号拖动同级排序。左侧三角折叠正文。父项仍有未完成子项时，在菜单选择“完成整组任务”。</p><p>完成的任务连同正文移到文件末尾的 # 归档 章节；恢复后移到待办末尾。查看源码只显示当前待办或归档分区，并定位到当前阅读位置；再次点击返回原视图和进入前的位置。公式支持 KaTeX 数学语法。</p>
       {:else if dialog === 'conflict'}
         <p class="eyebrow">外部修改</p><h2 id="dialog-title">选择要保留的内容</h2><p class="muted">可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。</p>
         <div class="compare"><label>当前编辑<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>磁盘版本<textarea readonly value={active?.status.external?.text}></textarea></label></div>

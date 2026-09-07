@@ -1,7 +1,7 @@
 /** 文件职责：验证自动保存的顺序、外部冲突及恢复保留契约。 */
 import { describe, expect, it, vi } from 'vitest';
 import type { FilePort, FileSnapshot } from '../contracts';
-import { SaveCoordinator } from './save-coordinator';
+import { SaveCoordinator, type SaveOptions } from './save-coordinator';
 
 function fixture(preserveRecovery = false) {
   let disk: FileSnapshot = { path: 'a.md', text: 'base', revision: '1' };
@@ -16,8 +16,9 @@ function fixture(preserveRecovery = false) {
     }),
     saveRecovery: vi.fn(async () => {}), clearRecovery: vi.fn(async () => {}),
   } as unknown as FilePort;
-  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload: value => { text = value; }, onStatus: status, delay: 60000, preserveRecovery });
-  return { saver, files, status, setText: (value: string) => { text = value; saver.changed(); }, getText: () => text, external: (value: string) => { disk = { ...disk, text: value, revision: '9' }; }, disk: () => disk };
+  const reload = vi.fn<SaveOptions['reload']>(value => { text = value; });
+  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload, onStatus: status, delay: 60000, preserveRecovery });
+  return { saver, files, status, reload, setText: (value: string) => { text = value; saver.changed(); }, getText: () => text, external: (value: string) => { disk = { ...disk, text: value, revision: '9' }; }, disk: () => disk };
 }
 
 describe('单文档保存协调', () => {
@@ -29,6 +30,7 @@ describe('单文档保存协调', () => {
   it('选用磁盘版本后，正常关闭仍保留被替换的本地恢复稿', async () => {
     const f = fixture(); f.setText('local draft'); f.external('disk version');
     await f.saver.acceptExternal(f.disk());
+    expect(f.reload).toHaveBeenCalledWith('disk version', 'accepted');
     expect(await f.saver.flush()).toBe(true);
     expect(f.files.saveRecovery).toHaveBeenCalledWith(expect.objectContaining({ text: 'local draft' }));
     expect(f.files.clearRecovery).not.toHaveBeenCalled(); f.saver.dispose();
@@ -54,7 +56,27 @@ describe('单文档保存协调', () => {
   });
   it('无本地修改时自动载入外部文本', async () => {
     const f = fixture(); f.external('outside'); await f.saver.checkExternal();
-    expect(f.getText()).toBe('outside'); f.saver.dispose();
+    expect(f.getText()).toBe('outside');
+    expect(f.reload).toHaveBeenCalledWith('outside', 'external');
+    expect(f.status).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'saved' }));
+    f.saver.dispose();
+  });
+  it('自动载入回调整理了正文时保持未保存状态，并以外部版本为基线写回', async () => {
+    const f = fixture();
+    f.reload.mockImplementation((value, reason) => {
+      expect(reason).toBe('external');
+      f.setText(`${value}\n\n# 归档\n`);
+    });
+    try {
+      f.external('outside'); await f.saver.checkExternal();
+      expect(f.getText()).toBe('outside\n\n# 归档\n');
+      expect(f.saver.hasLocalChanges).toBe(true);
+      expect(f.status).toHaveBeenLastCalledWith({ kind: 'dirty', message: '未保存' });
+      expect(f.files.write).not.toHaveBeenCalled();
+      expect(await f.saver.flush()).toBe(true);
+      expect(f.files.write).toHaveBeenCalledWith('a.md', 'outside\n\n# 归档\n', '9');
+      expect(f.saver.hasLocalChanges).toBe(false);
+    } finally { f.saver.dispose(); }
   });
   it('保存过程中输入的更新在同一次 flush 中顺序落盘', async () => {
     const f = fixture(); const original = f.files.write;

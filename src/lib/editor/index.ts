@@ -8,9 +8,12 @@ import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory } fro
 import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
-import { foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskToggleChanges, type DocumentModel } from '../markdown';
-import { actionsFacet, completionField, documentField, foldHistory, foldsField, holdCompletion, modeFacet, releaseCompletion, resourcesFacet, setFolds } from './state';
+import { archiveSections, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskToggleChanges, type DocumentModel } from '../markdown';
+import { actionsFacet, documentField, foldHistory, foldsField, modeFacet, resourcesFacet, setFolds, sourceViewFacet } from './state';
 import { previewField } from './preview';
+import { archiveLayoutSpec } from './archive-layout';
+import { refreshSourceScope, sourceScopeExtension } from './source-scope';
+import { captureSourcePosition, restoreSourcePosition, setSourceReturn, sourcePositionHistory, sourceReturnField } from './source-position';
 import { markerGestures } from './gestures';
 import { taskKeymap } from './commands';
 import { contentVisibility } from './visibility';
@@ -47,13 +50,15 @@ export class EditorController {
   private readonly mode = new Compartment();
   private readonly options: EditorOptions;
   private groupPrompt: HTMLElement | null = null;
-  private completionToken = 0;
-  private readonly completionTimers = new Set<ReturnType<typeof setTimeout>>();
+  private positionGeneration = 0;
 
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
     this.view.dom.addEventListener('keydown', this.historyKey, true);
+    this.view.scrollDOM.addEventListener('wheel', this.cancelPositionRestore, { passive: true });
+    this.view.scrollDOM.addEventListener('pointerdown', this.cancelPositionRestore);
+    this.view.dom.addEventListener('keydown', this.cancelPositionRestore, true);
   }
   get state(): EditorState { return this.view.state; }
   get text(): string { return this.state.doc.toString(); }
@@ -69,11 +74,17 @@ export class EditorController {
     return EditorState.create({ doc: text, extensions: [
       // Markdown 默认会以高优先级注册 Enter；键盘顺序统一由下方组合，保证围栏自动闭合先执行。
       markdown({ extensions: markdownExtensions, addKeymap: false }),
+      // 源码输入不搬移光标；撤销重做必须准确恢复历史，不能再次触发布局整理。
+      EditorState.transactionFilter.of(transaction => {
+        if (!transaction.docChanged || transaction.isUserEvent('undo') || transaction.isUserEvent('redo') || transaction.state.facet(modeFacet) === 'source') return transaction;
+        const layout = archiveLayoutSpec(transaction.state);
+        return layout ? [transaction, layout] : transaction;
+      }),
       history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, completionField, foldHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
+      documentField, foldsField, foldHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       placeholder('写下第一件事，或输入 - [ ] 创建任务…'),
@@ -82,34 +93,91 @@ export class EditorController {
     ] });
   }
 
-  private modeExtensions(mode: ViewMode): Extension[] { return [modeFacet.of(mode), EditorState.readOnly.of(mode === 'archive'), EditorView.editable.of(mode !== 'archive')]; }
-  setMode(mode: ViewMode): void { this.view.dispatch({ effects: this.mode.reconfigure(this.modeExtensions(mode)) }); }
+  private modeExtensions(mode: ViewMode, sourceView: 'todo' | 'archive' = mode === 'archive' ? 'archive' : 'todo'): Extension[] {
+    return [modeFacet.of(mode), sourceViewFacet.of(sourceView), EditorState.readOnly.of(mode === 'archive'), EditorView.editable.of(mode !== 'archive')];
+  }
+  /** 在来源分区的预览与源码之间切换；返回时使用进入源码前的阅读位置。 */
+  toggleSource(organize = true): void {
+    this.setMode(this.state.facet(modeFacet) === 'source' ? this.state.facet(sourceViewFacet) : 'source', organize);
+  }
+  /** organize=false 用于尚有受保护恢复草稿时仅切换显示，避免视图操作改写恢复数据。 */
+  setMode(mode: ViewMode, organize = true): void {
+    const previous = this.state.facet(modeFacet);
+    if (previous === mode) return;
+    const enteringSource = mode === 'source';
+    const leavingSource = previous === 'source';
+    const origin = enteringSource ? previous as 'todo' | 'archive' : this.state.facet(sourceViewFacet);
+    const current = captureSourcePosition(this.view);
+    const returning = leavingSource && mode === origin;
+    const target = returning ? this.state.field(sourceReturnField) ?? current : current;
+    const generation = ++this.positionGeneration;
+    this.view.dispatch({
+      effects: [
+        this.mode.reconfigure(this.modeExtensions(mode, enteringSource ? origin : mode as 'todo' | 'archive')),
+        setSourceReturn.of(enteringSource ? current : returning ? target : null),
+        setPreviewWindow.of({ from: Math.max(0, target.anchor - 3000), to: Math.min(this.state.doc.length, target.anchor + 3000) }),
+      ],
+      selection: returning ? { anchor: Math.min(target.cursor, this.state.doc.length) } : undefined,
+      annotations: Transaction.addToHistory.of(false),
+    });
+    if (leavingSource && organize) this.normalizeArchive();
+    const mappedTarget = returning ? this.state.field(sourceReturnField) ?? target : target;
+    if (leavingSource) this.view.dispatch({ effects: setSourceReturn.of(null), annotations: Transaction.addToHistory.of(false) });
+    // 预览和源码的行高不同，原始 scrollTop 不能表示同一阅读位置。
+    if (enteringSource || returning) restoreSourcePosition(this.view, mappedTarget, () => generation === this.positionGeneration);
+  }
+
+  /** 将文件布局整理作为可撤销正文操作；应用应在保存协调器就绪后调用。 */
+  normalizeArchive(): void {
+    if (this.state.facet(modeFacet) === 'source') return;
+    const spec = archiveLayoutSpec(this.state);
+    if (spec) this.view.dispatch({ ...spec, annotations: isolateHistory.of('full'), filter: false });
+    const warning = this.archiveLayoutWarning();
+    if (warning) this.options.onStatus?.(warning);
+  }
+
+  /** 未闭合语法可能吞掉追加标题；共享内核拒绝移动时必须让用户知道尚未完成布局整理。 */
+  private archiveLayoutWarning(): string | null {
+    if (this.state.facet(modeFacet) === 'source') return null;
+    const model = this.model;
+    const sections = archiveSections(model);
+    return model.tasks.some(item => taskIsArchived(model, item) && !sections.some(section => item.from >= section.headingTo && item.to <= section.to))
+      ? '暂缓整理归档：请检查源码中的代码围栏或 HTML 是否完整。' : null;
+  }
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
   setText(text: string, resetHistory = false): void {
+    this.positionGeneration++;
     const ui = this.getUIState();
-    if (resetHistory) { this.clearCompletionTimers(); this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui); return; }
-    this.view.dispatch({ changes: { from: 0, to: this.state.doc.length, insert: text }, annotations: isolateHistory.of('full') });
+    if (resetHistory) { this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui); return; }
+    this.view.dispatch({ changes: { from: 0, to: this.state.doc.length, insert: text }, effects: refreshSourceScope.of(null), annotations: isolateHistory.of('full') });
     this.setUIState(ui);
   }
   restoreState(state: EditorState, ui?: ProjectView): void {
-    this.groupPrompt?.remove(); this.clearCompletionTimers(); this.view.setState(state);
-    this.view.dispatch({ effects: releaseCompletion.of('all'), annotations: Transaction.addToHistory.of(false) });
+    this.positionGeneration++;
+    this.groupPrompt?.remove(); this.view.setState(state);
     if (ui) this.setUIState(ui);
   }
   getUIState(): ProjectView {
     const model = this.state.field(documentField);
     const folded = [...this.state.field(foldsField)].flatMap(from => { const item = model.items.find(item => item.from === from); const key = item ? foldKey(model, item) : ''; return key ? [key] : []; });
-    return { mode: this.state.facet(modeFacet), cursor: this.state.selection.main.head, scrollTop: this.view.scrollDOM.scrollTop, folded };
+    const mode = this.state.facet(modeFacet);
+    const sourceReturn = this.state.field(sourceReturnField);
+    return { mode, cursor: this.state.selection.main.head, scrollTop: this.view.scrollDOM.scrollTop, folded,
+      ...(mode === 'source' ? { sourceView: this.state.facet(sourceViewFacet), ...(sourceReturn ? { sourceReturn } : {}) } : {}),
+    };
   }
   setUIState(ui: ProjectView): void {
+    this.positionGeneration++;
     const model = this.state.field(documentField);
     const keys = new Set(ui.folded.filter(Boolean));
     const folded = keys.size ? model.items.filter(item => keys.has(foldKey(model, item))).map(item => item.from) : [];
-    this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode)), setFolds.of(folded)], annotations: Transaction.addToHistory.of(false) });
+    const sourceReturn = ui.sourceReturn ? { ...ui.sourceReturn, cursor: Math.min(ui.sourceReturn.cursor, this.state.doc.length), anchor: Math.min(ui.sourceReturn.anchor, this.state.doc.length) } : null;
+    this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
     this.view.scrollDOM.scrollTop = ui.scrollTop;
   }
   focusAt(pos: number): void {
+    this.positionGeneration++;
     const anchor = Math.max(0, Math.min(pos, this.state.doc.length));
     const model = this.state.field(documentField);
     const folds = [...this.state.field(foldsField)].filter(from => { const item = model.items.find(item => item.from === from); return !item || anchor <= item.firstLineTo || anchor > item.to; });
@@ -120,10 +188,11 @@ export class EditorController {
   }
   insertTask(): void {
     if (this.state.facet(modeFacet) === 'archive') this.setMode('todo');
-    const end = this.state.doc.length;
-    const prefix = end && this.state.doc.sliceString(end - 1) !== '\n' ? '\n' : '';
+    const end = archiveSections(this.model)[0]?.from ?? this.state.doc.length;
+    const prefix = end && this.state.doc.sliceString(end - 1, end) !== '\n' ? '\n' : '';
     const insert = `${prefix}- [ ] `;
-    this.view.dispatch({ changes: { from: end, insert }, selection: { anchor: end + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
+    const suffix = end < this.state.doc.length ? '\n\n' : '';
+    this.view.dispatch({ changes: { from: end, insert: insert + suffix }, selection: { anchor: end + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
     this.view.focus();
   }
   undo(): boolean { return this.runHistory(undo); }
@@ -134,9 +203,9 @@ export class EditorController {
     const mode = this.state.facet(modeFacet);
     if (mode !== 'archive') return command(this.view);
     // 临时可写仅覆盖同步历史命令，DOM 始终不可编辑，并在返回前恢复只读契约。
-    this.view.dispatch({ effects: this.mode.reconfigure([modeFacet.of(mode), EditorState.readOnly.of(false), EditorView.editable.of(false)]), annotations: Transaction.addToHistory.of(false) });
+    this.view.dispatch({ effects: this.mode.reconfigure([modeFacet.of(mode), sourceViewFacet.of('archive'), EditorState.readOnly.of(false), EditorView.editable.of(false)]), annotations: Transaction.addToHistory.of(false) });
     try { return command(this.view); }
-    finally { this.setMode(mode); }
+    finally { this.view.dispatch({ effects: this.mode.reconfigure(this.modeExtensions(mode)), annotations: Transaction.addToHistory.of(false) }); }
   }
   private historyKey = (event: KeyboardEvent): void => {
     // 嵌入语言输入框使用浏览器自己的文本历史，不能把其撤销快捷键送给正文。
@@ -160,19 +229,9 @@ export class EditorController {
       // 只在被隐藏范围包含现有选区时迁移光标；鼠标完成其他项不得抢走编辑位置。
       const selection = !item.task.checked && anchorInside ? { anchor: next?.contentFrom ?? model.text.length } : undefined;
       const completing = group || !item.task.checked;
-      const token = ++this.completionToken;
-      const effects = completing && this.state.facet(modeFacet) === 'todo' ? [holdCompletion.of({ token, from: itemFrom })] : [];
-      this.view.dispatch({ changes, selection, effects, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
-      if (effects.length) {
-        const delay = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 140;
-        const timer = setTimeout(() => {
-          this.completionTimers.delete(timer);
-          this.view.dispatch({ effects: releaseCompletion.of(token), annotations: Transaction.addToHistory.of(false) });
-        }, delay);
-        this.completionTimers.add(timer);
-      }
+      this.view.dispatch({ changes, selection, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
       this.groupPrompt?.remove();
-      this.options.onStatus?.(completing ? group ? '整组已完成，可撤销' : '任务已完成，可撤销' : '任务已恢复，可撤销');
+      this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? '整组已完成，可撤销' : '任务已完成，可撤销' : '任务已恢复，可撤销'));
     } catch (error) {
       if (error instanceof Error && error.message.includes('TASK_GROUP_REQUIRED')) { this.showGroupPrompt(itemFrom); return; }
       this.options.onStatus?.(error instanceof Error ? error.message : '任务操作失败');
@@ -236,6 +295,14 @@ export class EditorController {
     const intersects = selection.to > item.firstLineTo && selection.from < item.to;
     this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
   }
-  private clearCompletionTimers(): void { for (const timer of this.completionTimers) clearTimeout(timer); this.completionTimers.clear(); }
-  destroy(): void { this.groupPrompt?.remove(); this.clearCompletionTimers(); this.view.dom.removeEventListener('keydown', this.historyKey, true); this.view.destroy(); }
+  /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
+  private cancelPositionRestore = (): void => { this.positionGeneration++; };
+  destroy(): void {
+    this.positionGeneration++; this.groupPrompt?.remove();
+    this.view.dom.removeEventListener('keydown', this.historyKey, true);
+    this.view.dom.removeEventListener('keydown', this.cancelPositionRestore, true);
+    this.view.scrollDOM.removeEventListener('wheel', this.cancelPositionRestore);
+    this.view.scrollDOM.removeEventListener('pointerdown', this.cancelPositionRestore);
+    this.view.destroy();
+  }
 }

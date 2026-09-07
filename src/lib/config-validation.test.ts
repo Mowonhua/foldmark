@@ -17,4 +17,20 @@ describe('配置边界', () => {
     const config = { projects: [], preferences: { fontSize: 'large' } };
     expect(() => validateAppConfig(config)).toThrow('STATE_CONFIG_INVALID'); expect(config.preferences.fontSize).toBe('large');
   });
+  it('接受旧源码状态及带来源和阅读位置的新源码状态', () => {
+    const oldView = { mode: 'source', cursor: 0, scrollTop: 0, folded: [] };
+    for (const view of [oldView, { ...oldView, sourceView: 'archive', sourceReturn: { cursor: 8, scrollTop: 120.5, anchor: 4, offset: -8.5 } }]) {
+      const config = { projects: [], projectViews: { one: view } };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+  });
+  it('拒绝无效源码来源和无法安全恢复的阅读坐标', () => {
+    const view = { mode: 'source', cursor: 0, scrollTop: 0, folded: [] };
+    const sourceReturn = { cursor: 0, scrollTop: 0, anchor: 0, offset: 0 };
+    const invalid = [
+      { ...view, sourceView: 'source' }, { ...view, sourceView: null },
+      ...[null, {}, { ...sourceReturn, cursor: -1 }, { ...sourceReturn, anchor: NaN }, { ...sourceReturn, scrollTop: Infinity }, { ...sourceReturn, offset: Infinity }, { ...sourceReturn, offset: '0' }].map(value => ({ ...view, sourceReturn: value })),
+    ];
+    for (const candidate of invalid) expect(() => validateAppConfig({ projects: [], projectViews: { one: candidate } })).toThrow('STATE_CONFIG_INVALID');
+  });
 });

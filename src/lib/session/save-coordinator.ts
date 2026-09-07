@@ -8,7 +8,13 @@ import type { FilePort, FileSnapshot } from '../contracts';
 export interface SaveStatus { kind: 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'; message: string; external?: FileSnapshot }
 /** 结构职责：绑定唯一编辑器文档与保存策略；reload 只在无本地修改或明确选用磁盘版本时调用。 */
 export interface SaveOptions {
-  files: FilePort; snapshot: FileSnapshot; getText: () => string; reload: (text: string) => void;
+  files: FilePort; snapshot: FileSnapshot; getText: () => string;
+  /**
+   * external 表示无本地修改时自动加载，允许调用方整理正文并通过 changed 安排保存。
+   * accepted 表示用户明确选用磁盘版本，调用方必须保留该文本，避免整理覆盖被替换的恢复草稿。
+   * 回调同步更新 getText 对应的唯一正文；自动加载后的保存状态以回调完成后的正文为准。
+   */
+  reload: (text: string, reason: 'external' | 'accepted') => void;
   onStatus: (status: SaveStatus) => void; delay?: number;
   /** 已有草稿尚未恢复或用户选用了磁盘版本时，无编辑的保存/关闭不能删除草稿。 */
   preserveRecovery?: boolean;
@@ -34,6 +40,9 @@ export class SaveCoordinator {
 
   /** 用于失效路径重定位；只读比较唯一编辑状态与已加载磁盘基线。 */
   get hasLocalChanges(): boolean { return this.options.getText() !== this.baseline.text; }
+
+  /** 既有恢复草稿仍需保留时禁止自动整理正文；用户主动编辑和明确恢复仍由正常保存流程处理。 */
+  get hasProtectedRecovery(): boolean { return this.preserveRecovery; }
 
   /** 编辑器只通知变化；延迟执行时读取最新正文，合并连续输入。 */
   changed(): void {
@@ -110,8 +119,11 @@ export class SaveCoordinator {
       if (generation !== this.externalGeneration || this.pending || baseline !== this.baseline || this.disposed || external.revision === this.baseline.revision) return;
       if (this.options.getText() === this.baseline.text && !this.conflict) {
         this.baseline = external;
-        this.options.reload(external.text);
-        this.options.onStatus({ kind: 'saved', message: '已加载外部修改' });
+        this.options.reload(external.text, 'external');
+        // 加载回调可能同步整理正文并安排保存，此时不能用磁盘快照覆盖真实的未保存状态。
+        this.options.onStatus(this.hasLocalChanges
+          ? { kind: 'dirty', message: '未保存' }
+          : { kind: 'saved', message: '已加载外部修改' });
         return;
       }
       this.conflict = true;
@@ -129,7 +141,7 @@ export class SaveCoordinator {
     this.externalGeneration += 1;
     this.preserveRecovery = true;
     this.baseline = snapshot; this.conflict = false;
-    this.options.reload(snapshot.text);
+    this.options.reload(snapshot.text, 'accepted');
     this.options.onStatus({ kind: 'saved', message: '已选用磁盘版本；原草稿保留在恢复数据中' });
   }
 

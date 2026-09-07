@@ -401,7 +401,7 @@ describe('App 真实编辑与文件闭环', () => {
   it('顶部星号跟随正文保存，底部源码入口切换真实编辑视图', async () => {
     await start(['# 清单\n']);
     expect(document.querySelector('.unsaved-mark')).toBeNull();
-    const sourceButton = button('完整源码');
+    const sourceButton = button('查看源码');
     expect(sourceButton.closest('footer')).not.toBeNull();
     sourceButton.click(); await tick();
     expect(sourceButton.getAttribute('aria-pressed')).toBe('true');
@@ -441,6 +441,45 @@ describe('App 真实编辑与文件闭环', () => {
     expect(document.querySelector('.aggregate-task small')).toBeNull();
   });
 
+  it('归档源码仅显示归档分区，切换项目和重启后返回来源预览', async () => {
+    const source = '- [ ] 待办独有文字\n\n# 归档\n\n- [x] 归档独有文字\n';
+    await start([source, '- [ ] 第二项目\n']);
+    button(/^归档/).click(); await tick();
+    button('查看源码').click(); await tick();
+    expect(button('返回预览').getAttribute('aria-pressed')).toBe('true');
+    expect(button(/^归档/).classList.contains('tab-active')).toBe(true);
+    expect(documentInput().textContent).toContain('[x] 归档独有文字');
+    expect(documentInput().textContent).not.toContain('待办独有文字');
+    await switchProject(secondProject); await switchProject(firstProject);
+    expect(button('返回预览').getAttribute('aria-pressed')).toBe('true');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id].sourceView).toBe('archive'));
+    expect((await files.loadConfig())?.projectViews[firstProject.id].sourceReturn).toEqual(expect.objectContaining({ cursor: expect.any(Number), scrollTop: expect.any(Number), anchor: expect.any(Number), offset: expect.any(Number) }));
+    await remount();
+    expect(button('返回预览').getAttribute('aria-pressed')).toBe('true');
+    button('返回预览').click(); await tick();
+    expect(button(/^归档/).classList.contains('tab-active')).toBe(true);
+    expect(documentInput().textContent).toContain('归档独有文字');
+    expect(documentInput().textContent).not.toContain('[x]');
+    expect((await files.read(firstProject.path)).text).toBe(source);
+  });
+
+  it('旧源码配置默认显示待办源码，并可返回待办预览', async () => {
+    await start(['- [ ] 待办原文\n\n# 归档\n\n- [x] 归档原文\n'], { [firstProject.id]: { mode: 'source', cursor: 0, scrollTop: 0, folded: [] } });
+    expect(documentInput().textContent).toContain('[ ] 待办原文');
+    expect(documentInput().textContent).not.toContain('归档原文');
+    button('返回预览').click(); await tick();
+    expect(button(/^待办/).classList.contains('tab-active')).toBe(true);
+  });
+
+  it('全部待办隐藏未打开文件的系统归档标题，保留同名用户子章节', async () => {
+    await start(['- [ ] 当前任务\n', '# 归档\n\n- [ ] 待恢复任务\n\n## 归档\n\n- [ ] 用户章节任务\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(3));
+    const group = [...document.querySelectorAll('.aggregate-group')].find(node => node.querySelector('h2')?.textContent?.includes(secondProject.name))!;
+    expect([...group.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent)).toEqual(['待恢复任务', '归档', '用户章节任务']);
+    expect(group.querySelector('.aggregate-task')?.classList.contains('aggregate-section-task')).toBe(false);
+  });
+
   it('全部待办渲染组合 Markdown 和文档引用，点击样式文字仍定位原文', async () => {
     const source = '# 清单\n\n- [ ] **粗体与 *斜体*** ~~删除~~ `代码` [链接][ref] $x^2$ ![示意](./image.png)\n\n[ref]: https://example.com\n';
     await start([source]);
@@ -472,11 +511,11 @@ describe('App 真实编辑与文件闭环', () => {
     const original = '# 甲清单\n\n- [ ] 完成并重开\n- [ ] 持续编辑\n';
     await start([original]);
     button('完成任务').click(); await tick();
-    const completed = original.replace('[ ] 完成并重开', '[x] 完成并重开');
+    const completed = '# 甲清单\n\n- [ ] 持续编辑\n\n# 归档\n\n- [x] 完成并重开\n';
     await savedText(firstProject, completed);
 
     await insertTask(); await paste('输入实际落盘');
-    const finalText = `${completed}- [ ] 输入实际落盘`;
+    const finalText = '# 甲清单\n\n- [ ] 持续编辑\n\n- [ ] 输入实际落盘\n\n# 归档\n\n- [x] 完成并重开\n';
     await savedText(firstProject, finalText);
     await remount();
     expect(documentInput().textContent).toContain('输入实际落盘');
@@ -484,6 +523,38 @@ describe('App 真实编辑与文件闭环', () => {
     expect(documentInput().textContent).toContain('完成并重开');
     expect(document.querySelector('[role="checkbox"][aria-checked="true"]')).not.toBeNull();
     expect((await files.read(firstProject.path)).text).toBe(finalText);
+  });
+
+  it('打开旧布局和载入外部修改后，经保存器写回文末归档分区', async () => {
+    await start(['- [x] 历史完成\n- [ ] 保留待办\n']);
+    const normalized = '- [ ] 保留待办\n\n# 归档\n\n- [x] 历史完成\n';
+    await savedText(firstProject, normalized);
+    const baseline = await files.read(firstProject.path);
+    await files.write(firstProject.path, '- [x] 外部完成\n- [ ] 新待办\n', baseline.revision);
+    window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+    await savedText(firstProject, '- [ ] 新待办\n\n# 归档\n\n- [x] 外部完成\n');
+    expect(documentInput().textContent).toContain('新待办');
+  });
+
+  it('从源码项目首次切入其他项目，归档整理仍经保存器落盘', async () => {
+    await start(['- [ ] 源码项目\n', '- [x] 已完成\n- [ ] 待处理\n']);
+    button('查看源码').click(); await tick();
+    await switchProject(secondProject);
+    await savedText(secondProject, '- [ ] 待处理\n\n# 归档\n\n- [x] 已完成\n');
+  });
+
+  it('从归档视图搜索待办，定位后输入仍落在待办原文', async () => {
+    const source = '- [ ] 定位待办\n\n# 归档\n\n- [x] 完成任务\n';
+    await start([source]);
+    button(/^归档/).click(); await tick();
+    button(/^搜索/).click(); await tick();
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索所有项目"]')!;
+    search.value = '定位待办'; search.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('定位待办'));
+    button(/待办.*定位待办/).click(); await tick();
+    await vi.waitFor(() => expect(button(/^待办/).classList.contains('tab-active')).toBe(true));
+    await paste('定位证据\n'); await shortcut('s');
+    await savedText(firstProject, `定位证据\n${source}`);
   });
 
   it('保存前切换项目不丢草稿，撤销只影响当前项目', async () => {
@@ -648,6 +719,39 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     expect((await files.loadRecovery(firstProject.path))?.text).toBe(draft.text);
     await remount();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('未写入文件的草稿');
+  });
+
+  it('旧布局存在待确认草稿时，不自动整理覆盖恢复文件', async () => {
+    const source = '- [x] 尚未分区的完成任务\n- [ ] 待办\n';
+    await files.create(firstProject.path, source);
+    const disk = await files.read(firstProject.path);
+    const draft = { path: firstProject.path, text: '- [ ] 唯一恢复内容\n', baseRevision: disk.revision, savedAt: Date.now() };
+    await files.saveRecovery(draft);
+    await files.saveConfig({ projects: [firstProject], activeProjectId: firstProject.id, preferences: { ...defaultPreferences }, projectViews: {} });
+    await remount();
+    button('暂不恢复').click(); await tick(); await shortcut('s');
+    expect((await files.read(firstProject.path)).text).toBe(source);
+    expect((await files.loadRecovery(firstProject.path))?.text).toBe(draft.text);
+  });
+
+  it('选用磁盘版本后切换项目及源码视图，仍保留被替换的恢复草稿', async () => {
+    await start(['- [ ] 原始任务\n', '- [ ] 第二项目\n']);
+    await paste('本地草稿\n');
+    const baseline = await files.read(firstProject.path);
+    const external = '- [x] 外部完成\n- [ ] 外部待办\n';
+    await files.write(firstProject.path, external, baseline.revision);
+    window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+    await vi.waitFor(() => expect(document.querySelector('.conflict-banner')).not.toBeNull());
+    button('比较并处理').click(); await tick();
+    button('选用磁盘版本').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    const recoveryText = (await files.loadRecovery(firstProject.path))?.text;
+    expect(recoveryText).toContain('本地草稿');
+    await switchProject(secondProject); await switchProject(firstProject);
+    button('查看源码').click(); await tick();
+    button(/^待办/).click(); await tick(); await shortcut('s');
+    expect((await files.read(firstProject.path)).text).toBe(external);
+    expect((await files.loadRecovery(firstProject.path))?.text).toBe(recoveryText);
   });
 
   it('超过一百条同类搜索结果可继续加载并定位到末项原文', async () => {

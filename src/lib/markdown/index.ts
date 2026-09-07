@@ -7,3 +7,5 @@ export { parseDocument } from './parse';
 export { taskToggleChanges, moveItemChanges, moveItemPosition, indentItemChanges } from './transactions';
 export { getHiddenRanges, searchTasks, foldKey, taskIsArchived } from './projection';
 export { markdownExtensions, mathExtension } from './syntax';
+export { archiveSections, normalizeArchiveChanges } from './archive';
+export type { ArchiveSection } from './archive';

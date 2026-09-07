@@ -26,8 +26,6 @@
 .cm-editor .fm-quote { border-left: 3px solid var(--border); color: var(--muted); padding-left: 16px; }
 .fm-list-line { padding-top: 4px; padding-bottom: 4px; }
 .fm-completed-line { color: var(--muted); }
-.fm-completing-line { animation: fm-complete-feedback 140ms ease-out both; }
-@keyframes fm-complete-feedback { from { opacity: 1; } to { opacity: .6; } }
 .fm-item-controls { display: inline-flex; align-items: center; position: relative; vertical-align: text-bottom; line-height: 1; height: 1.35em; }
 .fm-item-controls button { padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; font-family: inherit; color: inherit; cursor: pointer; }
 .fm-fold-button { position: absolute; width: 20px; height: 25px; right: calc(100% + 5px); border: 0; background: transparent; font-size: 17px; opacity: 0; transition: opacity 100ms; }
@@ -58,7 +56,7 @@
 .fm-group-prompt { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; white-space: nowrap; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 5px 20px var(--shadow-color); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 .fm-group-prompt button { color: var(--accent); background: transparent; border: 0; cursor: pointer; font: inherit; }
 @media (max-width: 640px) { .cm-editor .cm-content { padding: 24px 25px 120px; }.fm-group-prompt { gap: 6px; padding: 10px; white-space: normal; width: 90%; } }
-@media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; }.fm-completing-line { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }
@@ -68,4 +66,4 @@
 .cm-editor .fm-selected .fm-code, .cm-editor .fm-code.fm-selected { background: var(--selection); }
 .cm-editor .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
 .cm-editor .cm-nonmatchingBracket { color: var(--danger); text-decoration: underline wavy; }
-:root[data-monochrome=true] .fm-completing-line, :root[data-monochrome=true] .fm-drag-preview { opacity: 1; }
+:root[data-monochrome=true] .fm-drag-preview { opacity: 1; }

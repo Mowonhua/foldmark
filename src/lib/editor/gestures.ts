@@ -4,7 +4,7 @@
  */
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { getHiddenRanges } from '../markdown';
-import { actionsFacet, completionField, documentField, modeFacet } from './state';
+import { actionsFacet, documentField, modeFacet } from './state';
 
 interface DragSession {
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
@@ -45,7 +45,6 @@ class MarkerGestures {
     if (!marker || !this.view.dom.contains(marker)) return;
     event.preventDefault();
     const from = Number(marker.dataset.listMarker);
-    if ([...this.view.state.field(completionField).values()].includes(from)) return;
     const recent = this.lastClick;
     // 收起完成项后，同一物理位置出现的是另一项；短时间重复按下不能误完成它。
     if (recent && recent.marker !== marker && performance.now() - recent.time < 360 && Math.hypot(event.clientX - recent.x, event.clientY - recent.y) < 5) return;
