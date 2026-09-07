@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "mono",
+  "name": "纯粹",
+  "monochrome": true,
+  "light": {
+    "canvas": "#F8FAFC",
+    "sidebar": "#F8FAFC",
+    "surface": "#F8FAFC",
+    "ink": "#0A0A0A",
+    "muted": "#0A0A0A",
+    "line": "#0A0A0A",
+    "accent": "#0A0A0A",
+    "accent-soft": "#F8FAFC",
+    "hover": "#F8FAFC",
+    "danger": "#0A0A0A",
+    "code": "#F8FAFC",
+    "selection": "#0A0A0A",
+    "selection-ink": "#F8FAFC"
+  },
+  "dark": {
+    "canvas": "#0A0A0A",
+    "sidebar": "#0A0A0A",
+    "surface": "#0A0A0A",
+    "ink": "#F8FAFC",
+    "muted": "#F8FAFC",
+    "line": "#F8FAFC",
+    "accent": "#F8FAFC",
+    "accent-soft": "#0A0A0A",
+    "hover": "#0A0A0A",
+    "danger": "#F8FAFC",
+    "code": "#0A0A0A",
+    "selection": "#F8FAFC",
+    "selection-ink": "#0A0A0A"
+  },
+  "corners": "square"
+}

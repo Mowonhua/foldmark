@@ -184,7 +184,7 @@ async function importThemeFile(content: string): Promise<void> {
 }
 
 describe('App 主题导入与持久化', () => {
-  const customTheme: ThemeDefinition = { ...builtInThemes[0], id: 'custom-slate', name: '自制石板', light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' } };
+  const customTheme: ThemeDefinition = { ...builtInThemes[0], id: 'custom-slate', name: '自制石板', corners: 'square', light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' } };
 
   it('设置中选择双色深色并保存，重新挂载恢复同一主题与完整配色', async () => {
     await start(['# 主题验收\n']); button('设置').click(); await tick();
@@ -193,6 +193,7 @@ describe('App 主题导入与持久化', () => {
     await remount(); button('设置').click(); await tick();
     expect(themeControl('主题').value).toBe('mono'); expect(themeControl('明暗模式').value).toBe('dark');
     expect(document.documentElement.dataset.monochrome).toBe('true');
+    expect(document.documentElement.dataset.corners).toBe('square');
     for (const key of paletteKeys) expect(document.documentElement.style.getPropertyValue(`--${key}`)).toBe(builtInThemes[1].dark[key]);
   });
 
@@ -201,6 +202,7 @@ describe('App 主题导入与持久化', () => {
     await chooseThemeSetting('明暗模式', 'light'); await importThemeFile(JSON.stringify(customTheme));
     expect(themeControl('主题').value).toBe(customTheme.id);
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#ABCDEF');
+    expect(document.documentElement.dataset.corners).toBe('square');
     await vi.waitFor(async () => {
       const config = await files.loadConfig();
       expect(config?.preferences.themeId).toBe(customTheme.id); expect(config?.customThemes).toEqual([customTheme]);
@@ -208,7 +210,16 @@ describe('App 主题导入与持久化', () => {
     await remount(); button('设置').click(); await tick();
     expect(themeControl('主题').value).toBe(customTheme.id);
     await chooseThemeSetting('明暗模式', 'dark');
+    expect(document.documentElement.dataset.corners).toBe('square');
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#123456');
+  });
+
+  it('内置包重复导入不覆盖已有主题', async () => {
+    await start(['# 重复主题\n']); button('设置').click(); await tick();
+    await importThemeFile(JSON.stringify(builtInThemes[1]));
+    expect(document.querySelector('.dialog-error')?.textContent).toContain('THEME_DUPLICATE');
+    expect(themeControl('主题').value).toBe('paper');
+    expect((await files.loadConfig())?.customThemes ?? []).toEqual([]);
   });
 
   it('非法文件显示错误，保留已选择的主题及持久化配置', async () => {
@@ -234,6 +245,7 @@ describe('App 主题导入与持久化', () => {
     await remount(); button('设置').click(); await tick();
     expect(themeControl('主题').value).toBe('paper');
     expect([...themeControl('主题').options].some(option => option.value === customTheme.id)).toBe(false);
+    expect(document.documentElement.dataset.corners).toBe('rounded');
   });
 
   it('跟随系统即时响应明暗事件，手动选择浅色后保持浅色', async () => {

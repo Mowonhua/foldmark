@@ -24,8 +24,28 @@ describe('主题文件', () => {
   it('解析完整的双模式文件并移除未知字段', () => {
     expect(parseTheme('\uFEFF' + JSON.stringify({ ...custom(), extra: true }))).toEqual(custom());
   });
-  it('拒绝损坏、不完整、保留 ID 和可执行样式值', () => {
-    for (const value of [null, {}, { ...custom(), version: 2 }, { ...custom(), id: 'paper' }, { ...custom(), dark: {} }, { ...custom(), light: { ...palette('#ffffff'), ink: 'url(https://example.com)' } }]) {
+  it('内置主题包可通过相同的文件解析器，保留边角声明', () => {
+    for (const theme of builtInThemes) expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    expect(builtInThemes.find(theme => theme.id === 'mono')?.corners).toBe('square');
+  });
+  it('边角独立于双色声明，切换旧主题时恢复默认边角', () => {
+    const root = document.createElement('div');
+    const square = parseTheme(JSON.stringify({ ...custom(), corners: 'square' }));
+    expect(square.corners).toBe('square');
+    applyTheme(root, square, 'light', false);
+    expect(root.dataset.corners).toBe('square');
+    expect(root.dataset.monochrome).toBe('false');
+    applyTheme(root, validateTheme({ ...custom(), monochrome: true, corners: 'rounded' }), 'dark', false);
+    expect(root.dataset.corners).toBe('rounded');
+    applyTheme(root, square, 'dark', false);
+    applyTheme(root, validateTheme(custom()), 'light', false);
+    expect(root.dataset.corners).toBe('rounded');
+    for (const corners of [null, 0, {}, 'url(https://example.com)']) {
+      expect(() => validateTheme({ ...custom(), corners })).toThrow('THEME_INVALID');
+    }
+  });
+  it('拒绝损坏、不完整和可执行样式值', () => {
+    for (const value of [null, {}, { ...custom(), version: 2 }, { ...custom(), dark: {} }, { ...custom(), light: { ...palette('#ffffff'), ink: 'url(https://example.com)' } }]) {
       expect(() => validateTheme(value)).toThrow('THEME_INVALID');
     }
     expect(() => parseTheme('{')).toThrow('THEME_INVALID');

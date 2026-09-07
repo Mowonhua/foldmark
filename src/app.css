@@ -1,6 +1,6 @@
 /* 文件职责：定义主题语义变量、应用布局及可访问的交互状态。 */
 /* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调，同时保持字重使用字体原生字形。 */
-:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:style;--canvas:#faf9f6;--sidebar:#f1f0eb;--surface:#fffefa;--ink:#343b35;--muted:#666e62;--line:#e6e6df;--accent:#4f6b54;--accent-soft:#e4eadd;--hover:#ebeee4;--danger:#9a4b35;--code:#eeeee7;--selection:#dde3d6;--selection-ink:#343b35;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
+:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:style;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
 
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);background:var(--canvas)}
@@ -190,3 +190,13 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 :root[data-monochrome=true] input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:50%}
 :root[data-monochrome=true] input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:50%}
 :root[data-monochrome=true] input::placeholder,:root[data-monochrome=true] textarea::placeholder{color:var(--muted);opacity:1}
+
+/* 边角由主题包独立声明；覆盖浮层和伪元素，避免编辑器局部样式留下圆角。 */
+:root[data-corners=square] *, :root[data-corners=square] *::before, :root[data-corners=square] *::after{border-radius:0!important}
+/* 原生控件不保证遵循 border-radius；直角主题使用与配色无关的显式控件外观。 */
+:root[data-corners=square] input[type=checkbox]{appearance:none;width:15px;height:15px;padding:0;border:1px solid var(--ink);display:inline-grid;place-content:center;flex-shrink:0}
+:root[data-corners=square] input[type=checkbox]:checked{background:var(--ink);color:var(--canvas)}
+:root[data-corners=square] input[type=checkbox]:checked::after{content:"✓";font-size:12px;line-height:1}
+:root[data-corners=square] input[type=range]{appearance:none;height:4px;background:var(--canvas);border:1px solid var(--ink);margin:8px 0}
+:root[data-corners=square] input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:0}
+:root[data-corners=square] input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:0}

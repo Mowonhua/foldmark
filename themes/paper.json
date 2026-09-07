@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "paper",
+  "name": "纸面",
+  "light": {
+    "canvas": "#faf9f6",
+    "sidebar": "#f1f0eb",
+    "surface": "#fffefa",
+    "ink": "#343b35",
+    "muted": "#666e62",
+    "line": "#e6e6df",
+    "accent": "#4f6b54",
+    "accent-soft": "#e4eadd",
+    "hover": "#ebeee4",
+    "danger": "#9a4b35",
+    "code": "#eeeee7",
+    "selection": "#dce5d5",
+    "selection-ink": "#343b35"
+  },
+  "dark": {
+    "canvas": "#252925",
+    "sidebar": "#20241f",
+    "surface": "#2b302a",
+    "ink": "#e0e3d9",
+    "muted": "#a1aa9b",
+    "line": "#3b4338",
+    "accent": "#b0c5a0",
+    "accent-soft": "#3b4b35",
+    "hover": "#333c2f",
+    "danger": "#f0ad96",
+    "code": "#30382d",
+    "selection": "#46533e",
+    "selection-ink": "#e0e3d9"
+  },
+  "corners": "rounded"
+}
