@@ -104,8 +104,12 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .aggregate-group{margin-bottom:35px}
 .aggregate-group h2{font-size:12px;display:flex;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px;align-items:center}
 .aggregate-group h2 span{font-size:10px;color:var(--muted);font-weight:400}
+.aggregate-section-heading{display:flex;align-items:center;gap:14px;margin:26px 8px 7px 36px;color:var(--muted);font-size:11px;font-weight:500;line-height:1.6;letter-spacing:.04em}
+.aggregate-section-heading::after{content:'';height:1px;flex:1;min-width:24px;background:var(--line);opacity:.65}
+.aggregate-section-heading span{min-width:0;overflow-wrap:anywhere}
+.aggregate-group h2 + .aggregate-section-heading{margin-top:18px}
+.aggregate-content{min-width:0;overflow-wrap:anywhere}
 .aggregate-task{display:flex;align-items:flex-start;text-align:left;width:100%;padding:13px 8px;gap:13px;font-size:14px;border-radius:4px}
-.aggregate-task small{display:block;font-size:10px;color:var(--muted);margin-top:7px}
 .readonly-box{width:15px;height:15px;border:1px solid var(--muted);border-radius:3px;margin-top:2px;flex-shrink:0}
 .result-arrow{margin-left:auto;color:var(--muted);opacity:0}
 .aggregate-task:hover .result-arrow{opacity:1}

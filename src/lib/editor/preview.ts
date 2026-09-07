@@ -406,7 +406,8 @@ function buildPreview(state: EditorState): DecorationSet {
         : range.itemFrom !== null && range.count ? new NoteWidget(`已完成 ${range.count} 项`) : undefined;
       merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
     }
-    for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block }).range(range.from, range.to));
+    // 过滤范围右端是下一条可见行的起点；块替换不能吞掉该行的缩进、标题等行装饰。
+    for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block, inclusiveEnd: false }).range(range.from, range.to));
   }
   // 隐藏区间已排序且不重叠，二分定位避免大清单装饰与已完成项形成平方级扫描。
   const overlappingRange = (from: number, to: number): typeof merged[number] | undefined => {

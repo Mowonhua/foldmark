@@ -6,6 +6,17 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 let instance: EditorController;
 afterEach(() => { instance?.destroy(); document.body.replaceChildren(); });
+it('归档保留父任务上下文时，已完成子任务仍有独立的行缩进', () => {
+  const text = '# 今天\n\n- [ ] 父任务\n\n  父任务正文\n\n  - [ ] 未完成子任务\n  - [x] 已完成子任务\n';
+  instance = new EditorController(document.body, { text, mode: 'archive', onChange: () => {} });
+  const lines = [...instance.view.dom.querySelectorAll<HTMLElement>('.cm-line')];
+  const parent = lines.find(line => line.textContent?.includes('父任务'))!;
+  const child = lines.find(line => line.textContent?.includes('已完成子任务'))!;
+  expect(child.style.marginLeft).not.toBe('');
+  expect(child.style.marginLeft).not.toBe(parent.style.marginLeft);
+  expect(child.classList.contains('fm-list-line')).toBe(true);
+  expect(instance.text).toBe(text);
+});
 it('列表内块沿容器缩进且整行替换公式，不留下前导空白行', () => {
   const text = '- [ ] 标题\n  ```\n  ggg = fun()\n  ```\n\n  $$\n  a=b\n  $$\n\n  > 引用\n\n  - [ ] 子项\n    ```\n      nested()\n    ```\n\n末尾';
   instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });

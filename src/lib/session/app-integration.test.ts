@@ -432,6 +432,15 @@ describe('App 真实编辑与文件闭环', () => {
     expect(documentInput().textContent).toContain('console.log(1)');
   });
 
+  it('全部待办按章节位置显示段首标题，同名章节不合并且任务保持原序', async () => {
+    await start(['- [ ] 无章节任务\n\n# 清单\n\n- [ ] 第一项\n- [ ] 第二项\n\n# 清单\n\n- [ ] 第三项\n\n## 已完成章节\n\n- [x] 已完成\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(4));
+    const content = [...document.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent);
+    expect(content).toEqual(['无章节任务', '清单', '第一项', '第二项', '清单', '第三项']);
+    expect(document.querySelector('.aggregate-task small')).toBeNull();
+  });
+
   it('全部待办渲染组合 Markdown 和文档引用，点击样式文字仍定位原文', async () => {
     const source = '# 清单\n\n- [ ] **粗体与 *斜体*** ~~删除~~ `代码` [链接][ref] $x^2$ ![示意](./image.png)\n\n[ref]: https://example.com\n';
     await start([source]);

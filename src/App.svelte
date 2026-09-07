@@ -40,7 +40,11 @@
   let results = $state<TaskResult[]>([]);
   let resultLimit = $state(100);
   // 每条聚合结果保留生成它的语法快照，异步刷新时标题与引用定义不会跨版本混用。
-  type AggregateResult = TaskResult & { model: DocumentModel; item: ListItem; path: string };
+  type AggregateResult = TaskResult & {
+    model: DocumentModel; item: ListItem; path: string;
+    /** 最近章节在同一文档中的起点；无章节为 null，同名章节通过位置区分。 */
+    sectionFrom: number | null;
+  };
   let aggregateResults = $state.raw<AggregateResult[]>([]);
   let aggregateLimits = $state<Record<string, number>>({});
   let indexing = $state(false);
@@ -263,8 +267,13 @@
         for (const result of searchTasks(model, query, searchOpen && includeArchived)) {
           found.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: result.archived });
         }
-        if (screen === 'all') for (const result of searchTasks(model, '', false)) {
-          allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: false, model, item: result.item, path: project.path });
+        if (screen === 'all') {
+          let headingIndex = -1;
+          // 任务与章节均按原文位置排序，单次推进游标保留同名章节身份，避免逐任务扫描整篇文档。
+          for (const result of searchTasks(model, '', false)) {
+            while (headingIndex + 1 < model.headings.length && model.headings[headingIndex + 1].from < result.from) headingIndex++;
+            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, sectionFrom: model.headings[headingIndex]?.from ?? null, checked: false, model, item: result.item, path: project.path });
+          }
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
       // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
@@ -549,7 +558,18 @@
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
         {#each config.projects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
-          {#if projectResults.length}<section class="aggregate-group"><h2>{project.name}<span>{projectResults.length}</span></h2>{#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result}<button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span><small>{result.section}</small></span><span class="result-arrow">↗</span></button>{/each}{#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}</section>{/if}
+          {#if projectResults.length}
+            <section class="aggregate-group">
+              <h2>{project.name}<span>{projectResults.length}</span></h2>
+              {#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result, index}
+                {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== projectResults[index - 1].sectionFrom)}
+                  <h3 class="aggregate-section-heading"><span>{result.section}</span></h3>
+                {/if}
+                <button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><span class="result-arrow">↗</span></button>
+              {/each}
+              {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}
+            </section>
+          {/if}
         {/each}
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
