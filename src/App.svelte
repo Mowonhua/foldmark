@@ -565,7 +565,7 @@
                 {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== projectResults[index - 1].sectionFrom)}
                   <h3 class="aggregate-section-heading"><span>{result.section}</span></h3>
                 {/if}
-                <button class="aggregate-task" onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><span class="result-arrow">↗</span></button>
+                <button class="aggregate-task" class:aggregate-section-task={result.sectionFrom !== null} onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><span class="result-arrow">↗</span></button>
               {/each}
               {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}
             </section>

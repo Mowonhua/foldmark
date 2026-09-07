@@ -102,14 +102,20 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .aggregate h1 span{font-size:17px;color:var(--muted);font-weight:400}
 .aggregate>.muted{font-size:13px;margin-bottom:38px}
 .aggregate-group{margin-bottom:35px}
-.aggregate-group h2{font-size:12px;display:flex;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px;align-items:center}
+.aggregate-group h2{font-size:14px;display:flex;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px;align-items:center}
 .aggregate-group h2 span{font-size:10px;color:var(--muted);font-weight:400}
-.aggregate-section-heading{display:flex;align-items:center;gap:14px;margin:26px 8px 7px 36px;color:var(--muted);font-size:11px;font-weight:500;line-height:1.6;letter-spacing:.04em}
-.aggregate-section-heading::after{content:'';height:1px;flex:1;min-width:24px;background:var(--line);opacity:.65}
+.aggregate-section-heading{position:relative;display:flex;align-items:center;margin:26px 0 7px;color:var(--muted);font-size:13px;font-weight:500;line-height:1.6;letter-spacing:.04em}
+/* 连线与复选框统一使用 1px 边框，避免缩放时背景色块与边框的像素取整产生粗细差异。 */
+.aggregate-section-heading::after{content:'';position:absolute;left:7px;top:100%;width:0;height:7px;border-left:1px solid var(--line);pointer-events:none}
 .aggregate-section-heading span{min-width:0;overflow-wrap:anywhere}
 .aggregate-group h2 + .aggregate-section-heading{margin-top:18px}
 .aggregate-content{min-width:0;overflow-wrap:anywhere}
 .aggregate-task{display:flex;align-items:flex-start;text-align:left;width:100%;padding:13px 8px;gap:13px;font-size:14px;border-radius:4px}
+/* 连接线锚定首行复选框中心；逐行延续竖线，使多行任务及分页末项均在正确位置收尾。 */
+.aggregate-section-task{position:relative;padding-left:28px;--branch-y:22px}
+.aggregate-section-task::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:0;border-left:1px solid var(--line);pointer-events:none}
+.aggregate-section-task::after{content:'';position:absolute;left:7px;top:var(--branch-y);width:21px;height:0;border-top:1px solid var(--line);pointer-events:none}
+.aggregate-section-task:not(:has(+ .aggregate-section-task))::before{bottom:auto;height:calc(var(--branch-y) + 1px)}
 .readonly-box{width:15px;height:15px;border:1px solid var(--muted);border-radius:3px;margin-top:2px;flex-shrink:0}
 .result-arrow{margin-left:auto;color:var(--muted);opacity:0}
 .aggregate-task:hover .result-arrow{opacity:1}
