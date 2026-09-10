@@ -19,6 +19,53 @@ function editor(text: string, options: Partial<EditorOptions> = {}): EditorContr
 afterEach(() => { for (const instance of editors.splice(0)) instance.destroy(); document.body.replaceChildren(); });
 
 describe('唯一文档编辑事务', () => {
+  it.each(['todo', 'source'] as const)('%s 模式在列表中间续建空任务后一次回车退出', mode => {
+    const first = '- [ ] 设计完整的UI/UX';
+    const rest = '\n- [ ] 迁移UI\n- [ ] 确认法阵模型';
+    const instance = editor(first + rest, { mode });
+    instance.focusAt(first.length);
+    const enter = () => instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    enter();
+    expect(instance.text).toBe(first + '\n- [ ] ' + rest);
+    enter();
+    expect(instance.text).toBe(first + '\n' + rest);
+    expect(instance.state.selection.main.head).toBe(first.length + 1);
+  });
+  it.each((['todo', 'source'] as const).flatMap(mode => ['- [ ]', '- [ ] ', '- [ ]   ', '* [ ]\t', '2. [ ] '].map(marker => ({ mode, marker }))))('$mode 空任务 $marker 的闭括号后按 Enter 直接清除符号', ({ mode, marker }) => {
+    const prefix = `${marker.startsWith('2.') ? '1.' : '-'} [ ] 设计完整的UI/UX\n`;
+    const instance = editor(prefix + marker, { mode });
+    const cursor = prefix.length + marker.indexOf(']') + 1;
+    instance.focusAt(cursor);
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(instance.text).toBe(prefix);
+    expect(instance.state.selection.main.head).toBe(prefix.length);
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(prefix + marker);
+    expect(instance.state.selection.main.head).toBe(cursor);
+  });
+  it('嵌套空任务退出保留缩进和下一项，尾空白中的光标也可退出', () => {
+    const instance = editor('- [ ] 父\n  - [ ]   \n  - [ ] 子');
+    instance.focusAt(instance.text.indexOf('   \n') + 1);
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(instance.text).toBe('- [ ] 父\n  \n  - [ ] 子');
+    expect(instance.state.selection.main.head).toBe('- [ ] 父\n  '.length);
+  });
+  it.each(['```\n- [ ]\n```', '正文 [ ]', '- [ ] 正文'])('空任务识别不接管代码或有正文的标记：%j', text => {
+    const instance = editor(text);
+    instance.focusAt(text.indexOf(']') + 1);
+    expect(taskEnter(instance.view)).toBe(false);
+    expect(instance.text).toBe(text);
+  });
+  it('文末新建空任务后再按一次 Enter 直接退出任务，不增加空行', () => {
+    const instance = editor('- [ ] 设计完整的UI/UX');
+    instance.focusAt(instance.text.length);
+    const enter = () => instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    enter();
+    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n- [ ] ');
+    enter();
+    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n');
+    expect(instance.state.selection.main.head).toBe(instance.text.length);
+  });
   it('完成移动正文到文末归档，撤销恢复任务标记和布局', () => {
     const instance = editor('- [ ] 写作\n  正文\n- [ ] 校对');
     instance.toggleTask(0);

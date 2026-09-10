@@ -61,22 +61,32 @@ export function codeFenceEnter(view: EditorView): boolean {
 
 /**
  * 函数职责：仅在单光标位于任务首行时接管列表输入。
- * 输入说明：中文候选组合、选区、源码及普通正文都交给 CodeMirror 默认行为。
+ * 输入说明：todo 与 source 共用空任务退出；源码的其他列表输入、中文候选组合、选区及普通正文交给 CodeMirror 默认行为。
  * 输出说明：同级新任务或退出空任务是一笔可撤销事务。
  * 实现思路：任务范围取语法树，缩进与标记从原文保留。
  */
 export function taskEnter(view: EditorView, continuation = false): boolean {
   if (view.composing) return false;
-  if (view.state.facet(modeFacet) !== 'todo' || !view.state.selection.main.empty || view.state.selection.ranges.length !== 1) return false;
+  const mode = view.state.facet(modeFacet);
+  if (view.state.readOnly || mode === 'archive' || !view.state.selection.main.empty || view.state.selection.ranges.length !== 1) return false;
   const pos = view.state.selection.main.head;
   const model = view.state.field(documentField);
-  const item = model.tasks.find(candidate => pos >= candidate.contentFrom && pos <= candidate.firstLineTo);
+  // 空任务的可编辑位置从闭括号后开始，不能用跳过尾随空白的 contentFrom 限制。
+  // GFM 不把缺少尾随空格的 [ ] 解析成 Task；只在语法树确认的列表首行补认空标记，避免误删代码或正文。
+  const emptyItem = continuation ? undefined : model.items.find(candidate => {
+    if (pos < candidate.markerTo || pos > candidate.firstLineTo) return false;
+    const marker = /^[ \t]+\[ \]([ \t]*)$/.exec(model.text.slice(candidate.markerTo, candidate.firstLineTo));
+    return marker !== null && pos >= candidate.firstLineTo - marker[1].length;
+  });
+  // 源码模式也必须一次退出空任务；其他输入继续交给 Markdown 默认键位，保留原有续项和 Shift-Enter 行为。
+  if (mode === 'source' && !emptyItem) return false;
+  const item = emptyItem ?? model.tasks.find(candidate => pos >= candidate.contentFrom && pos <= candidate.firstLineTo);
   if (!item) return false;
   const line = view.state.doc.lineAt(item.from);
   const indent = line.text.slice(0, item.from - line.from);
   const marker = model.text.slice(item.markerFrom, item.markerTo);
   const eol = model.text.includes('\r\n') ? '\r\n' : '\n';
-  if (!continuation && !model.text.slice(item.contentFrom, item.firstLineTo).trim()) {
+  if (emptyItem || (!continuation && !model.text.slice(item.contentFrom, item.firstLineTo).trim())) {
     view.dispatch({ changes: { from: line.from, to: item.firstLineTo, insert: indent }, selection: { anchor: line.from + indent.length }, userEvent: 'input' });
     return true;
   }
