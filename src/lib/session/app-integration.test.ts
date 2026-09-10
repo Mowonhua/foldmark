@@ -183,6 +183,30 @@ async function importThemeFile(content: string): Promise<void> {
   await vi.waitFor(() => expect(button('导入主题').disabled).toBe(false));
 }
 
+describe('App 更多操作菜单', () => {
+  it('内部点击保留菜单，外部点击关闭，触发按钮仍能切换且菜单操作正常', async () => {
+    await start(['# 菜单验收\n']);
+    const trigger = button('更多操作');
+    trigger.click(); await tick();
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(menu).not.toBeNull();
+    menu.click(); await tick();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    documentInput().click(); await tick();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    trigger.click(); await tick();
+    trigger.click(); await tick();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    trigger.click(); await tick();
+    button('快捷键与使用帮助').click(); await tick();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+});
+
 describe('App 主题导入与持久化', () => {
   const customTheme: ThemeDefinition = { ...builtInThemes[0], id: 'custom-slate', name: '自制石板', corners: 'square', light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' } };
 

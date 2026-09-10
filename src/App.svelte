@@ -444,12 +444,13 @@
     void tick().then(() => document.getElementById('project-filter')?.focus());
   }
 
-  /** 点击冒泡到窗口后再收起，确保项目选择、搜索结果定位先完成；触发按钮也属于弹窗内部。 */
-  function dismissSearch(event: MouseEvent): void {
+  /** 点击冒泡到窗口后再收起，确保菜单命令、项目选择和搜索结果定位先完成；触发按钮也属于弹窗内部。 */
+  function dismissPopovers(event: MouseEvent): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (!target.closest('[data-project-search]')) closeProjectSearch();
     if (!target.closest('[data-global-search]')) searchOpen = false;
+    if (!target.closest('[data-more-menu]')) menuOpen = false;
   }
 
   function keydown(event: KeyboardEvent): void {
@@ -505,7 +506,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onclick={dismissSearch} />
+<svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
 <div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop}>
 
@@ -533,8 +534,8 @@
     <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
       <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}>☰</button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
-      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
-      {#if menuOpen}<div class="dropdown" role="menu">
+      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
+      {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
         <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>新增任务</button>
