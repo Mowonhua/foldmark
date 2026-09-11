@@ -19,21 +19,22 @@ h1{font-size:30px;line-height:1.55;font-weight:550;letter-spacing:-.6px}
 h2{font-size:21px;line-height:1.5;font-weight:550}
 p{line-height:1.85}
 button svg{flex-shrink:0}
-.app-shell{display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden}
+/* 品牌区与工具栏共用高度，确保折叠按钮在桌面及窄屏布局中始终同轴。 */
+.app-shell{--topbar-height:67px;display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden}
 .app-shell.sidebar-hidden{grid-template-columns:1fr}
 /* 窗口操作共用现有工具栏；弹窗从工具栏下方遮罩，保留窗口控制入口。 */
 body:has(.desktop-window) .modal-backdrop{top:54px}
-.sidebar{background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:26px 16px 12px;min-height:0}
-.brand{display:flex;align-items:center;gap:9px;padding:0 9px 30px;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
+.sidebar{background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:0 16px 12px;min-height:0}
+.brand{display:flex;align-items:center;gap:9px;height:var(--topbar-height);flex-shrink:0;margin-bottom:21px;padding:0 9px;border-bottom:1px solid transparent;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
 .icon-button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:23px;color:var(--muted);flex-shrink:0}
-.sidebar-close{margin-left:auto;font-size:24px}
+.sidebar-close{margin-left:auto;padding:0;line-height:1;letter-spacing:normal}
 .nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink)}
 .nav-active{background:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
 .all-nav{margin-bottom:30px}
 .all-nav>span:first-child{font-size:18px}
 .shortcut{margin-left:auto;font-size:12px;color:var(--muted)}
-.sidebar-section{position:relative;padding:0 9px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:1px}
+.sidebar-section{position:relative;margin-bottom:6px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:1px}
 .project-actions{display:flex;align-items:center}
 .project-actions .icon-button{padding:0;line-height:1;letter-spacing:normal}
 .project-actions svg{display:block}
@@ -47,13 +48,14 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
 .sidebar-bottom .icon-button{margin-left:auto;font-size:18px}
 .main-pane{min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
-.topbar{height:67px;min-height:67px;display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--divider-color,var(--line));gap:15px}
+.topbar{height:var(--topbar-height);min-height:var(--topbar-height);display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--divider-color,var(--line));gap:15px}
 .breadcrumb{display:flex;align-items:center;gap:13px;font-size:12px;white-space:nowrap;overflow:hidden}
 .crumb-label,.crumb-divider{color:var(--muted)}
 .breadcrumb strong{font-weight:500;text-overflow:ellipsis;overflow:hidden}
 .unsaved-mark{flex-shrink:0;color:var(--muted);margin-left:-7px}
 .top-actions{display:flex;gap:14px;align-items:center}
-.desktop-window .topbar{height:54px;min-height:54px;padding-right:0;gap:12px;user-select:none}
+.desktop-window{--topbar-height:54px}
+.desktop-window .topbar{padding-right:0;gap:12px;user-select:none}
 .desktop-window .breadcrumb{flex:1;min-width:40px;height:100%}
 .desktop-window .breadcrumb>span,.desktop-window .breadcrumb>strong,.desktop-window .brand>svg,.desktop-window .brand>span{pointer-events:none}
 .desktop-window .brand{user-select:none}
@@ -149,7 +151,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .compare textarea{height:300px;font-family:Consolas,"Microsoft YaHei",monospace;font-size:12px;resize:vertical;line-height:1.7}
 
 @media(max-width:950px){.app-shell{grid-template-columns:190px minmax(0,1fr)}
-.sidebar{padding:24px 10px 10px}
+.sidebar{padding:0 10px 10px}
 .brand{font-size:20px}
 .topbar{padding:0 20px}
 .viewbar{padding:14px 20px 10px}
@@ -157,9 +159,9 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .editor-region{padding-top:10px}
 }
 
-@media(max-width:720px){.app-shell{grid-template-columns:minmax(0,1fr)}
+@media(max-width:720px){.app-shell{--topbar-height:54px;grid-template-columns:minmax(0,1fr)}
 .sidebar{position:fixed;z-index:35;width:232px;height:100dvh;box-shadow:20px 0 60px var(--shadow-color)}
-.topbar{height:54px;min-height:54px;padding:0 14px}
+.topbar{padding:0 14px}
 .crumb-label,.crumb-divider{display:none}
 .top-actions{gap:5px}
 .viewbar{padding:12px 10px 8px}

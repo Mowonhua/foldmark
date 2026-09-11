@@ -512,7 +512,7 @@
 
   {#if sidebar}
     <aside class="sidebar" aria-label="项目导航">
-      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航">‹</button></div>
+      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
       <div class="sidebar-section"><span>项目</span><div class="project-actions">
         <div class="project-search" data-project-search>
