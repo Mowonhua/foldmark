@@ -208,7 +208,14 @@ describe('App 更多操作菜单', () => {
 });
 
 describe('App 主题导入与持久化', () => {
-  const customTheme: ThemeDefinition = { ...builtInThemes[0], id: 'custom-slate', name: '自制石板', corners: 'square', light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' } };
+  const customTheme: ThemeDefinition = {
+    ...builtInThemes[0], id: 'custom-slate', name: '自制石板', corners: 'square',
+    light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' },
+    appearance: {
+      light: { 'control-shadow': '3px 3px 6px #123456', 'control-radius': 9 },
+      dark: { 'control-shadow': '2px 2px 5px #102030', 'control-radius': 7 },
+    },
+  };
 
   it('设置中选择双色深色并保存，重新挂载恢复同一主题与完整配色', async () => {
     await start(['# 主题验收\n']); button('设置').click(); await tick();
@@ -227,15 +234,21 @@ describe('App 主题导入与持久化', () => {
     expect(themeControl('主题').value).toBe(customTheme.id);
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#ABCDEF');
     expect(document.documentElement.dataset.corners).toBe('square');
+    expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe(customTheme.appearance!.light['control-shadow']);
+    expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('9px');
     await vi.waitFor(async () => {
       const config = await files.loadConfig();
       expect(config?.preferences.themeId).toBe(customTheme.id); expect(config?.customThemes).toEqual([customTheme]);
     });
     await remount(); button('设置').click(); await tick();
     expect(themeControl('主题').value).toBe(customTheme.id);
+    expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe(customTheme.appearance!.light['control-shadow']);
+    expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('9px');
     await chooseThemeSetting('明暗模式', 'dark');
     expect(document.documentElement.dataset.corners).toBe('square');
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#123456');
+    expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe(customTheme.appearance!.dark['control-shadow']);
+    expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('7px');
   });
 
   it('内置包重复导入不覆盖已有主题', async () => {
@@ -262,6 +275,8 @@ describe('App 主题导入与持久化', () => {
     await start(['# 移除主题\n']); button('设置').click(); await tick();
     await importThemeFile(JSON.stringify(customTheme)); button('移除主题').click(); await tick();
     expect(themeControl('主题').value).toBe('paper');
+    expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('');
     await vi.waitFor(async () => {
       const config = await files.loadConfig();
       expect(config?.preferences.themeId).toBe('paper'); expect(config?.customThemes).toEqual([]);
@@ -270,6 +285,8 @@ describe('App 主题导入与持久化', () => {
     expect(themeControl('主题').value).toBe('paper');
     expect([...themeControl('主题').options].some(option => option.value === customTheme.id)).toBe(false);
     expect(document.documentElement.dataset.corners).toBe('rounded');
+    expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('');
   });
 
   it('跟随系统即时响应明暗事件，手动选择浅色后保持浅色', async () => {
@@ -349,19 +366,23 @@ describe('App 桌面主题模板下载', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
-  it('选择位置后落盘完整双模式模板，并反馈保存成功', async () => {
-    desktopBoundary.save.mockResolvedValue(exportPath);
+  it.each(['mono', 'neumorphic'])('选择位置后落盘 %s 完整双模式模板，并反馈保存成功', async (themeId) => {
+    const selected = builtInThemes.find(theme => theme.id === themeId)!;
+    const templateId = `custom-${themeId}`;
+    const selectedExportPath = `浏览器/${templateId}.json`;
+    desktopBoundary.save.mockResolvedValue(selectedExportPath);
     await start(['# 下载模板\n']); button('设置').click(); await tick();
-    await chooseThemeSetting('主题', 'mono');
+    await chooseThemeSetting('主题', themeId);
     button('下载主题模板').click(); await tick();
     await vi.waitFor(() => expect(desktopBoundary.save).toHaveBeenCalledWith({
-      title: '保存主题模板', defaultPath: 'custom-mono.json', filters: [{ name: 'JSON 主题', extensions: ['json'] }],
+      title: '保存主题模板', defaultPath: `${templateId}.json`, filters: [{ name: 'JSON 主题', extensions: ['json'] }],
     }));
     await vi.waitFor(async () => {
-      const template = parseTheme((await files.read(exportPath)).text);
-      expect(template.id).toBe('custom-mono');
-      expect(template.light).toEqual(builtInThemes[1].light);
-      expect(template.dark).toEqual(builtInThemes[1].dark);
+      const template = parseTheme((await files.read(selectedExportPath)).text);
+      expect(template.id).toBe(templateId);
+      expect(template.light).toEqual(selected.light);
+      expect(template.dark).toEqual(selected.dark);
+      expect(template.appearance).toEqual(selected.appearance);
     });
     expect(document.body.textContent).toContain('主题模板已保存');
   });

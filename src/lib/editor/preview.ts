@@ -48,7 +48,7 @@ class ItemWidget extends WidgetType {
       marker.setAttribute('role', 'checkbox');
       marker.setAttribute('aria-checked', String(this.item.task.checked));
       marker.setAttribute('aria-label', this.item.task.checked ? '恢复任务' : '完成任务');
-      marker.textContent = this.item.task.checked ? '✓' : '';
+      // 可见完成标记由 CSS 主题变量绘制；名称和状态由 ARIA 提供，不依赖具体字形。
       // 指针单击由拖动状态机在松开时判定；键盘产生 detail=0 的 click 独立激活。
       marker.addEventListener('click', event => { event.preventDefault(); if (event.detail === 0) actions.toggleTask(this.item.from); });
     } else {

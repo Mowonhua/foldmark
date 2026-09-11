@@ -23,13 +23,13 @@ button svg{flex-shrink:0}
 .app-shell.sidebar-hidden{grid-template-columns:1fr}
 /* 窗口操作共用现有工具栏；弹窗从工具栏下方遮罩，保留窗口控制入口。 */
 body:has(.desktop-window) .modal-backdrop{top:54px}
-.sidebar{background:var(--sidebar);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:26px 16px 12px;min-height:0}
+.sidebar{background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:26px 16px 12px;min-height:0}
 .brand{display:flex;align-items:center;gap:9px;padding:0 9px 30px;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
 .icon-button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:23px;color:var(--muted);flex-shrink:0}
 .sidebar-close{margin-left:auto;font-size:24px}
-.nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:5px;font-size:13px;color:var(--ink)}
-.nav-active{background:var(--accent-soft)!important;color:var(--accent);font-weight:550}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink)}
+.nav-active{background:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
 .all-nav{margin-bottom:30px}
 .all-nav>span:first-child{font-size:18px}
 .shortcut{margin-left:auto;font-size:12px;color:var(--muted)}
@@ -39,7 +39,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .project-actions svg{display:block}
 .project-search{display:flex}
 .project-search-panel{margin:4px 9px 8px;flex-shrink:0}
-.project-filter{display:block;width:100%;height:30px;font-size:11px;padding:5px 8px;background:transparent;border:1px solid var(--line);border-radius:4px}
+.project-filter{display:block;width:100%;height:30px;font-size:11px;padding:5px 8px;background:transparent;border:1px solid var(--field-border,var(--line));border-radius:var(--field-radius,4px);box-shadow:var(--field-shadow,none)}
 .project-filter::placeholder{color:var(--muted)}
 .project-list{overflow:auto;min-height:0}
 .project-list .nav-item{margin-bottom:4px}
@@ -47,7 +47,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
 .sidebar-bottom .icon-button{margin-left:auto;font-size:18px}
 .main-pane{min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
-.topbar{height:67px;min-height:67px;display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--line);gap:15px}
+.topbar{height:67px;min-height:67px;display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--divider-color,var(--line));gap:15px}
 .breadcrumb{display:flex;align-items:center;gap:13px;font-size:12px;white-space:nowrap;overflow:hidden}
 .crumb-label,.crumb-divider{color:var(--muted)}
 .breadcrumb strong{font-weight:500;text-overflow:ellipsis;overflow:hidden}
@@ -61,13 +61,13 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .search-button{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:8px;border-radius:5px}
 .key-hint{font-size:10px;border:1px solid var(--line);padding:2px 4px;border-radius:3px;margin-left:14px}
 .viewbar{display:flex;align-items:center;justify-content:space-between;padding:16px 32px 12px;gap:12px}
-.tabs{display:flex;gap:4px}
-.tabs button{font-size:12px;color:var(--muted);border-radius:4px;padding:7px 12px;white-space:nowrap}
+.tabs{display:flex;gap:var(--tabs-gap,4px);padding:var(--tabs-padding,0px);border-radius:var(--tabs-radius,0px);background:var(--tabs-background,transparent);box-shadow:var(--tabs-shadow,none)}
+.tabs button{font-size:12px;color:var(--muted);border-radius:var(--tab-radius,4px);padding:7px 12px;white-space:nowrap}
 .tabs button span{font-size:10px;padding-left:7px;opacity:.8}
-.tabs .tab-active{background:var(--accent-soft);color:var(--accent)}
+.tabs .tab-active{background:var(--tab-active-background,var(--accent-soft));color:var(--accent);box-shadow:var(--tab-active-shadow,none);font-weight:var(--tab-active-weight,inherit)}
 .editor-region{flex:1;min-height:0;overflow:hidden;padding:17px 0 0}
 .offscreen{display:none!important}
-.statusbar{height:30px;flex-shrink:0;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 6px;font-size:10px;color:var(--muted);gap:10px}
+.statusbar{height:30px;flex-shrink:0;border-top:1px solid var(--divider-color,var(--line));display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 6px;font-size:10px;color:var(--muted);gap:10px}
 .statusbar button{font-size:10px}
 .statusbar .source-button{display:block;font-family:monospace;font-size:14px;padding:3px 6px;border-radius:3px}
 .statusbar .source-active{color:var(--accent);background:var(--accent-soft)}
@@ -84,11 +84,11 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .text-button{display:block;margin:18px auto;font-size:12px;color:var(--muted)}
 .muted{color:var(--muted)}
 .small{font-size:11px}
-.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:7px;width:222px;box-shadow:0 8px 28px var(--shadow-color)}
+.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--floating-border,var(--line));padding:6px;border-radius:var(--floating-radius,7px);width:222px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
 .dropdown button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:12px;text-align:left;padding:9px 11px;border-radius:4px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
-.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:0 8px 28px var(--shadow-color)}
+.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius,8px);padding:14px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
 .search-row{display:flex;align-items:center;gap:8px}
 .search-row input{flex:1;font-size:13px}
 .check-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);padding:10px 0}
@@ -116,7 +116,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .aggregate-section-task::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:0;border-left:1px solid var(--line);pointer-events:none}
 .aggregate-section-task::after{content:'';position:absolute;left:7px;top:var(--branch-y);width:21px;height:0;border-top:1px solid var(--line);pointer-events:none}
 .aggregate-section-task:not(:has(+ .aggregate-section-task))::before{bottom:auto;height:calc(var(--branch-y) + 1px)}
-.readonly-box{width:15px;height:15px;border:1px solid var(--muted);border-radius:3px;margin-top:2px;flex-shrink:0}
+.readonly-box{width:15px;height:15px;border:1px solid var(--task-checkbox-border,var(--muted));border-radius:3px;margin-top:2px;flex-shrink:0;box-shadow:var(--task-checkbox-shadow,none)}
 .result-arrow{margin-left:auto;color:var(--muted);opacity:0}
 .aggregate-task:hover .result-arrow{opacity:1}
 .all-clear{padding-top:60px;color:var(--muted);font-size:14px}
@@ -127,7 +127,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .error-banner{color:var(--danger)}
 .error-banner button,.conflict-banner button{margin-left:16px;text-decoration:underline;font-size:12px}
 .modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
-.modal{background:var(--surface);border:1px solid var(--line);border-radius:9px;width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
+.modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius,9px);box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
 .modal.wide{width:min(850px,100%)}
 .modal-close{position:absolute;right:14px;top:12px}
 .modal>p{font-size:13px}
@@ -137,7 +137,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .modal input,.modal select{width:100%;font-size:13px}
 .modal input[type=range]{padding:0;accent-color:var(--accent)}
 .file-buttons{display:flex;gap:10px;margin:20px 0}
-.file-buttons button,.modal-actions button:not(.primary){border:1px solid var(--line);border-radius:5px;padding:10px 12px;font-size:12px}
+.file-buttons button,.modal-actions button:not(.primary){border:1px solid var(--control-border,var(--line));border-radius:5px;padding:10px 12px;font-size:12px}
 .file-buttons button:focus-visible,.modal-actions button:not(.primary):focus-visible{outline:none;border-color:var(--accent)}
 .file-path{font-family:Consolas,monospace;font-size:11px!important;background:var(--sidebar);border-radius:4px;padding:10px;word-break:break-all}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:24px}
@@ -164,7 +164,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .top-actions{gap:5px}
 .viewbar{padding:12px 10px 8px}
 .tabs button{padding:7px 9px}
-.tabs{gap:0}
+.tabs{gap:var(--tabs-gap,0px)}
 .statusbar{padding:0 12px 0 6px}
 .statusbar button{display:none}
 .compare{grid-template-columns:1fr}
@@ -181,6 +181,15 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 
 /* 派生效果随主题颜色变化；双色主题禁用混色和渐变过程，保证界面只使用声明的两种实色。 */
 :root{--shadow-color:color-mix(in srgb,var(--ink) 10%,transparent);--backdrop:color-mix(in srgb,var(--ink) 25%,transparent);--checkbox-border:var(--muted);scrollbar-color:var(--muted) var(--canvas)}
+/* 控件只消费通用视觉变量；缺省值保留原外观，编辑器内联控件不参与表单效果。 */
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.primary,.file-buttons button,.modal-actions button,.modal-close){border-radius:var(--control-radius,5px);box-shadow:var(--control-shadow,none)}
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close){background:var(--control-background,transparent)}
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close):hover:not(:disabled){background:var(--hover)}
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.primary,.file-buttons button,.modal-actions button,.modal-close):active:not(:disabled){box-shadow:var(--control-pressed-shadow,var(--control-shadow,none))}
+:is(.modal input:where(:not([type=checkbox],[type=radio],[type=range],[type=file])),.modal select,.modal textarea,.search-row input){border-color:var(--field-border,var(--line));border-radius:var(--field-radius,5px);box-shadow:var(--field-shadow,none)}
+/* 常态边框可由主题隐藏，键盘焦点仍须使用强调色；此规则与表单规则保持同级或更高优先级。 */
+:is(.modal input,.modal select,.modal textarea,.search-row input,.project-filter,.file-buttons button,.modal-actions button):focus-visible{border-color:var(--accent)}
+
 /* 双色遮罩只拦截背景交互，不绘制底色；实色会遮没页面，半透明色会引入混色。 */
 :root[data-monochrome=true]{--shadow-color:transparent;--backdrop:transparent}
 :root[data-monochrome=true] *, :root[data-monochrome=true] *::before, :root[data-monochrome=true] *::after{transition:none!important;animation:none!important;box-shadow:none!important;filter:none!important}

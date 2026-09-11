@@ -5,6 +5,8 @@
 
 import paperPackage from '../../themes/paper.json';
 import monoPackage from '../../themes/mono.json';
+import neumorphicPackage from '../../themes/neumorphic.json';
+import { applyAppearance, validateAppearance, type ThemeAppearance } from './theme-appearance';
 
 /** 结构职责：区分明暗模式与系统偏好；主题身份独立保存，不随模式变化。 */
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -23,12 +25,14 @@ export interface ThemeDefinition {
   monochrome?: boolean;
   /** 统一控制界面边角；缺省为 rounded，与旧版主题文件兼容，独立于双色模式。 */
   corners?: 'rounded' | 'square';
+  /** 可选通用视觉参数；两种模式分别声明，缺省键回退组件默认值，双色模式不应用扩展。 */
+  appearance?: { light: ThemeAppearance; dark: ThemeAppearance };
   light: ThemePalette;
   dark: ThemePalette;
 }
 
 // 内置包仅在此登记，结构校验与第三方主题相同；首项为首次启动和移除主题后的默认值。
-export const builtInThemes: readonly ThemeDefinition[] = [paperPackage, monoPackage].map(validateTheme);
+export const builtInThemes: readonly ThemeDefinition[] = [paperPackage, monoPackage, neumorphicPackage].map(validateTheme);
 
 /**
  * 函数职责：校验不可信主题对象并返回仅含受支持字段的副本。
@@ -44,6 +48,12 @@ export function validateTheme(value: unknown): ThemeDefinition {
   if (typeof theme.name !== 'string' || !theme.name.trim() || theme.name.length > 80) return fail();
   if (theme.monochrome !== undefined && typeof theme.monochrome !== 'boolean') return fail();
   if (theme.corners !== undefined && theme.corners !== 'rounded' && theme.corners !== 'square') return fail();
+  let appearance: ThemeDefinition['appearance'];
+  if (theme.appearance !== undefined) {
+    if (typeof theme.appearance !== 'object' || theme.appearance === null || Array.isArray(theme.appearance)) return fail();
+    const source = theme.appearance as Record<string, unknown>;
+    appearance = { light: validateAppearance(source.light), dark: validateAppearance(source.dark) };
+  }
   const palettes = {} as Record<'light' | 'dark', ThemePalette>;
   for (const mode of ['light', 'dark'] as const) {
     const source = theme[mode];
@@ -56,7 +66,7 @@ export function validateTheme(value: unknown): ThemeDefinition {
     }
   }
   if (theme.monochrome && new Set(Object.values(palettes).flatMap(palette => Object.values(palette).map(color => color.toUpperCase()))).size !== 2) return fail();
-  return { version: 1, id: theme.id, name: theme.name.trim(), ...(theme.monochrome === undefined ? {} : { monochrome: theme.monochrome }), ...(theme.corners === undefined ? {} : { corners: theme.corners }), ...palettes };
+  return { version: 1, id: theme.id, name: theme.name.trim(), ...(theme.monochrome === undefined ? {} : { monochrome: theme.monochrome }), ...(theme.corners === undefined ? {} : { corners: theme.corners }), ...(appearance === undefined ? {} : { appearance }), ...palettes };
 }
 /**
  * 函数职责：读取用户提供的主题 JSON 文本。
@@ -82,6 +92,8 @@ export function applyTheme(root: HTMLElement, theme: ThemeDefinition, mode: Them
   root.dataset.theme = resolved;
   root.dataset.corners = theme.corners ?? 'rounded';
   root.dataset.monochrome = String(theme.monochrome === true);
+  // 双色模式使用基础视觉参数，避免扩展中的阴影或实色引入第三种颜色。
+  applyAppearance(root, theme.monochrome ? undefined : theme.appearance?.[resolved]);
   root.style.colorScheme = resolved;
   for (const key of paletteKeys) root.style.setProperty(`--${key}`, theme[resolved][key]);
 }

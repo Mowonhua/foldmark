@@ -31,8 +31,11 @@
 .fm-fold-button { position: absolute; width: 20px; height: 25px; right: calc(100% + 5px); border: 0; background: transparent; font-size: 17px; opacity: 0; transition: opacity 100ms; }
 .fm-fold-button:hover, .fm-item-controls:hover .fm-fold-button, .fm-item-controls:focus-within .fm-fold-button, .fm-item-controls.is-folded .fm-fold-button { opacity: 1; }
 .fm-fold-button.is-empty { visibility: hidden; }
-.fm-task-checkbox { border: 1.5px solid var(--checkbox-border); border-radius: 4px; width: 17px; height: 17px; background: transparent; font-size: 12px; }
-.fm-task-checkbox[aria-checked=true] { background: var(--accent); color: var(--canvas); border-color: var(--accent); }
+.fm-task-checkbox { border: 1.5px solid var(--task-checkbox-border,var(--checkbox-border)); border-radius: 4px; width: 17px; height: 17px; background: transparent; font-size: 12px; box-shadow: var(--task-checkbox-shadow,none); }
+.fm-task-checkbox[aria-checked=true] { background: var(--task-checkbox-checked-background,var(--accent)); color: var(--task-checkbox-checked-color,var(--canvas)); border-color: var(--task-checkbox-border,var(--accent)); box-shadow: var(--task-checkbox-checked-shadow,var(--task-checkbox-shadow,none)); }
+.fm-task-checkbox[aria-checked=true]::after { content: var(--task-checkbox-checked-mark,'✓'); font-size: var(--task-checkbox-checked-mark-size,12px); width: var(--task-checkbox-checked-mark-width,auto); height: var(--task-checkbox-checked-mark-height,auto); border-radius: var(--task-checkbox-checked-mark-radius,0px); background: var(--task-checkbox-checked-mark-background,transparent); box-shadow: var(--task-checkbox-checked-mark-shadow,none); flex-shrink: 0; line-height: 1; pointer-events: none; }
+/* 已完成控件的主题底色优先于全局按钮悬停色；缺省时保留原有悬停反馈。 */
+.fm-task-checkbox[aria-checked=true]:hover:not(:disabled) { background: var(--task-checkbox-checked-background,var(--hover)); }
 .fm-list-marker { border: none; background: transparent; min-width: 15px; height: 20px; font-size: 1em; }
 .fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }

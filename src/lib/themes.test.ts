@@ -2,10 +2,84 @@
 import { describe, expect, it } from 'vitest';
 import { applyTheme, builtInThemes, paletteKeys, parseTheme, validateTheme } from './themes';
 import { validateAppConfig } from './config-validation';
+import { appearanceProperties } from './theme-appearance';
 
 const palette = (color: string) => Object.fromEntries(paletteKeys.map(key => [key, color]));
 const custom = () => ({ version: 1, id: 'custom-test', name: '自制主题', light: palette('#F8FAFC'), dark: palette('#0A0A0A') });
 describe('主题文件', () => {
+  it('新拟物支持内置选择、配置恢复和复制导入时保留表面效果', () => {
+    const theme = builtInThemes.find(theme => theme.id === 'neumorphic')!;
+    expect(theme?.name).toBe('新拟物');
+    expect(theme.appearance?.light['control-shadow']).toContain('#');
+    const copy = parseTheme(JSON.stringify({ ...theme, id: 'soft-custom' }));
+    expect(copy.appearance).toEqual(theme.appearance);
+    expect(validateAppConfig({ projects: [], preferences: { themeId: theme.id } })).not.toBeNull();
+    expect(validateAppConfig({ projects: [], preferences: { themeId: copy.id }, customThemes: [copy] })).not.toBeNull();
+  });
+  it('视觉参数随模式覆盖，缺省、旧主题与双色模式均清除上一次效果', () => {
+    const root = document.createElement('div');
+    const theme = validateTheme({ ...custom(), appearance: {
+      light: { 'control-shadow': '4px 4px 9px #c1c5c9, -4px -4px 9px #f6f8fa', 'control-radius': 9 },
+      dark: { 'control-shadow': 'inset 3px 3px 6px #151a20' },
+    } });
+    applyTheme(root, theme, 'light', false);
+    expect(root.style.getPropertyValue('--control-radius')).toBe('9px');
+    applyTheme(root, theme, 'system', true);
+    expect(root.style.getPropertyValue('--control-shadow')).toBe('inset 3px 3px 6px #151a20');
+    expect(root.style.getPropertyValue('--control-radius')).toBe('');
+    for (const fallback of [validateTheme(custom()), validateTheme({ ...theme, monochrome: true })]) {
+      applyTheme(root, theme, 'light', false);
+      applyTheme(root, fallback, 'light', false);
+      for (const key of Object.keys(appearanceProperties)) expect(root.style.getPropertyValue(`--${key}`)).toBe('');
+    }
+  });
+  it('视觉参数只接受有限值，拒绝资源地址、表达式、负模糊半径及不完整模式', () => {
+    for (const appearance of [null, [], {}, { light: {}, dark: [] }, { light: {}, dark: null }]) {
+      expect(() => validateTheme({ ...custom(), appearance })).toThrow('THEME_INVALID');
+    }
+    for (const light of [
+      { 'control-radius': -1 }, { 'control-radius': 33 }, { 'control-radius': '9px' },
+      { 'control-radius': Infinity }, { 'tab-active-weight': 901 },
+      { 'control-background': 'url(https://example.com)' }, { 'control-background': 'var(--untrusted)' },
+      { 'control-shadow': '4px 4px -1px #ffffff' }, { 'control-shadow': '100px 0px 9px #ffffff' },
+      { 'control-shadow': '0px 0px 1px #ffffff; color:red' },
+      { 'control-shadow': Array(5).fill('0px 0px 1px #ffffff').join(', ') },
+      { 'control-shadow': null }, { 'field-border': {} },
+      { 'task-checkbox-checked-mark': 'url(https://example.com)' },
+      { 'task-checkbox-checked-mark': '"; color:red' },
+      { 'task-checkbox-checked-mark': '●●' },
+    ]) expect(() => validateTheme({ ...custom(), appearance: { light, dark: {} } })).toThrow('THEME_INVALID');
+  });
+  it('白名单限制导入及配置应用，不将未知参数注入页面', () => {
+    const appearance = { light: { 'control-shadow': 'none', 'field-border': 'transparent', 'control-radius': 0, 'tab-active-weight': 550, 'unknown-color': '#123456' }, dark: {} };
+    const theme = validateTheme({ ...custom(), appearance });
+    expect(theme.appearance?.light).not.toHaveProperty('unknown-color');
+    const root = document.createElement('div');
+    // 配置验证不替换原对象，应用边界仍须限制写入字段。
+    applyTheme(root, { ...theme, appearance }, 'light', false);
+    expect(root.style.getPropertyValue('--unknown-color')).toBe('');
+    expect(root.style.getPropertyValue('--control-radius')).toBe('0px');
+    expect(root.style.getPropertyValue('--tab-active-weight')).toBe('550');
+  });
+  it.each(['●', ''])('完成标记 %j 作为 CSS 字符串应用，切换旧主题后恢复默认标记', mark => {
+    const root = document.createElement('div');
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance: {
+      light: { 'task-checkbox-checked-mark': mark, 'task-checkbox-checked-mark-size': 6, 'task-checkbox-checked-mark-width': 8, 'task-checkbox-checked-mark-height': 8 },
+      dark: { 'task-checkbox-checked-mark': '✓' },
+    } }));
+    applyTheme(root, theme, 'light', false);
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark')).toBe(JSON.stringify(mark));
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-width')).toBe('8px');
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-height')).toBe('8px');
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-size')).toBe('6px');
+    applyTheme(root, theme, 'dark', false);
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark')).toBe('"✓"');
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-size')).toBe('');
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-width')).toBe('');
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark-height')).toBe('');
+    applyTheme(root, validateTheme(custom()), 'light', false);
+    expect(root.style.getPropertyValue('--task-checkbox-checked-mark')).toBe('');
+  });
   it('内置纯粹主题只包含指定两色，浅深背景对应正确', () => {
     const mono = builtInThemes.find(theme => theme.id === 'mono')!;
     expect(new Set([...Object.values(mono.light), ...Object.values(mono.dark)])).toEqual(new Set(['#0A0A0A', '#F8FAFC']));
