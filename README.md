@@ -6,6 +6,8 @@
 
 ## 使用
 
+从 [GitHub Releases](https://github.com/Mowonhua/foldmark/releases) 下载 Windows x64 安装包。首个预发布版本为 `v0.1.0-alpha.1`。
+
 打开应用后，选择“新增项目”，关联已有 `.md` 文件或在指定位置新建清单。
 
 - **待办**：就地编辑 Markdown。列表圆点、编号和任务复选框可拖动同级排序；左侧三角折叠正文和后代。
@@ -13,6 +15,7 @@
 - **查看源码**：只编辑当前待办或归档分区的 Markdown，进入时定位到当前阅读位置；再次点击“返回预览”回到来源视图和进入前的位置。切换项目或重启后也保留源码来源。
 - **全部待办与搜索**：跨项目查找任务，点击结果回到原文。“全部待办”不显示系统 `归档` 章节名。搜索可包含归档，并会展开目标所在的折叠祖先。
 - **阅读与外观**：每套主题包含浅色和深色，支持跟随系统；内置纸面、纯粹双色与新拟物主题，可导入自制 JSON 主题、下载模板。另可配置字体、字号和正文宽度。格式见 [自制主题](docs/主题.md)。
+- **应用更新**：从“更多操作 → 检查更新”打开更新面板。默认启动检查并自动下载，两个开关可分别关闭。下载完成后点击“安装并重启”；全部文档及配置保存成功后才会安装，保存失败或冲突时保留窗口和下载包供重试。预发布接收预览通道，正式版只接收稳定通道。
 
 | 操作 | 快捷键 |
 | --- | --- |
@@ -60,10 +63,12 @@ npm run dev
 构建 Windows NSIS 安装包：
 
 ```powershell
-npm run tauri -- build
+npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
 ```
 
-默认输出为 `src-tauri/target/release/bundle/nsis/Foldmark_0.1.0_x64-setup.exe`。安装包采用 WebView2 下载引导方式；机器缺少运行时时，首次安装需要联网下载。需要离线安装的设备应预先安装 Microsoft WebView2 Evergreen Runtime。应用正文、搜索、公式和保存均在本地工作。
+以上命令用于本地构建，不生成更新签名。输出为 `src-tauri/target/release/bundle/nsis/Foldmark_0.1.0-alpha.1_x64-setup.exe`。正式发布由 GitHub Actions 生成签名安装包、更新清单及 SHA-256 校验文件，步骤见 [发布与自动更新](docs/发布.md)。
+
+安装包采用 WebView2 下载引导方式；机器缺少运行时时，首次安装需要联网下载。需要离线安装的设备应预先安装 Microsoft WebView2 Evergreen Runtime。应用正文、搜索、公式和保存均在本地工作。
 
 ## 验证
 

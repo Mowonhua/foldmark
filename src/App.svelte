@@ -2,6 +2,10 @@
   /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
   import { onMount, tick } from 'svelte';
   import WindowControls from './lib/WindowControls.svelte';
+  import UpdatePanel from './lib/UpdatePanel.svelte';
+  import { UpdateCoordinator } from './lib/updater/update-coordinator';
+  import type { UpdateStatus } from './lib/updater/contracts';
+  import packageInfo from '../package.json';
   import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { renderTaskTitle } from './lib/editor/preview';
@@ -27,6 +31,9 @@
   let ready = $state(false);
   let configReady = $state(false);
   let configError = $state('');
+  let updater: UpdateCoordinator | undefined;
+  let updateStatus = $state<UpdateStatus>({ kind: 'idle' });
+  let updateInstalling = $state(false);
   let switching = false;
   let openGeneration = 0;
   let version = $state(0);
@@ -59,7 +66,7 @@
   let fatal = $state('');
   let missing = $state<Project | null>(null);
   let menuOpen = $state(false);
-  let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | null>(null);
+  let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | 'updates' | null>(null);
   let projectName = $state('');
   let projectPath = $state('');
   let createFile = $state(false);
@@ -97,6 +104,30 @@
 
   function notify(message: string, undoable = false): void {
     toast = message; toastUndo = undoable; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast = ''; }, 6000);
+  }
+
+  /**
+   * 函数职责：安装更新前保存全部已打开文档与配置，并禁止继续输入。
+   * 输入说明：只由更新协调器在签名验证成功且用户点击安装后调用。
+   * 输出说明：全部保存成功返回 true；失败由协调器解除编辑锁并保留安装包。
+   * 实现思路：锁定界面、捕获定位、等待所有保存器和配置队列，再允许原生安装退出。
+   */
+  async function prepareUpdateInstall(): Promise<boolean> {
+    updateInstalling = true;
+    // 撤销提示位于主界面外；进入保存屏障后不能再从提示条产生新的正文事务。
+    toast = ''; toastUndo = false; clearTimeout(toastTimer);
+    await tick();
+    captureUI(); clearTimeout(configTimer);
+    const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
+    const configured = await persistConfig();
+    return saved.every(Boolean) && configured;
+  }
+
+  /** 更新偏好与普通配置走同一持久化队列；禁用自动下载不会打断已经开始的校验。 */
+  function updatePreferences(autoCheck: boolean, autoDownload: boolean): void {
+    config.preferences.autoCheckUpdates = autoCheck;
+    config.preferences.autoDownloadUpdates = autoDownload;
+    updater?.setAutoDownload(autoDownload); scheduleConfig();
   }
 
   /** 校验完整成功后才更新主题列表；重复 ID 必须先移除，避免无提示覆盖用户的配色。 */
@@ -454,6 +485,7 @@
   }
 
   function keydown(event: KeyboardEvent): void {
+    if (updateInstalling) { event.preventDefault(); return; }
     if (event.isComposing) return;
     if (event.key === 'Escape') { dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
     if (!(event.ctrlKey || event.metaKey)) return;
@@ -484,12 +516,28 @@
         if (desktop) {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
           unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
-            event.preventDefault(); captureUI();
+            event.preventDefault();
+            if (updateInstalling) return;
+            captureUI();
             const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
             const configured = await persistConfig();
+            // 关闭保存可能早于安装请求开始；安装已接管退出时，旧关闭请求不能销毁窗口。
+            if (updateInstalling) return;
             if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
             else notify('仍有正文或配置未保存，请处理保存失败后关闭。');
           });
+          // 更新初始化独立于正文加载；检查失败只进入更新面板，不使编辑器变为不可用。
+          const { TauriUpdatePort } = await import('./lib/updater/tauri');
+          if (disposed) return;
+          updater = new UpdateCoordinator({
+            port: new TauriUpdatePort(), autoDownload: config.preferences.autoDownloadUpdates ?? true,
+            beforeInstall: prepareUpdateInstall, afterInstallFailure: () => { updateInstalling = false; },
+            onStatus: status => {
+              updateStatus = status;
+              if (status.kind === 'ready') notify(`Foldmark ${status.version} 已下载，可在更新面板安装。`);
+            },
+          });
+          if (config.preferences.autoCheckUpdates ?? true) void updater.check();
         }
       } catch (error) { fatal = errorMessage(error); ready = true; }
     };
@@ -501,6 +549,7 @@
       colorPreference.removeEventListener('change', updateSystemTheme);
       disposed = true; unlistenClose(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
       clearTimeout(searchTimer); clearTimeout(configTimer); clearTimeout(toastTimer);
+      updater?.dispose();
       for (const session of sessions.values()) { session.stopWatch(); session.saver.dispose(); } editor?.destroy();
     };
   });
@@ -508,7 +557,7 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
-<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop}>
+<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop} inert={updateInstalling}>
 
   {#if sidebar}
     <aside class="sidebar" aria-label="项目导航">
@@ -546,7 +595,7 @@
         <hr/><button role="menuitem" onclick={() => openDialog('rename')}>重命名项目</button>
         <button role="menuitem" onclick={() => exportMarkdown()}>另存 Markdown 副本</button>
         <button role="menuitem" onclick={() => openDialog('remove')}>移除项目关联</button>
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
       </div>{/if}
     </header>
 
@@ -592,16 +641,16 @@
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
     {/if}
-    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button><button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
+    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button>{#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
   </main>
 </div>
 
-{#if toast}<div class="toast" role="status"><span>{toast}</span>{#if toastUndo}<button onclick={() => { editor?.undo(); toast = ''; }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}>×</button></div>{/if}
+{#if toast}<div class="toast" role="status" inert={updateInstalling}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}>×</button></div>{/if}
 
 {#if dialog}
   <div class="modal-backdrop" role="presentation">
     <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
-      <button class="modal-close icon-button" aria-label="关闭对话框" onclick={() => dialog = null}>×</button>
+      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling} onclick={() => dialog = null}>×</button>
       {#if dialog === 'project'}
         <p class="eyebrow">项目</p><h2 id="dialog-title">给一份清单一个位置</h2><p class="muted">关联已有 Markdown，或选择位置新建文件。</p>
         <label>项目名称<input placeholder="例如：工作、阅读、生活" bind:value={projectName}/></label>
@@ -623,6 +672,12 @@
         <label>字号 <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
         <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
         <p class="small muted">外观自动保存。动画遵循系统的减少动态效果设置。</p>
+      {:else if dialog === 'updates'}
+        <p class="eyebrow">Foldmark</p><h2 id="dialog-title">应用更新</h2>
+        <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}
+          autoCheck={config.preferences.autoCheckUpdates ?? true} autoDownload={config.preferences.autoDownloadUpdates ?? true}
+          onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
+          onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}/>
       {:else if dialog === 'help'}
         <p class="eyebrow">连续写作</p><h2 id="dialog-title">写下任务，逐件完成。</h2>
         <dl class="shortcuts"><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>

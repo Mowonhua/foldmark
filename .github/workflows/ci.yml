@@ -1,0 +1,47 @@
+# 文件职责：验证主分支、拉取请求及发布标签使用的同一套构建前检查。
+# 定义范围：Windows 前端、Rust 与发布脚本验证，可被发布工作流复用。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Windows checks
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows
+      - run: npm ci
+      - name: Validate release versions
+        run: node scripts/release.mjs validate
+      - name: Test release boundaries
+        run: node --test scripts/release-policy.test.mjs scripts/release.test.mjs scripts/release-github.test.mjs
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:app
+      - run: npm run build
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

@@ -9,7 +9,13 @@ export interface Project { id: string; name: string; path: string }
 export type ViewMode = 'todo' | 'archive' | 'source';
 import type { ThemeDefinition, ThemeMode } from './themes';
 /** 结构职责：保存阅读参数；theme 保留旧版明暗模式语义，themeId 缺省时使用纸面主题。 */
-export interface Preferences { theme: ThemeMode; themeId?: string; fontFamily: string; fontSize: number; contentWidth: number }
+export interface Preferences {
+  theme: ThemeMode; themeId?: string; fontFamily: string; fontSize: number; contentWidth: number;
+  /** 缺省为 true；仅桌面版启动后检查，关闭后仍允许手动检查。 */
+  autoCheckUpdates?: boolean;
+  /** 缺省为 true；下载完成后仍需用户启动安装，以便先保存全部文档。 */
+  autoDownloadUpdates?: boolean;
+}
 /** 结构职责：保存独立于 Markdown 的配置；正文及编辑历史不属于配置。 */
 export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[] }
 /** 结构职责：保存可可靠恢复的界面定位；折叠键失配时默认展开。 */

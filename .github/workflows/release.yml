@@ -1,0 +1,72 @@
+# 文件职责：将通过验证的版本标签发布为签名安装包，并提升静态更新频道。
+# 定义范围：Windows x64 NSIS 构建、GitHub Release 与 updates 分支写入。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# 所有版本共用发布锁；已经开始的版本不能被新标签取消到一半。
+concurrency:
+  group: foldmark-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish Windows x64
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows
+      - run: npm ci
+      - name: Validate version tag
+        id: version
+        run: node scripts/release.mjs validate
+      - name: Build signed NSIS installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw '缺少仓库 secret TAURI_SIGNING_PRIVATE_KEY'
+          }
+          npx tauri build -- --locked
+      - name: Prepare and verify release files
+        id: prepare
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/foldmark-release
+        run: node scripts/release.mjs prepare
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: foldmark-${{ steps.version.outputs.version }}-windows-x64
+          path: ${{ runner.temp }}/foldmark-release/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish verified release and update channels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_DIR: ${{ runner.temp }}/foldmark-release
+        run: node scripts/release-github.mjs

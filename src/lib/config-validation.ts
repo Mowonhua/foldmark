@@ -37,6 +37,7 @@ export function validateAppConfig(value: unknown): AppConfig | null {
   if (value.preferences !== undefined) {
     if (!record(value.preferences)) return fail();
     const p = value.preferences;
+    for (const flag of [p.autoCheckUpdates, p.autoDownloadUpdates]) if (flag !== undefined && typeof flag !== 'boolean') return fail();
     if (p.theme !== undefined && (typeof p.theme !== 'string' || !['light', 'dark', 'system'].includes(p.theme))) return fail();
     if (p.themeId !== undefined && (typeof p.themeId !== 'string' || !themeIds.has(p.themeId))) return fail();
     if (p.fontFamily !== undefined && typeof p.fontFamily !== 'string') return fail();

@@ -2,6 +2,13 @@
 import { describe, expect, it } from 'vitest';
 import { validateAppConfig } from './config-validation';
 describe('配置边界', () => {
+  it('更新偏好允许旧配置缺省并拒绝字符串布尔值', () => {
+    const config = { projects: [], preferences: { autoCheckUpdates: false, autoDownloadUpdates: true } };
+    expect(validateAppConfig(config)).toBe(config);
+    for (const key of ['autoCheckUpdates', 'autoDownloadUpdates']) {
+      expect(() => validateAppConfig({ projects: [], preferences: { [key]: 'false' } })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('允许首次启动和保留未知附加字段的有效关联', () => {
     expect(validateAppConfig(null)).toBe(null);
     const valid = { projects: [{ id: 'one', name: '项目', path: 'D:/清单.md' }], activeProjectId: 'one', future: true };

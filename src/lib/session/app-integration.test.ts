@@ -20,7 +20,12 @@ const desktopBoundary = vi.hoisted(() => ({
   requestClose: vi.fn(async () => {}),
   destroy: vi.fn(async () => {}),
   save: vi.fn<() => Promise<string | null>>(async () => null),
+  updateCheck: vi.fn<() => Promise<unknown>>(async () => null),
+  updateInstall: vi.fn(async () => {}),
+  updateDownload: vi.fn(async (_progress: unknown) => {}),
+  updateClose: vi.fn(async () => {}),
 }));
+vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path }));
 // 仅替换桌面 IO 与窗口事件边界，退出决策仍运行生产 App 代码。
@@ -50,6 +55,110 @@ vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({
 }) }));
 
 const files = new BrowserFilePort();
+describe('应用更新', () => {
+  it('后台下载完成后保存最新正文再安装，保存失败可以重试', async () => {
+    desktopBoundary.enabled = true;
+    desktopBoundary.updateCheck.mockResolvedValue({
+      version: '0.1.0-alpha.2', currentVersion: '0.1.0-alpha.1', body: '修复与改进',
+      download: desktopBoundary.updateDownload, install: desktopBoundary.updateInstall, close: desktopBoundary.updateClose,
+    });
+    await start(['- [ ] 初始任务\n']);
+    await vi.waitFor(() => expect(desktopBoundary.updateDownload).toHaveBeenCalledTimes(1));
+    await insertTask(); await paste('安装前必须保存的正文');
+    desktopBoundary.updateInstall.mockImplementation(async () => {
+      expect((await files.read(firstProject.path)).text).toContain('安装前必须保存的正文');
+    });
+    button('更多操作').click(); await tick(); button('检查更新').click(); await tick();
+    await vi.waitFor(() => expect(button('安装并重启')).toBeDefined());
+    const saveConfig = vi.spyOn(BrowserFilePort.prototype, 'saveConfig').mockRejectedValue(new Error('配置只读'));
+    button('安装并重启').click();
+    await vi.waitFor(() => expect(button('重试')).toBeDefined());
+    await vi.waitFor(() => expect(document.querySelector('.app-shell')?.hasAttribute('inert')).toBe(false));
+    expect(desktopBoundary.updateInstall).not.toHaveBeenCalled();
+    saveConfig.mockRestore();
+    button('重试').click();
+    await vi.waitFor(() => expect(desktopBoundary.updateInstall).toHaveBeenCalledTimes(1));
+    expect(await files.loadConfig()).not.toBeNull();
+    expect(desktopBoundary.updateDownload).toHaveBeenCalledTimes(1);
+  });
+  it('安装等待配置保存时，完成任务的撤销提示不能再修改正文', async () => {
+    desktopBoundary.enabled = true;
+    desktopBoundary.updateCheck.mockResolvedValue({
+      version: '0.1.0-alpha.2', currentVersion: '0.1.0-alpha.1',
+      download: desktopBoundary.updateDownload, install: desktopBoundary.updateInstall, close: desktopBoundary.updateClose,
+    });
+    await start(['# 安装保护\n\n- [ ] 安装前完成的任务\n']);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id]).toBeDefined());
+    button('完成任务').click(); await tick();
+    expect(button('撤销')).toBeDefined();
+    button('更多操作').click(); await tick(); button('检查更新').click(); await tick();
+    await vi.waitFor(() => expect(button('安装并重启')).toBeDefined());
+    const visibleText = documentInput().textContent;
+    let releaseConfig!: () => void;
+    const configPending = new Promise<void>(resolve => { releaseConfig = resolve; });
+    const writeConfig = BrowserFilePort.prototype.saveConfig;
+    const saveConfig = vi.spyOn(BrowserFilePort.prototype, 'saveConfig').mockImplementation(async config => {
+      await configPending; await writeConfig.call(files, config);
+    });
+    try {
+      button('安装并重启').click();
+      await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledOnce());
+      const completedText = (await files.read(firstProject.path)).text;
+      expect(completedText).toContain('- [x] 安装前完成的任务');
+      expect(desktopBoundary.updateInstall).not.toHaveBeenCalled();
+      // 配置等待点位于正文 flush 之后；此时任何有效撤销都会产生未再次保存的新事务。
+      const undo = [...document.querySelectorAll<HTMLButtonElement>('.toast button')].find(candidate => candidate.textContent?.trim() === '撤销');
+      undo?.click(); await tick();
+      expect(documentInput().textContent).toBe(visibleText);
+      expect((await files.read(firstProject.path)).text).toBe(completedText);
+    } finally { releaseConfig(); }
+    await vi.waitFor(() => expect(desktopBoundary.updateInstall).toHaveBeenCalledOnce());
+  });
+  it('普通关闭已在等待保存时启动安装，关闭请求不能提前销毁窗口', async () => {
+    desktopBoundary.enabled = true;
+    desktopBoundary.updateCheck.mockResolvedValue({
+      version: '0.1.0-alpha.2', currentVersion: '0.1.0-alpha.1',
+      download: desktopBoundary.updateDownload, install: desktopBoundary.updateInstall, close: desktopBoundary.updateClose,
+    });
+    await start(['- [ ] 等待安全安装\n']);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id]).toBeDefined());
+    button('更多操作').click(); await tick(); button('检查更新').click(); await tick();
+    await vi.waitFor(() => expect(button('安装并重启')).toBeDefined());
+    let releaseCloseConfig!: () => void;
+    let releaseInstallConfig!: () => void;
+    const closeConfigPending = new Promise<void>(resolve => { releaseCloseConfig = resolve; });
+    const installConfigPending = new Promise<void>(resolve => { releaseInstallConfig = resolve; });
+    const writeConfig = BrowserFilePort.prototype.saveConfig;
+    const saveConfig = vi.spyOn(BrowserFilePort.prototype, 'saveConfig')
+      .mockImplementationOnce(async config => { await closeConfigPending; await writeConfig.call(files, config); })
+      .mockImplementationOnce(async config => { await installConfigPending; await writeConfig.call(files, config); });
+    const close = desktopBoundary.close!({ preventDefault: vi.fn() });
+    try {
+      await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledOnce());
+      button('安装并重启').click(); await tick();
+      await vi.waitFor(() => expect(button('关闭对话框').disabled).toBe(true));
+      // 先完成普通关闭的配置，再让安装自己的配置保持未完成，避免以最终状态掩盖提前退出。
+      releaseCloseConfig(); await close;
+      await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledTimes(2));
+      expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+      expect(desktopBoundary.updateInstall).not.toHaveBeenCalled();
+    } finally { releaseCloseConfig(); releaseInstallConfig(); await close; }
+    await vi.waitFor(() => expect(desktopBoundary.updateInstall).toHaveBeenCalledOnce());
+    expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+  });
+  it('更新偏好可以持久化，关闭启动检查后重启不会请求更新', async () => {
+    desktopBoundary.enabled = true;
+    await start(['- [ ] 任务\n']);
+    await vi.waitFor(() => expect(desktopBoundary.updateCheck).toHaveBeenCalledTimes(1));
+    button('更多操作').click(); await tick(); button('检查更新').click(); await tick();
+    const check = document.querySelector<HTMLInputElement>('[aria-label="启动时检查更新"]')!;
+    check.click(); await tick();
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.autoCheckUpdates).toBe(false));
+    await remount();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(desktopBoundary.updateCheck).toHaveBeenCalledTimes(1);
+  });
+});
 const firstProject: Project = { id: 'project-a', name: '甲项目', path: '浏览器/甲.md' };
 const secondProject: Project = { id: 'project-b', name: '乙项目', path: '浏览器/乙.md' };
 let mounted: ReturnType<typeof mount> | undefined;
@@ -70,6 +179,10 @@ beforeEach(() => {
     await desktopBoundary.close({ preventDefault: vi.fn() });
   });
   desktopBoundary.save.mockReset().mockResolvedValue(null);
+  desktopBoundary.updateCheck.mockReset().mockResolvedValue(null);
+  desktopBoundary.updateInstall.mockReset().mockResolvedValue(undefined);
+  desktopBoundary.updateDownload.mockReset().mockResolvedValue(undefined);
+  desktopBoundary.updateClose.mockReset().mockResolvedValue(undefined);
   // Node 的实验性同名全局不代表浏览器存储，固定使用 jsdom 的真实 Storage。
   const browserStorage = (globalThis as unknown as { jsdom: { window: { localStorage: Storage } } }).jsdom.window.localStorage;
   vi.stubGlobal('localStorage', browserStorage);

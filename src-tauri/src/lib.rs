@@ -251,9 +251,26 @@ fn unwatch_file(watch_id: u64, state: State<'_, FileState>) -> Result<(), FileEr
 }
 
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    // 插件注册时读取配置；必须在运行前选择通道，正式版不能收到预发布更新。
+    let channel = if context.package_info().version.pre.is_empty() {
+        "stable"
+    } else {
+        "preview"
+    };
+    context
+        .config_mut()
+        .plugins
+        .0
+        .get_mut("updater")
+        .expect("更新配置缺失")["endpoints"] = serde_json::json!([format!(
+        "https://raw.githubusercontent.com/Mowonhua/foldmark/updates/{channel}.json"
+    )]);
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(FileState::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
@@ -270,7 +287,7 @@ pub fn run() {
             watch_file,
             unwatch_file
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("无法启动 Foldmark 桌面窗口");
 }
 

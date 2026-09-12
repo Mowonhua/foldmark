@@ -1,6 +1,6 @@
 {
   "name": "foldmark",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,6 +25,8 @@
     "@lezer/markdown": "^1.4.3",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "katex": "^0.16.22",
     "svelte": "^5.39.0"
   },
