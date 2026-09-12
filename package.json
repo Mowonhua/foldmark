@@ -1,6 +1,7 @@
 {
   "name": "foldmark",
   "version": "0.1.0-alpha.1",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

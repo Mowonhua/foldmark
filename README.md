@@ -1,105 +1,83 @@
-# Foldmark
+<p align="center">
+  <img src="./src-tauri/icons/icon.png" width="64" height="64" alt="Foldmark 标志">
+</p>
 
-面向 Windows 的多项目 Markdown 待办编辑器。连续输入正文、公式和嵌套任务，完成后在待办视图收起，随时从归档恢复。
+<h1 align="center">Foldmark</h1>
 
-正文保存在你关联的 Markdown 原文件中。完成任务后，其正文和完整子树移到同一文件末尾唯一的 `# 归档` 标题下；嵌套任务移出时提升为顶层任务。移除项目只移除关联。
+<p align="center">把待办和笔记，写在同一份 Markdown 里。</p>
+<p align="center">Windows x64 · 本地文件 · MIT</p>
 
-## 使用
+<p align="center">
+  <a href="https://github.com/Mowonhua/foldmark/releases">下载预发布版</a> ·
+  <a href="./docs/使用.md">使用指南</a> ·
+  <a href="./docs/主题.md">自制主题</a> ·
+  <a href="https://github.com/Mowonhua/foldmark/issues">反馈问题</a>
+</p>
 
-从 [GitHub Releases](https://github.com/Mowonhua/foldmark/releases) 下载 Windows x64 安装包。首个预发布版本为 `v0.1.0-alpha.1`。
+Foldmark 是面向 Windows 的多项目 Markdown 待办编辑器。在任务下面接着写正文、代码和公式，折叠暂时不需要的细节，再回到手头的一件事。
 
-打开应用后，选择“新增项目”，关联已有 `.md` 文件或在指定位置新建清单。
+<p align="center">
+  <img src="./assets/readme/workspace.png" width="100%" alt="Foldmark 编辑界面：左侧切换项目，右侧在 Markdown 原文中编辑正文、嵌套任务与代码块。截图使用演示数据。">
+</p>
 
-- **待办**：就地编辑 Markdown。列表圆点、编号和任务复选框可拖动同级排序；左侧三角折叠正文和后代。
-- **归档**：查阅已完成任务，点击复选框恢复到待办区域末尾，不恢复原父任务或原章节位置。父任务存在未完成后代时，使用“完成整组”明确完成所有子项。
-- **查看源码**：只编辑当前待办或归档分区的 Markdown，进入时定位到当前阅读位置；再次点击“返回预览”回到来源视图和进入前的位置。切换项目或重启后也保留源码来源。
-- **全部待办与搜索**：跨项目查找任务，点击结果回到原文。“全部待办”不显示系统 `归档` 章节名。搜索可包含归档，并会展开目标所在的折叠祖先。
-- **阅读与外观**：每套主题包含浅色和深色，支持跟随系统；内置纸面、纯粹双色与新拟物主题，可导入自制 JSON 主题、下载模板。另可配置字体、字号和正文宽度。格式见 [自制主题](docs/主题.md)。
-- **应用更新**：从“更多操作 → 检查更新”打开更新面板。默认启动检查并自动下载，两个开关可分别关闭。下载完成后点击“安装并重启”；全部文档及配置保存成功后才会安装，保存失败或冲突时保留窗口和下载包供重试。预发布接收预览通道，正式版只接收稳定通道。
+## 一份文件，一个项目
 
-| 操作 | 快捷键 |
-| --- | --- |
-| 创建下一个任务 / 空任务退出列表 | `Enter` |
-| 在任务首行内插入正文换行 | `Shift + Enter` |
-| 整项缩进 / 反缩进 | `Tab` / `Shift + Tab` |
-| 当前项目撤销 / 重做 | `Ctrl + Z` / `Ctrl + Shift + Z` |
-| 手动保存 | `Ctrl + S` |
-| 快速查找项目 | `Ctrl + P` |
-| 跨项目搜索 | `Ctrl + Shift + F` |
-| 聚焦列表标记后同级排序 | `Alt + ↑` / `Alt + ↓` |
-| 打开预览中的链接 | `Ctrl + 单击` |
+关联已有 `.md` 文件，就能开始编辑。正文保留在原来的位置，其他编辑器也能继续打开；移除项目只移除关联。
 
-代码块、公式块和正文中的 Enter 保留正常换行语义。公式采用 KaTeX 数学语法；错误或未闭合公式保留原文并显示局部提示。
+- **任务和上下文放在一起**：支持嵌套任务、代码高亮、KaTeX 公式和图片，拖动列表标记调整同级顺序。
+- **完成后归档，随时恢复**：任务及其完整子树移到同一文件末尾的 `# 归档` 区域；恢复后回到待办区域末尾。
+- **从多个项目找到下一步**：在“全部待办”中浏览项目任务，跨项目搜索后直接定位到原文。
+- **阅读方式由你选择**：预览与分区源码视图可以切换；内置纸面、双色和新拟物主题，支持浅色、深色及自制主题。
 
-打开旧文件、结束源码编辑并返回预览时，应用会主动整理待办与归档布局并自动保存。尚有受保护的恢复草稿时暂缓自动整理，避免覆盖草稿。新增待办放在归档区域之前；一次撤销同时恢复完成状态和源文布局。
+输入后自动保存。遇到外部修改、文件冲突或保存失败时，应用保留待处理内容并提供恢复入口。[查看保存与恢复规则 →](./docs/使用.md#保存外部编辑与恢复)
 
-未闭合的代码围栏或 HTML 若会吞没归档标题，应用暂缓整理并保留原文，补全语法后再整理。
+<details>
+<summary>任务文件仍然是普通 Markdown</summary>
 
-## 保存、外部编辑与恢复
+````markdown
+# 工作手记
 
-输入后自动保存，也可以手动保存。每个文档的保存请求按顺序处理，写入前检查磁盘内容指纹，使用同目录临时文件原子替换；保留 UTF-8 BOM、CRLF 及未修改行的混合换行。
+- [ ] 整理产品笔记
 
-其他应用修改文件时，无本地修改的文档自动加载新内容。有未保存修改时展示双方文本，可手动合并、另存副本或明确选择版本。保存失败会保留内存正文并显示错误，可重试或重新定位文件。
+  把 **关键决定** 和待确认事项放在一起。
 
-恢复草稿与项目配置位于系统应用数据目录下的 `app.foldmark.desktop`。应用启动发现不同于磁盘的草稿时，会显示恢复入口；“暂不恢复”不会删除草稿。损坏的恢复数据先保留独立备份，界面说明备份位置，Markdown 原文件仍可查看。关闭桌面窗口前会等待正文与配置保存；保存失败时保留窗口供处理。
+  - [ ] 梳理反馈
+  - [ ] 写下下一步
 
-## 开发与构建
+# 归档
 
-需要 Node.js、npm、Rust，以及 Windows 的 MSVC C++ 构建工具。桌面运行需要 WebView2。
+- [x] 建立项目清单
+````
+
+</details>
+
+## 开始使用
+
+1. 从 [GitHub Releases](https://github.com/Mowonhua/foldmark/releases) 下载 Windows x64 的 `-setup.exe` 安装包。
+2. 打开 Foldmark，点击“新增项目”，关联已有 Markdown 或新建一份清单。
+3. 输入 `- [ ]` 写下任务；`Enter` 继续下一项，空任务上再按一次 `Enter` 退出列表。
+
+当前发布处于 **alpha 预发布阶段**。桌面运行需要 WebView2；缺少运行时的设备会在首次安装时联网下载。
+
+“更多操作 → 检查更新”提供更新入口，默认启动检查并自动下载。点击“安装并重启”后，全部文档和配置保存成功才会安装。[自动更新与发布流程 →](./docs/发布.md)
+
+## 本地开发
+
+项目使用 **Tauri 2 · Svelte 5 · TypeScript · CodeMirror 6**。Windows 开发需要 Node.js、npm、Rust 和 MSVC C++ 构建工具。
 
 ```powershell
 npm ci
 npm run tauri -- dev
 ```
 
-只预览前端：
+只预览前端可运行 `npm run dev`。浏览器预览导入文件副本；直接关联原文件和系统文件监听需要桌面版。
 
-```powershell
-npm run dev
-```
+<p>
+  <a href="https://github.com/Mowonhua/foldmark/actions/workflows/ci.yml"><img src="https://github.com/Mowonhua/foldmark/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows CI 状态"></a>
+</p>
 
-浏览器预览使用独立的浏览器存储，导入的是文件副本，可通过菜单另存 Markdown；实际原文件关联和系统文件监听需要桌面应用。
+[构建、测试与性能采样](./docs/开发.md) · [产品与技术方案](./docs/方案.md) · [首版验收记录](./docs/验收检查.md)
 
-构建 Windows NSIS 安装包：
+## 许可证
 
-```powershell
-npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
-```
-
-以上命令用于本地构建，不生成更新签名。输出为 `src-tauri/target/release/bundle/nsis/Foldmark_0.1.0-alpha.1_x64-setup.exe`。正式发布由 GitHub Actions 生成签名安装包、更新清单及 SHA-256 校验文件，步骤见 [发布与自动更新](docs/发布.md)。
-
-安装包采用 WebView2 下载引导方式；机器缺少运行时时，首次安装需要联网下载。需要离线安装的设备应预先安装 Microsoft WebView2 Evergreen Runtime。应用正文、搜索、公式和保存均在本地工作。
-
-## 验证
-
-```powershell
-npm run check
-npm test
-npm run test:app
-cargo test --manifest-path src-tauri/Cargo.toml --lib
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-npm run build
-```
-
-`test:app` 使用真实 Svelte App、CodeMirror 和文件适配器，覆盖输入落盘、重启、项目切换、撤销隔离、搜索和失败边界。Rust 测试在真实临时目录验证原子保存、文件冲突、编码换行和监听。
-
-性能采样与功能验收分别记录。内核与同步编辑事务耗时不能替代屏幕反馈、原生冷启动或整个 WebView 进程组的内存数据。
-
-- [产品与技术方案](docs/方案.md)
-- [内核基准原始记录](docs/performance-core.json)
-- [原生验证与进程内存记录](docs/native-validation.json)
-- [首版验收检查](docs/验收检查.md)
-- [真实浏览器输入与勾选采样](docs/performance-browser.json)
-- [浏览器交互与布局检查](docs/browser-validation.json)
-- [Windows 安装与卸载验证](docs/installer-validation.json)
-
-内核基准：`npm run benchmark:core`。编辑器同步事务基准：`npx vitest run --config src/lib/editor/vitest.perf.config.ts`。
-
-浏览器交互基准使用独立生产构建，避免开发热更新中断采样：
-
-```powershell
-npm run benchmark:browser:build
-npm run benchmark:browser
-```
-
-打开 [浏览器验收页](http://127.0.0.1:1421/tests/browser-performance.html)，载入固定场景后逐次输入或完成 20 项，再导出 JSON 报告。输入至下一 rAF 的计时用于定位性能问题，不等同于屏幕像素最终呈现时间。
+[MIT License](./LICENSE) · Copyright © 2026 Mowonhua

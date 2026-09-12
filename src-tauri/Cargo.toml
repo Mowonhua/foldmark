@@ -2,6 +2,7 @@
 name = "foldmark"
 version = "0.1.0-alpha.1"
 description = "Markdown task editor"
+license = "MIT"
 edition = "2021"
 
 [lib]

@@ -673,7 +673,7 @@
         <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
         <p class="small muted">外观自动保存。动画遵循系统的减少动态效果设置。</p>
       {:else if dialog === 'updates'}
-        <p class="eyebrow">Foldmark</p><h2 id="dialog-title">应用更新</h2>
+        <h2 id="dialog-title">应用更新</h2>
         <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}
           autoCheck={config.preferences.autoCheckUpdates ?? true} autoDownload={config.preferences.autoDownloadUpdates ?? true}
           onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
