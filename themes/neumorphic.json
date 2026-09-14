@@ -69,7 +69,14 @@
       "tabs-background": "#e8edf2",
       "tab-active-background": "#e8edf2",
       "divider-color": "#d5dde6",
-      "floating-border": "#e2e8ee"
+      "floating-border": "#e2e8ee",
+      "scrollbar-track": "#e0e7ef",
+      "scrollbar-thumb": "#98a8bc",
+      "scrollbar-thumb-hover": "#73869f",
+      "scrollbar-thumb-active": "#5377a6",
+      "scrollbar-radius": 6,
+      "scrollbar-thumb-shadow": "inset 1px 1px 1px #ffffff99, inset -1px -1px 1px #71839966",
+      "scrollbar-track-shadow": "inset 1px 1px 2px #b5beca80, inset -1px -1px 2px #ffffff99"
     },
     "dark": {
       "control-shadow": "4px 4px 9px #1b1f25, -4px -4px 9px #363b45",
@@ -106,7 +113,14 @@
       "tabs-background": "#292f39",
       "tab-active-background": "#292f39",
       "divider-color": "#394351",
-      "floating-border": "#3c4551"
+      "floating-border": "#3c4551",
+      "scrollbar-track": "#242a33",
+      "scrollbar-thumb": "#62748b",
+      "scrollbar-thumb-hover": "#8499b3",
+      "scrollbar-thumb-active": "#a6c8fa",
+      "scrollbar-radius": 6,
+      "scrollbar-thumb-shadow": "inset 1px 1px 1px #9eafc34d, inset -1px -1px 1px #151a2280",
+      "scrollbar-track-shadow": "inset 1px 1px 2px #151a2280, inset -1px -1px 2px #424b5966"
     }
   }
 }

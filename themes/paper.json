@@ -32,5 +32,25 @@
     "selection": "#46533e",
     "selection-ink": "#e0e3d9"
   },
-  "corners": "rounded"
+  "corners": "rounded",
+  "appearance": {
+    "light": {
+      "scrollbar-track": "transparent",
+      "scrollbar-thumb": "#92998b",
+      "scrollbar-thumb-hover": "#666e62",
+      "scrollbar-thumb-active": "#4f6b54",
+      "scrollbar-radius": 6,
+      "scrollbar-thumb-shadow": "none",
+      "scrollbar-track-shadow": "none"
+    },
+    "dark": {
+      "scrollbar-track": "transparent",
+      "scrollbar-thumb": "#77816f",
+      "scrollbar-thumb-hover": "#a1aa9b",
+      "scrollbar-thumb-active": "#b0c5a0",
+      "scrollbar-radius": 6,
+      "scrollbar-thumb-shadow": "none",
+      "scrollbar-track-shadow": "none"
+    }
+  }
 }

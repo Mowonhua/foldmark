@@ -95,7 +95,14 @@
       "floating-border-bottom": "#FFFFFF2E",
       "nav-active-background": "#FFFFFF33",
       "sidebar-background": "#FFFFFF14",
-      "backdrop-blur": 16
+      "backdrop-blur": 16,
+      "scrollbar-track": "transparent",
+      "scrollbar-thumb": "#64758299",
+      "scrollbar-thumb-hover": "#506270cc",
+      "scrollbar-thumb-active": "#344e64",
+      "scrollbar-radius": 5,
+      "scrollbar-thumb-shadow": "none",
+      "scrollbar-track-shadow": "none"
     },
     "dark": {
       "control-pressed-shadow": "inset 0px 1px 3px #0A111840",
@@ -158,7 +165,14 @@
       "floating-border-bottom": "#FFFFFF2E",
       "nav-active-background": "#10182033",
       "sidebar-background": "#FFFFFF14",
-      "backdrop-blur": 16
+      "backdrop-blur": 16,
+      "scrollbar-track": "transparent",
+      "scrollbar-thumb": "#a0adb999",
+      "scrollbar-thumb-hover": "#bdcbd6cc",
+      "scrollbar-thumb-active": "#d7e6f3",
+      "scrollbar-radius": 5,
+      "scrollbar-thumb-shadow": "none",
+      "scrollbar-track-shadow": "none"
     }
   }
 }

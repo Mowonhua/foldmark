@@ -5,6 +5,14 @@
 
 // 参数描述同时约束导入字段和根节点变量，防止两处白名单漂移。
 export const appearanceProperties = {
+  // 所有原生滚动区域共用状态参数；缺省值由公共 CSS 回退，直角模式统一覆盖圆角。
+  'scrollbar-track': 'color',
+  'scrollbar-thumb': 'color',
+  'scrollbar-thumb-hover': 'color',
+  'scrollbar-thumb-active': 'color',
+  'scrollbar-radius': 'length',
+  'scrollbar-thumb-shadow': 'shadow',
+  'scrollbar-track-shadow': 'shadow',
   // 窗口材质由桌面适配器应用，背景色仅在原生材质成功后参与透明合成。
   'window-material': 'material',
   'window-background': 'color',

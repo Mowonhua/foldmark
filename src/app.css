@@ -190,7 +190,29 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 :root{--editor-font:var(--document-font);--editor-font-size:var(--document-size);--editor-width:var(--document-width);--text:var(--ink);--surface-alt:var(--code);--border:var(--line)}
 
 /* 派生效果随主题颜色变化；双色主题禁用混色和渐变过程，保证界面只使用声明的两种实色。 */
-:root{--shadow-color:color-mix(in srgb,var(--ink) 10%,transparent);--backdrop:color-mix(in srgb,var(--ink) 25%,transparent);--checkbox-border:var(--muted);scrollbar-color:var(--muted) var(--canvas)}
+:root{--shadow-color:color-mix(in srgb,var(--ink) 10%,transparent);--backdrop:color-mix(in srgb,var(--ink) 25%,transparent);--checkbox-border:var(--muted)}
+/* 全部原生滚动容器共用主题参数，包括编辑器、侧栏、搜索、弹窗和横向内容。
+   标准属性用于不支持 WebKit 伪元素的浏览器；Chromium 中必须恢复 auto，
+   否则 scrollbar-color/width 会优先于伪元素，导致尺寸、圆角和交互状态失效。 */
+*{scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb,var(--muted)) var(--scrollbar-track,transparent)}
+@supports selector(::-webkit-scrollbar){
+  *{scrollbar-width:auto;scrollbar-color:auto}
+  ::-webkit-scrollbar{width:12px;height:12px}
+  ::-webkit-scrollbar-track{background:var(--scrollbar-track,transparent);border-radius:var(--scrollbar-radius,6px);box-shadow:var(--scrollbar-track-shadow,none)}
+  /* 透明边缘保留 12px 拖动命中宽度，中间 6px 绘为滑块。 */
+  ::-webkit-scrollbar-thumb{min-width:32px;min-height:32px;border:3px solid transparent;border-radius:var(--scrollbar-radius,6px);background:var(--scrollbar-thumb,var(--muted));background-clip:padding-box;box-shadow:var(--scrollbar-thumb-shadow,none)}
+  ::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar-thumb-hover,var(--ink))}
+  ::-webkit-scrollbar-thumb:active{background-color:var(--scrollbar-thumb-active,var(--accent))}
+  ::-webkit-scrollbar-button{display:none;width:0;height:0}
+  ::-webkit-scrollbar-corner{background:var(--scrollbar-track,transparent)}
+  :root[data-corners=square]::-webkit-scrollbar-thumb,:root[data-corners=square] *::-webkit-scrollbar-thumb,
+  :root[data-corners=square]::-webkit-scrollbar-track,:root[data-corners=square] *::-webkit-scrollbar-track{border-radius:0}
+}
+/* 高对比度模式交由系统绘制，以保留用户指定的可见性和操作反馈。 */
+@media (forced-colors:active){
+  *{scrollbar-width:auto;scrollbar-color:auto}
+  ::-webkit-scrollbar,::-webkit-scrollbar-track,::-webkit-scrollbar-thumb,::-webkit-scrollbar-button,::-webkit-scrollbar-corner{all:revert}
+}
 /* 反光仅绘制在表面背景层，位于文字下方；缺省颜色全部透明，不生成遮挡输入的覆盖元素。 */
 :root{
   --surface-image:radial-gradient(ellipse 80% 65% at 50% 0%,var(--surface-reflection,transparent),transparent 70%),linear-gradient(135deg,var(--surface-sheen-start,transparent) 0%,var(--surface-sheen-middle,transparent) 40%,var(--surface-sheen-end,transparent) 100%);
@@ -201,7 +223,6 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 /* 直接模糊页面自身，避免透明 WebView 的 backdrop-filter 无法采样正文合成层。
    弹窗必须保持为 app-shell 的兄弟节点，不能放入此过滤层；关闭弹窗即移除类并恢复清晰。 */
 .app-shell.modal-open{filter:blur(var(--backdrop-blur,0px))}
-.modal{scrollbar-width:thin;scrollbar-color:var(--muted) transparent}
 .sidebar{box-shadow:var(--sidebar-shadow,none)}
 :is(.modal,.dropdown,.search-panel){border-color:var(--floating-border-top,var(--floating-border,var(--line))) var(--floating-border-right,var(--floating-border,var(--line))) var(--floating-border-bottom,var(--floating-border,var(--line))) var(--floating-border-left,var(--floating-border,var(--line)))}
 /* 不支持背景模糊时保留原有实色表面，避免透明浮层降低文字可读性。 */

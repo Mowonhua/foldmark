@@ -7,6 +7,36 @@ import { appearanceProperties } from './theme-appearance';
 const palette = (color: string) => Object.fromEntries(paletteKeys.map(key => [key, color]));
 const custom = () => ({ version: 1, id: 'custom-test', name: '自制主题', light: palette('#F8FAFC'), dark: palette('#0A0A0A') });
 describe('主题文件', () => {
+  it('滚动条参数可导入导出和恢复配置，明暗、旧主题及双色切换均清理缺省状态', () => {
+    const appearance = {
+      light: { 'scrollbar-track': 'transparent', 'scrollbar-thumb': '#52657880', 'scrollbar-thumb-hover': '#526578', 'scrollbar-thumb-active': '#365d91', 'scrollbar-radius': 6, 'scrollbar-thumb-shadow': 'inset 1px 1px 1px #ffffff80', 'scrollbar-track-shadow': 'none' },
+      dark: { 'scrollbar-thumb': '#a5b2c4' },
+    };
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance }));
+    expect(theme.appearance).toEqual(appearance);
+    expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    const config = validateAppConfig(JSON.parse(JSON.stringify({ projects: [], customThemes: [theme], preferences: { themeId: theme.id } })));
+    expect(config?.customThemes?.[0].appearance).toEqual(appearance);
+    const root = document.createElement('div');
+    applyTheme(root, theme, 'light', false);
+    expect(root.style.getPropertyValue('--scrollbar-radius')).toBe('6px');
+    expect(root.style.getPropertyValue('--scrollbar-thumb-shadow')).toBe(appearance.light['scrollbar-thumb-shadow']);
+    applyTheme(root, theme, 'system', true);
+    expect(root.style.getPropertyValue('--scrollbar-thumb')).toBe('#a5b2c4');
+    expect(root.style.getPropertyValue('--scrollbar-thumb-hover')).toBe('');
+    expect(root.style.getPropertyValue('--scrollbar-radius')).toBe('');
+    expect(root.style.getPropertyValue('--scrollbar-thumb-shadow')).toBe('');
+    for (const fallback of [validateTheme(custom()), validateTheme({ ...theme, monochrome: true })]) {
+      applyTheme(root, theme, 'light', false);
+      applyTheme(root, fallback, 'light', false);
+      for (const key of Object.keys(appearance.light)) expect(root.style.getPropertyValue(`--${key}`)).toBe('');
+    }
+  });
+  it('滚动条参数拒绝注入表达式与越界尺寸', () => {
+    for (const light of [{ 'scrollbar-thumb': 'var(--ink)' }, { 'scrollbar-track': 'url(x)' }, { 'scrollbar-thumb-hover': '#12345' }, { 'scrollbar-thumb-active': null }, { 'scrollbar-radius': -1 }, { 'scrollbar-radius': 33 }, { 'scrollbar-thumb-shadow': '0px 0px -1px #ffffff' }, { 'scrollbar-track-shadow': 'none; color:red' }]) {
+      expect(() => validateTheme({ ...custom(), appearance: { light, dark: {} } })).toThrow('THEME_INVALID');
+    }
+  });
   it('表面光学参数往返保存并清除旧值，禁止表达式和越界滤镜', () => {
     const theme = parseTheme(JSON.stringify({ ...custom(), appearance: {
       light: { 'surface-saturation': 1.6, 'surface-contrast': 1.15, 'surface-brightness': 1.1, 'control-hover-lift': 1, 'surface-sheen-start': '#ffffff38', 'floating-border-left': '#ffffff66', 'floating-radius-top-left': 32 },
@@ -50,7 +80,7 @@ describe('主题文件', () => {
     applyTheme(root, theme, 'system', true);
     expect(root.style.getPropertyValue('--floating-blur')).toBe('32px');
     expect(root.style.getPropertyValue('--sidebar-background')).toBe('');
-    applyTheme(root, builtInThemes[0], 'light', false);
+    applyTheme(root, validateTheme(custom()), 'light', false);
     for (const key of Object.keys(appearanceProperties)) expect(root.style.getPropertyValue(`--${key}`)).toBe('');
   });
   it('透明参数仍拒绝非法颜色与模糊表达式，基础配色保持不透明', () => {
