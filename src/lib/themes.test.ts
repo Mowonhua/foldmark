@@ -7,10 +7,62 @@ import { appearanceProperties } from './theme-appearance';
 const palette = (color: string) => Object.fromEntries(paletteKeys.map(key => [key, color]));
 const custom = () => ({ version: 1, id: 'custom-test', name: '自制主题', light: palette('#F8FAFC'), dark: palette('#0A0A0A') });
 describe('主题文件', () => {
-  it('新拟物支持内置选择、配置恢复和复制导入时保留表面效果', () => {
-    const theme = builtInThemes.find(theme => theme.id === 'neumorphic')!;
-    expect(theme?.name).toBe('新拟物');
-    expect(theme.appearance?.light['control-shadow']).toContain('#');
+  it('表面光学参数往返保存并清除旧值，禁止表达式和越界滤镜', () => {
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance: {
+      light: { 'surface-saturation': 1.6, 'surface-contrast': 1.15, 'surface-brightness': 1.1, 'control-hover-lift': 1, 'surface-sheen-start': '#ffffff38', 'floating-border-left': '#ffffff66', 'floating-radius-top-left': 32 },
+      dark: { 'surface-contrast': 1 },
+    } }));
+    expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    expect(validateAppConfig({ projects: [], customThemes: [theme], preferences: { themeId: theme.id } })).not.toBeNull();
+    const root = document.createElement('div');
+    applyTheme(root, theme, 'light', false);
+    expect(root.style.getPropertyValue('--surface-saturation')).toBe('1.6');
+    expect(root.style.getPropertyValue('--control-hover-lift')).toBe('1px');
+    applyTheme(root, theme, 'system', true);
+    expect(root.style.getPropertyValue('--surface-saturation')).toBe('');
+    expect(root.style.getPropertyValue('--control-hover-lift')).toBe('');
+    applyTheme(root, theme, 'light', false);
+    applyTheme(root, builtInThemes.find(theme => theme.id === 'mono')!, 'light', false);
+    for (const key of Object.keys(appearanceProperties)) expect(root.style.getPropertyValue(`--${key}`)).toBe('');
+    for (const light of [{ 'surface-saturation': 2.01 }, { 'surface-brightness': .49 }, { 'surface-contrast': 'contrast(1)' }, { 'control-hover-lift': -1 }, { 'control-hover-lift': 3 }, { 'surface-reflection': 'url(x)' }]) {
+      expect(() => validateTheme({ ...custom(), appearance: { light, dark: {} } })).toThrow('THEME_INVALID');
+    }
+  });
+  it('窗口材质保留导入导出参数，拒绝未知材质和非颜色背景', () => {
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance: { light: { 'window-material': 'transparent', 'window-background': '#ffffff70' }, dark: { 'window-material': 'acrylic' } } }));
+    expect(theme.appearance?.light['window-material']).toBe('transparent');
+    expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    for (const light of [{ 'window-material': 'mica' }, { 'window-material': null }, { 'window-background': 'linear-gradient(red, blue)' }]) {
+      expect(() => validateTheme({ ...custom(), appearance: { light, dark: {} } })).toThrow('THEME_INVALID');
+    }
+  });
+  it('透明表面参数可往返保存、跟随系统并在切换旧主题时清除', () => {
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance: {
+      light: { 'sidebar-background': '#ffffff88', 'floating-background': '#ffffffcc', 'sidebar-blur': 12, 'floating-blur': 24, 'floating-shadow': '0px 8px 24px #10203022' },
+      dark: { 'floating-background': '#182030dd', 'floating-blur': 32 },
+    } }));
+    expect(theme.appearance?.light['sidebar-background']).toBe('#ffffff88');
+    expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    expect(validateAppConfig({ projects: [], customThemes: [theme], preferences: { themeId: theme.id } })).not.toBeNull();
+    const root = document.createElement('div');
+    applyTheme(root, theme, 'light', false);
+    expect(root.style.getPropertyValue('--sidebar-blur')).toBe('12px');
+    applyTheme(root, theme, 'system', true);
+    expect(root.style.getPropertyValue('--floating-blur')).toBe('32px');
+    expect(root.style.getPropertyValue('--sidebar-background')).toBe('');
+    applyTheme(root, builtInThemes[0], 'light', false);
+    for (const key of Object.keys(appearanceProperties)) expect(root.style.getPropertyValue(`--${key}`)).toBe('');
+  });
+  it('透明参数仍拒绝非法颜色与模糊表达式，基础配色保持不透明', () => {
+    for (const light of [{ 'sidebar-blur': -1 }, { 'floating-blur': 33 }, { 'floating-blur': 'blur(2px)' }, { 'floating-background': '#1234567' }, { 'floating-background': 'url(x)' }]) {
+      expect(() => validateTheme({ ...custom(), appearance: { light, dark: {} } })).toThrow('THEME_INVALID');
+    }
+    expect(() => validateTheme({ ...custom(), light: palette('#ffffff88') })).toThrow('THEME_INVALID');
+  });
+  it.each([['neumorphic', '新拟物'], ['liquid-glass', '液态玻璃'], ['frosted-glass', '磨砂玻璃']])('%s 支持内置选择、配置恢复和复制导入时保留表面效果', (id, name) => {
+    const theme = builtInThemes.find(theme => theme.id === id)!;
+    expect(theme?.name).toBe(name);
+    expect(theme.appearance?.light).toBeDefined();
     const copy = parseTheme(JSON.stringify({ ...theme, id: 'soft-custom' }));
     expect(copy.appearance).toEqual(theme.appearance);
     expect(validateAppConfig({ projects: [], preferences: { themeId: theme.id } })).not.toBeNull();

@@ -2,6 +2,9 @@
 /* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调，同时保持字重使用字体原生字形。 */
 :root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:style;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
 
+/* 仅原生窗口材质应用成功后清空根背景；浏览器和失败状态使用基础实色。 */
+:root[data-window-transparent=true]{background:transparent}
+:root[data-window-transparent=true] body{background:var(--window-background,var(--canvas))}
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);background:var(--canvas)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -30,7 +33,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .icon-button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:23px;color:var(--muted);flex-shrink:0}
 .sidebar-close{margin-left:auto;padding:0;line-height:1;letter-spacing:normal}
 .nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink)}
-.nav-active{background:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
+.nav-active{background-color:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
 .all-nav{margin-bottom:30px}
 .all-nav>span:first-child{font-size:18px}
 .shortcut{margin-left:auto;font-size:12px;color:var(--muted)}
@@ -71,7 +74,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .tabs{display:flex;gap:var(--tabs-gap,4px);padding:var(--tabs-padding,0px);border-radius:var(--tabs-radius,0px);background:var(--tabs-background,transparent);box-shadow:var(--tabs-shadow,none)}
 .tabs button{font-size:12px;color:var(--muted);border-radius:var(--tab-radius,4px);padding:7px 12px;white-space:nowrap}
 .tabs button span{font-size:10px;padding-left:7px;opacity:.8}
-.tabs .tab-active{background:var(--tab-active-background,var(--accent-soft));color:var(--accent);box-shadow:var(--tab-active-shadow,none);font-weight:var(--tab-active-weight,inherit)}
+.tabs .tab-active{background-color:var(--tab-active-background,var(--accent-soft));color:var(--accent);box-shadow:var(--tab-active-shadow,none);font-weight:var(--tab-active-weight,inherit)}
 .editor-region{flex:1;min-height:0;overflow:hidden;padding:17px 0 0}
 .offscreen{display:none!important}
 .statusbar{height:30px;flex-shrink:0;border-top:1px solid var(--divider-color,var(--line));display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 6px;font-size:10px;color:var(--muted);gap:10px}
@@ -91,11 +94,11 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .text-button{display:block;margin:18px auto;font-size:12px;color:var(--muted)}
 .muted{color:var(--muted)}
 .small{font-size:11px}
-.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--floating-border,var(--line));padding:6px;border-radius:var(--floating-radius,7px);width:222px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
+.dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--floating-border,var(--line));padding:6px;border-radius:var(--floating-radius-top-left,var(--floating-radius,7px)) var(--floating-radius-top-right,var(--floating-radius,7px)) var(--floating-radius-bottom-right,var(--floating-radius,7px)) var(--floating-radius-bottom-left,var(--floating-radius,7px));width:222px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
 .dropdown button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:12px;text-align:left;padding:9px 11px;border-radius:4px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
-.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius,8px);padding:14px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
+.search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,8px)) var(--floating-radius-top-right,var(--floating-radius,8px)) var(--floating-radius-bottom-right,var(--floating-radius,8px)) var(--floating-radius-bottom-left,var(--floating-radius,8px));padding:14px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
 .search-row{display:flex;align-items:center;gap:8px}
 .search-row input{flex:1;font-size:13px}
 .check-label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);padding:10px 0}
@@ -134,7 +137,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .error-banner{color:var(--danger)}
 .error-banner button,.conflict-banner button{margin-left:16px;text-decoration:underline;font-size:12px}
 .modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
-.modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius,9px);box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
+.modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,9px)) var(--floating-radius-top-right,var(--floating-radius,9px)) var(--floating-radius-bottom-right,var(--floating-radius,9px)) var(--floating-radius-bottom-left,var(--floating-radius,9px));box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
 .modal.wide{width:min(850px,100%)}
 .modal-close{position:absolute;right:14px;top:12px}
 .modal>p{font-size:13px}
@@ -188,11 +191,42 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 
 /* 派生效果随主题颜色变化；双色主题禁用混色和渐变过程，保证界面只使用声明的两种实色。 */
 :root{--shadow-color:color-mix(in srgb,var(--ink) 10%,transparent);--backdrop:color-mix(in srgb,var(--ink) 25%,transparent);--checkbox-border:var(--muted);scrollbar-color:var(--muted) var(--canvas)}
+/* 反光仅绘制在表面背景层，位于文字下方；缺省颜色全部透明，不生成遮挡输入的覆盖元素。 */
+:root{
+  --surface-image:radial-gradient(ellipse 80% 65% at 50% 0%,var(--surface-reflection,transparent),transparent 70%),linear-gradient(135deg,var(--surface-sheen-start,transparent) 0%,var(--surface-sheen-middle,transparent) 40%,var(--surface-sheen-end,transparent) 100%);
+  --control-image:linear-gradient(135deg,var(--control-sheen-start,transparent),var(--control-sheen-end,transparent));
+  --surface-filter:saturate(var(--surface-saturation,1)) contrast(var(--surface-contrast,1)) brightness(var(--surface-brightness,1));
+}
+.app-shell{box-shadow:var(--workspace-shadow,none)}
+/* 直接模糊页面自身，避免透明 WebView 的 backdrop-filter 无法采样正文合成层。
+   弹窗必须保持为 app-shell 的兄弟节点，不能放入此过滤层；关闭弹窗即移除类并恢复清晰。 */
+.app-shell.modal-open{filter:blur(var(--backdrop-blur,0px))}
+.modal{scrollbar-width:thin;scrollbar-color:var(--muted) transparent}
+.sidebar{box-shadow:var(--sidebar-shadow,none)}
+:is(.modal,.dropdown,.search-panel){border-color:var(--floating-border-top,var(--floating-border,var(--line))) var(--floating-border-right,var(--floating-border,var(--line))) var(--floating-border-bottom,var(--floating-border,var(--line))) var(--floating-border-left,var(--floating-border,var(--line)))}
+/* 不支持背景模糊时保留原有实色表面，避免透明浮层降低文字可读性。 */
+@supports (backdrop-filter:blur(1px)){
+  .sidebar{background:var(--sidebar-background,var(--sidebar));backdrop-filter:blur(var(--sidebar-blur,0px)) var(--surface-filter)}
+  :is(.modal,.dropdown,.search-panel){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
+  .modal-backdrop{background:var(--backdrop-background,var(--backdrop))}
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not(.project-filter),select,textarea{background:var(--field-background,var(--surface))}
+  :is(.sidebar,.modal,.dropdown,.search-panel){background-image:var(--surface-image)}
+}
 /* 控件只消费通用视觉变量；缺省值保留原外观，编辑器内联控件不参与表单效果。 */
 :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.primary,.file-buttons button,.modal-actions button,.modal-close){border-radius:var(--control-radius,5px);box-shadow:var(--control-shadow,none)}
 :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close){background:var(--control-background,transparent)}
-:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close):hover:not(:disabled){background:var(--hover)}
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close):hover:not(:disabled){background-color:var(--control-hover-background,var(--hover));box-shadow:var(--control-hover-shadow,var(--control-shadow,none))}
 :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.primary,.file-buttons button,.modal-actions button,.modal-close):active:not(:disabled){box-shadow:var(--control-pressed-shadow,var(--control-shadow,none))}
+/* 表面微动效只影响独立按钮，不移动正文、浮层或原生窗口控制；减少动态效果时不位移。 */
+:is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close,.nav-active,.tabs .tab-active){background-image:var(--control-image)}
+@supports (backdrop-filter:blur(1px)){
+  :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close){backdrop-filter:blur(var(--control-blur,0px))}
+}
+@media(prefers-reduced-motion:no-preference){
+  :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close){transition:background-color .2s,box-shadow .2s,transform .2s}
+  :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close):hover:not(:disabled){transform:translateY(calc(-1 * var(--control-hover-lift,0px)))}
+  :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.file-buttons button,.modal-actions button:not(.primary),.modal-close):active:not(:disabled){transform:none}
+}
 :is(.modal input:where(:not([type=checkbox],[type=radio],[type=range],[type=file])),.modal select,.modal textarea,.search-row input){border-color:var(--field-border,var(--line));border-radius:var(--field-radius,5px);box-shadow:var(--field-shadow,none)}
 /* 常态边框可由主题隐藏，键盘焦点仍须使用强调色；此规则与表单规则保持同级或更高优先级。 */
 :is(.modal input,.modal select,.modal textarea,.search-row input,.project-filter,.file-buttons button,.modal-actions button):focus-visible{border-color:var(--accent)}

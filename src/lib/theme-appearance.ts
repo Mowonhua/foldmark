@@ -5,6 +5,41 @@
 
 // 参数描述同时约束导入字段和根节点变量，防止两处白名单漂移。
 export const appearanceProperties = {
+  // 窗口材质由桌面适配器应用，背景色仅在原生材质成功后参与透明合成。
+  'window-material': 'material',
+  'window-background': 'color',
+  // 反光限定为颜色与有界数值，由公共 CSS 合成；主题不能注入渐变函数或图片资源。
+  'surface-sheen-start': 'color',
+  'surface-sheen-middle': 'color',
+  'surface-sheen-end': 'color',
+  'surface-reflection': 'color',
+  'surface-saturation': 'factor',
+  'surface-contrast': 'factor',
+  'surface-brightness': 'factor',
+  'sidebar-shadow': 'shadow',
+  'workspace-shadow': 'shadow',
+  'floating-border-top': 'color',
+  'floating-border-right': 'color',
+  'floating-border-bottom': 'color',
+  'floating-border-left': 'color',
+  'floating-radius-top-left': 'length',
+  'floating-radius-top-right': 'length',
+  'floating-radius-bottom-right': 'length',
+  'floating-radius-bottom-left': 'length',
+  'control-sheen-start': 'color',
+  'control-sheen-end': 'color',
+  'control-hover-background': 'color',
+  'control-hover-shadow': 'shadow',
+  'control-hover-lift': 'lift',
+  'control-blur': 'length',
+  'field-background': 'color',
+  'backdrop-background': 'color',
+  'backdrop-blur': 'length',
+  // 窗口内表面透明度与背景模糊独立配置，不替代操作系统的窗口合成。
+  'sidebar-background': 'color',
+  'floating-background': 'color',
+  'sidebar-blur': 'length',
+  'floating-blur': 'length',
   'control-shadow': 'shadow',
   'control-pressed-shadow': 'shadow',
   'field-shadow': 'shadow',
@@ -46,11 +81,11 @@ export const appearanceProperties = {
 
 /**
  * 结构职责：承载一种明暗模式下的可选视觉参数。
- * 字段说明：length 为像素数值，weight 为字重；color 为实色或透明，shadow 为有限层阴影，symbol 为完成字符或用于几何标记的空字符串。
+ * 字段说明：length 为像素数值，lift 为最多 2px 的悬停位移，factor 为 0.5–2 的滤镜倍率，weight 为字重；color 为六位实色、八位透明色或 transparent，material 为原生窗口材质枚举，shadow 为有限层阴影，symbol 为完成字符或用于几何标记的空字符串。
  * 约束条件：缺省键由组件 CSS 回退；不接受选择器、资源地址或任意 CSS 表达式。
  */
 export type ThemeAppearance = {
-  [Key in keyof typeof appearanceProperties]?: typeof appearanceProperties[Key] extends 'length' | 'weight' ? number : string;
+  [Key in keyof typeof appearanceProperties]?: typeof appearanceProperties[Key] extends 'length' | 'weight' | 'factor' | 'lift' ? number : string;
 };
 
 /**
@@ -67,18 +102,22 @@ export function validateAppearance(value: unknown): ThemeAppearance {
   for (const [key, kind] of Object.entries(appearanceProperties)) {
     if (!Object.hasOwn(source, key)) continue;
     const entry = source[key];
-    if (kind === 'length' || kind === 'weight') {
+    if (kind === 'length' || kind === 'weight' || kind === 'factor' || kind === 'lift') {
       if (typeof entry !== 'number' || !Number.isFinite(entry)) return fail();
-      if (kind === 'length' && (entry < 0 || entry > 32)) return fail();
+      // 整页遮罩允许更大模糊半径；控件尺寸和局部表面仍保持原有上限。
+      if (kind === 'length' && (entry < 0 || entry > (key === 'backdrop-blur' ? 64 : 32))) return fail();
+      if (kind === 'factor' && (entry < .5 || entry > 2)) return fail();
+      if (kind === 'lift' && (entry < 0 || entry > 2)) return fail();
       if (kind === 'weight' && (!Number.isInteger(entry) || entry < 100 || entry > 900)) return fail();
     } else {
       if (typeof entry !== 'string') return fail();
-      if (kind === 'color' && !/^(#[0-9a-f]{6}|transparent)$/i.test(entry)) return fail();
+      if (kind === 'material' && !['opaque', 'transparent', 'blur', 'acrylic'].includes(entry)) return fail();
+      if (kind === 'color' && !/^(#[0-9a-f]{6}(?:[0-9a-f]{2})?|transparent)$/i.test(entry)) return fail();
       if (kind === 'symbol' && entry !== '' && entry !== '✓' && entry !== '●') return fail();
       if (kind === 'shadow' && entry !== 'none') {
         // 阴影仅允许偏移为负数，模糊半径非负；禁用变量、函数和其他 CSS 语法。
         const layers = entry.split(',');
-        if (entry.length > 512 || layers.length > 4 || layers.some(layer => !/^(?:inset )?-?(?:0|[1-9]\d?)px -?(?:0|[1-9]\d?)px (?:0|[1-9]\d?)px #[0-9a-f]{6}$/i.test(layer.trim()))) return fail();
+        if (entry.length > 512 || layers.length > 4 || layers.some(layer => !/^(?:inset )?-?(?:0|[1-9]\d?)px -?(?:0|[1-9]\d?)px (?:0|[1-9]\d?)px #[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(layer.trim()))) return fail();
       }
     }
     result[key] = entry;
@@ -99,6 +138,6 @@ export function applyAppearance(root: HTMLElement, appearance?: ThemeAppearance)
     if (value === undefined) root.style.removeProperty(`--${key}`);
     // 标记只允许受支持字符或空串；空串仍生成伪元素，供尺寸与背景参数绘制几何标记。
     else if (appearanceProperties[key] === 'symbol') root.style.setProperty(`--${key}`, JSON.stringify(value));
-    else root.style.setProperty(`--${key}`, appearanceProperties[key] === 'length' ? `${value}px` : String(value));
+    else root.style.setProperty(`--${key}`, appearanceProperties[key] === 'length' || appearanceProperties[key] === 'lift' ? `${value}px` : String(value));
   }
 }

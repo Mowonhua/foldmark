@@ -3,6 +3,7 @@
 mod external_link;
 mod recovery;
 mod storage;
+mod window_material;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
 use std::{
@@ -285,7 +286,8 @@ pub fn run() {
             save_recovery,
             clear_recovery,
             watch_file,
-            unwatch_file
+            unwatch_file,
+            window_material::set_window_material
         ])
         .run(context)
         .expect("无法启动 Foldmark 桌面窗口");

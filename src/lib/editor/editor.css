@@ -64,6 +64,17 @@
 .fm-item-menu button:hover, .fm-item-menu button:focus-visible { background: var(--surface-alt); }
 .fm-group-prompt { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; white-space: nowrap; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 5px 20px var(--shadow-color); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 .fm-group-prompt button { color: var(--accent); background: transparent; border: 0; cursor: pointer; font: inherit; }
+/* 编辑器浮层与应用浮层共用表面契约；不支持模糊时保留实色以保障可读性。 */
+@supports (backdrop-filter: blur(1px)) {
+  .fm-item-menu, .fm-group-prompt {
+    background: var(--floating-background,var(--surface));
+    background-image: var(--surface-image,none);
+    backdrop-filter: blur(var(--floating-blur,0px)) var(--surface-filter,brightness(1));
+    border-color: var(--floating-border-top,var(--floating-border,var(--border))) var(--floating-border-right,var(--floating-border,var(--border))) var(--floating-border-bottom,var(--floating-border,var(--border))) var(--floating-border-left,var(--floating-border,var(--border)));
+    border-radius: var(--floating-radius-top-left,var(--floating-radius,8px)) var(--floating-radius-top-right,var(--floating-radius,8px)) var(--floating-radius-bottom-right,var(--floating-radius,8px)) var(--floating-radius-bottom-left,var(--floating-radius,8px));
+    box-shadow: var(--floating-shadow,0 8px 24px var(--shadow-color));
+  }
+}
 @media (max-width: 640px) { .cm-editor .cm-content { padding: 24px 25px 120px; }.fm-group-prompt { gap: 6px; padding: 10px; white-space: normal; width: 90%; } }
 @media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; } }
 

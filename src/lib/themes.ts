@@ -6,6 +6,8 @@
 import paperPackage from '../../themes/paper.json';
 import monoPackage from '../../themes/mono.json';
 import neumorphicPackage from '../../themes/neumorphic.json';
+import liquidGlassPackage from '../../themes/liquid-glass.json';
+import frostedGlassPackage from '../../themes/frosted-glass.json';
 import { applyAppearance, validateAppearance, type ThemeAppearance } from './theme-appearance';
 
 /** 结构职责：区分明暗模式与系统偏好；主题身份独立保存，不随模式变化。 */
@@ -32,7 +34,7 @@ export interface ThemeDefinition {
 }
 
 // 内置包仅在此登记，结构校验与第三方主题相同；首项为首次启动和移除主题后的默认值。
-export const builtInThemes: readonly ThemeDefinition[] = [paperPackage, monoPackage, neumorphicPackage].map(validateTheme);
+export const builtInThemes: readonly ThemeDefinition[] = [paperPackage, monoPackage, neumorphicPackage, liquidGlassPackage, frostedGlassPackage].map(validateTheme);
 
 /**
  * 函数职责：校验不可信主题对象并返回仅含受支持字段的副本。

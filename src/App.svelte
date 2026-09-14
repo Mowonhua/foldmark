@@ -6,7 +6,7 @@
   import { UpdateCoordinator } from './lib/updater/update-coordinator';
   import type { UpdateStatus } from './lib/updater/contracts';
   import packageInfo from '../package.json';
-  import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+  import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { renderTaskTitle } from './lib/editor/preview';
   import { BrowserFilePort, defaultPreferences, welcomeText } from './lib/browser-files';
@@ -18,8 +18,11 @@
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
   import { applyTheme, builtInThemes, parseTheme } from './lib/themes';
+  import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
 
   const desktop = isTauri();
+  const windowMaterial = new WindowMaterialController(document.documentElement, (material, theme) =>
+    desktop ? invoke<boolean>('set_window_material', { material, theme: theme === 'system' ? null : theme }) : Promise.resolve(false));
   let files: FilePort;
   let editor: EditorController | undefined;
   let resourceDocumentPath = '';
@@ -79,6 +82,9 @@
   let themeInput = $state<HTMLInputElement>();
   const themes = $derived([...builtInThemes, ...(config.customThemes ?? [])]);
   const selectedTheme = $derived(themes.find(theme => theme.id === config.preferences.themeId) ?? builtInThemes[0]);
+  const resolvedThemeMode = $derived(config.preferences.theme === 'system' ? (systemDark ? 'dark' : 'light') : config.preferences.theme);
+  const selectedWindowMaterial = $derived((selectedTheme.monochrome ? 'opaque' :
+    selectedTheme.appearance?.[resolvedThemeMode]?.['window-material'] ?? 'opaque') as WindowMaterial);
   let recovery = $state<{ project: Project; disk: FileSnapshot; text: string } | null>(null);
   const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
   const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
@@ -103,6 +109,10 @@
     if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+  // 显式明暗同步原生窗口；system 解除原生覆盖，避免 WebView 的媒体查询被上一次显式模式锁住。
+  $effect(() => {
+    void windowMaterial.update(selectedWindowMaterial, config.preferences.theme).catch(error => { toast = `窗口材质应用失败：${errorMessage(error)}`; });
+  });
 
   /**
    * 开始内部项目拖动；只记录稳定 ID，排序在成功放下时提交。
@@ -599,7 +609,7 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
-<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop} inert={updateInstalling}>
+<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling}>
 
   {#if sidebar}
     <aside class="sidebar" aria-label="项目导航">
