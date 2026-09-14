@@ -41,6 +41,8 @@
   let sidebar = $state(true);
   let projectFilter = $state('');
   let projectSearchOpen = $state(false);
+  let draggedProjectId = $state<string | null>(null);
+  let projectDropTarget = $state<{ id: string; after: boolean } | null>(null);
   let query = $state('');
   let searchOpen = $state(false);
   let includeArchived = $state(false);
@@ -101,6 +103,46 @@
     if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+
+  /**
+   * 开始内部项目拖动；只记录稳定 ID，排序在成功放下时提交。
+   * Windows 上依赖窗口配置 dragDropEnabled=false，避免原生文件拖放拦截 HTML 拖放事件。
+   */
+  function startProjectDrag(event: DragEvent, id: string): void {
+    if (!event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-foldmark-project', id);
+    draggedProjectId = id;
+    projectDropTarget = null;
+  }
+
+  /** 根据目标行中线显示插入位置；外部拖入和自身目标不参与排序。 */
+  function previewProjectDrop(event: DragEvent, id: string): void {
+    if (!draggedProjectId || draggedProjectId === id) { projectDropTarget = null; return; }
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    projectDropTarget = { id, after: event.clientY >= bounds.top + bounds.height / 2 };
+  }
+
+  /** 按完整项目数组移动源项，保留隐藏项相对顺序及当前会话，并复用配置保存队列。 */
+  function dropProject(event: DragEvent, id: string): void {
+    previewProjectDrop(event, id);
+    const sourceId = draggedProjectId;
+    const target = projectDropTarget;
+    draggedProjectId = null; projectDropTarget = null;
+    if (!sourceId || !target) return;
+    const source = config.projects.find(project => project.id === sourceId);
+    if (!source) return;
+    // 先移除源项再定位目标，避免向下移动时的索引偏移；筛选只影响显示。
+    const reordered = config.projects.filter(project => project.id !== sourceId);
+    const targetIndex = reordered.findIndex(project => project.id === target.id);
+    if (targetIndex < 0) return;
+    reordered.splice(targetIndex + Number(target.after), 0, source);
+    if (reordered.every((project, index) => project.id === config.projects[index].id)) return;
+    config.projects = reordered;
+    scheduleConfig();
+  }
 
   function notify(message: string, undoable = false): void {
     toast = message; toastUndo = undoable; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast = ''; }, 6000);
@@ -572,7 +614,15 @@
       {#if projectSearchOpen}<div id="project-search-panel" class="project-search-panel" data-project-search><input id="project-filter" class="project-filter" aria-label="快速查找项目" placeholder="查找项目…" bind:value={projectFilter} /></div>{/if}
       <nav class="project-list">
         {#each visibleProjects as project (project.id)}
-          <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id} onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
+          <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id}
+            class:project-dragging={draggedProjectId === project.id}
+            class:project-drop-before={projectDropTarget?.id === project.id && !projectDropTarget.after}
+            class:project-drop-after={projectDropTarget?.id === project.id && projectDropTarget.after}
+            draggable="true" ondragstart={event => startProjectDrag(event, project.id)}
+            ondragover={event => previewProjectDrop(event, project.id)} ondrop={event => dropProject(event, project.id)}
+            ondragleave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) projectDropTarget = null; }}
+            ondragend={() => { draggedProjectId = null; projectDropTarget = null; }}
+            onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
       <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>

@@ -44,6 +44,11 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .project-filter::placeholder{color:var(--muted)}
 .project-list{overflow:auto;min-height:0}
 .project-list .nav-item{margin-bottom:4px}
+.project-list .nav-item[draggable]{position:relative;cursor:grab}
+.project-list .project-dragging{opacity:.5;cursor:grabbing}
+.project-drop-before::before,.project-drop-after::after{content:"";position:absolute;left:0;right:0;height:2px;background:var(--accent);pointer-events:none}
+.project-drop-before::before{top:0}
+.project-drop-after::after{bottom:0}
 .project-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
 .sidebar-bottom .icon-button{margin-left:auto;font-size:18px}

@@ -273,6 +273,69 @@ async function savedText(project: Project, expected: string): Promise<void> {
   await vi.waitFor(async () => expect((await files.read(project.path)).text).toBe(expected), { timeout: 5000 });
 }
 
+describe('左栏项目拖动排序', () => {
+  function projectButton(project: Project): HTMLButtonElement {
+    return [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.title === project.path)!;
+  }
+
+  function projectOrder(): string[] {
+    return [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .filter(candidate => [firstProject.path, secondProject.path].includes(candidate.title))
+      .map(candidate => candidate.title);
+  }
+
+  /** jsdom 不提供 DragEvent；保留浏览器事件入口及坐标、传输数据契约。 */
+  function dragEvent(type: string, clientY = 0): Event {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      clientY: { value: clientY },
+      dataTransfer: { value: { effectAllowed: 'all', dropEffect: 'none', setData: vi.fn(), getData: () => '', types: [] } },
+    });
+    return event;
+  }
+
+  it.each([
+    { name: '拖到项目下半部插入其后', source: firstProject, target: secondProject, clientY: 130 },
+    { name: '拖到项目上半部插入其前', source: secondProject, target: firstProject, clientY: 110 },
+  ])('$name，并保留活动项目及重启后的顺序', async ({ source, target, clientY }) => {
+    await start(['- [ ] 甲任务\n', '- [ ] 乙任务\n']);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id]).toBeDefined());
+    const sourceControl = projectButton(source);
+    const targetControl = projectButton(target);
+    expect(sourceControl.draggable).toBe(true);
+    vi.spyOn(targetControl, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 140, height: 40 } as DOMRect);
+    sourceControl.dispatchEvent(dragEvent('dragstart')); await tick();
+    targetControl.dispatchEvent(dragEvent('dragover', clientY)); await tick();
+    expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([firstProject.id, secondProject.id]);
+    targetControl.dispatchEvent(dragEvent('drop', clientY)); await tick();
+    sourceControl.dispatchEvent(dragEvent('dragend')); await tick();
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([secondProject.id, firstProject.id]));
+    expect(projectOrder()).toEqual([secondProject.path, firstProject.path]);
+    expect((await files.loadConfig())?.activeProjectId).toBe(firstProject.id);
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    await remount();
+    expect(projectOrder()).toEqual([secondProject.path, firstProject.path]);
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+  });
+
+  it('取消拖动及外部拖放不保存项目顺序', async () => {
+    await start(['- [ ] 甲任务\n', '- [ ] 乙任务\n']);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id]).toBeDefined());
+    const save = vi.spyOn(BrowserFilePort.prototype, 'saveConfig');
+    const source = projectButton(firstProject);
+    const target = projectButton(secondProject);
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 140, height: 40 } as DOMRect);
+    source.dispatchEvent(dragEvent('dragstart')); await tick();
+    target.dispatchEvent(dragEvent('dragover', 130)); await tick();
+    source.dispatchEvent(dragEvent('dragend')); await tick();
+    target.dispatchEvent(dragEvent('dragover', 130));
+    target.dispatchEvent(dragEvent('drop', 130)); await tick();
+    expect(save).not.toHaveBeenCalled();
+    expect(projectOrder()).toEqual([firstProject.path, secondProject.path]);
+    expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([firstProject.id, secondProject.id]);
+  });
+});
+
 /** 从关联标签定位设置控件，测试不依赖组件状态或固定 DOM 排列。 */
 function themeControl(name: string): HTMLSelectElement {
   const label = [...document.querySelectorAll('label')].find(candidate => candidate.firstChild?.textContent?.trim() === name);
