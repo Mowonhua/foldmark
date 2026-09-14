@@ -6,27 +6,16 @@ import type { EditorView, KeyBinding } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { indentItemChanges } from '../markdown';
 import { documentField, modeFacet } from './state';
+import { editParagraph } from './paragraph-editing';
 
 /**
  * 函数职责：在预览正文中插入段落分隔或段内换行。
- * 输入说明：只接管可编辑预览；列表、引用、代码及表格交回各自的输入规则。
+ * 输入说明：只接管可编辑预览的普通段落与列表；引用、代码及表格继续使用各自规则。
  * 输出说明：替换选区并将光标放在新段落起点，整个操作可一次撤销。
- * 实现思路：用共享语法树识别容器，按文档内部换行坐标构造事务。
+ * 实现思路：统一交给段落模型规划结构编辑，避免键位与预览各自推断空白分隔。
  */
 export function paragraphEnter(view: EditorView, soft = false): boolean {
-  const { state } = view;
-  if (view.composing || state.readOnly || state.facet(modeFacet) !== 'todo' || state.selection.ranges.length !== 1) return false;
-  const selection = state.selection.main;
-  for (const position of [selection.from, selection.to]) {
-    let node: SyntaxNode | null = state.field(documentField).tree.resolveInner(position, -1);
-    while (node) {
-      if (/^(ListItem|Blockquote|FencedCode|CodeBlock|MathBlock|Table)$/.test(node.name)) return false;
-      node = node.parent;
-    }
-  }
-  const insert = soft ? '\n' : '\n\n';
-  view.dispatch({ changes: { from: selection.from, to: selection.to, insert }, selection: { anchor: selection.from + insert.length }, userEvent: 'input' });
-  return true;
+  return editParagraph(view, soft ? 'soft-enter' : 'enter');
 }
 
 /**
@@ -61,7 +50,7 @@ export function codeFenceEnter(view: EditorView): boolean {
 
 /**
  * 函数职责：仅在单光标位于任务首行时接管列表输入。
- * 输入说明：todo 与 source 共用空任务退出；源码的其他列表输入、中文候选组合、选区及普通正文交给 CodeMirror 默认行为。
+ * 输入说明：预览交给共享段落编辑器；源码仅保留一次退出空任务的规则，其余行为交给 CodeMirror。
  * 输出说明：同级新任务或退出空任务是一笔可撤销事务。
  * 实现思路：任务范围取语法树，缩进与标记从原文保留。
  */
@@ -82,17 +71,10 @@ export function taskEnter(view: EditorView, continuation = false): boolean {
   if (mode === 'source' && !emptyItem) return false;
   const item = emptyItem ?? model.tasks.find(candidate => pos >= candidate.contentFrom && pos <= candidate.firstLineTo);
   if (!item) return false;
+  if (mode === 'todo') return editParagraph(view, continuation ? 'soft-enter' : 'enter');
   const line = view.state.doc.lineAt(item.from);
   const indent = line.text.slice(0, item.from - line.from);
-  const marker = model.text.slice(item.markerFrom, item.markerTo);
-  const eol = model.text.includes('\r\n') ? '\r\n' : '\n';
-  if (emptyItem || (!continuation && !model.text.slice(item.contentFrom, item.firstLineTo).trim())) {
-    view.dispatch({ changes: { from: line.from, to: item.firstLineTo, insert: indent }, selection: { anchor: line.from + indent.length }, userEvent: 'input' });
-    return true;
-  }
-  const nextMarker = /^\d/.test(marker) ? marker.replace(/\d+/, digits => String(Number(digits) + 1)) : marker;
-  const prefix = continuation ? ' '.repeat(item.markerTo - line.from + 1) : `${indent}${nextMarker} [ ] `;
-  view.dispatch({ changes: { from: pos, insert: `${eol}${prefix}` }, selection: { anchor: pos + eol.length + prefix.length }, userEvent: 'input' });
+  view.dispatch({ changes: { from: line.from, to: item.firstLineTo, insert: indent }, selection: { anchor: line.from + indent.length }, userEvent: 'input' });
   return true;
 }
 
@@ -109,7 +91,10 @@ export function indentTask(view: EditorView, direction: 1 | -1): boolean {
 }
 
 export const taskKeymap: KeyBinding[] = [
+  { key: 'Backspace', run: view => editParagraph(view, 'backspace') },
+  { key: 'Delete', run: view => editParagraph(view, 'delete') },
   { key: 'Enter', run: view => codeFenceEnter(view) || taskEnter(view) || paragraphEnter(view) },
+  { key: 'Mod-Enter', run: view => view.state.facet(modeFacet) === 'todo' && (codeFenceEnter(view) || taskEnter(view) || paragraphEnter(view)) },
   { key: 'Shift-Enter', run: view => taskEnter(view, true) || paragraphEnter(view, true) },
   { key: 'Tab', run: view => indentTask(view, 1) },
   { key: 'Shift-Tab', run: view => indentTask(view, -1) },

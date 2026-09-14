@@ -27,6 +27,8 @@
 .fm-list-line { padding-top: 4px; padding-bottom: 4px; }
 .fm-completed-line { color: var(--muted); }
 .fm-item-controls { display: inline-flex; align-items: center; position: relative; vertical-align: text-bottom; line-height: 1; height: 1.35em; }
+/* 任务标题的标记列与所属正文共用 1.5 个编辑字号的缩进，源码标记后的空白由投影隐藏。 */
+.fm-task-controls { width: calc(var(--editor-font-size, 16px) * 1.5); }
 .fm-item-controls button { padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; font-family: inherit; color: inherit; cursor: pointer; }
 .fm-fold-button { position: absolute; width: 20px; height: 25px; right: calc(100% + 5px); border: 0; background: transparent; font-size: 17px; opacity: 0; transition: opacity 100ms; }
 .fm-fold-button:hover, .fm-item-controls:hover .fm-fold-button, .fm-item-controls:focus-within .fm-fold-button, .fm-item-controls.is-folded .fm-fold-button { opacity: 1; }

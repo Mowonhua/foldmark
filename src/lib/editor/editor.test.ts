@@ -26,10 +26,15 @@ describe('唯一文档编辑事务', () => {
     instance.focusAt(first.length);
     const enter = () => instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     enter();
-    expect(instance.text).toBe(first + '\n- [ ] ' + rest);
+    expect(instance.text).toBe(first + (mode === 'todo' ? '\n\n- [ ] \n' : '\n- [ ] ') + rest);
+    expect(instance.state.selection.main.head).toBe(first.length + (mode === 'todo' ? 8 : 7));
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(4);
     enter();
-    expect(instance.text).toBe(first + '\n' + rest);
-    expect(instance.state.selection.main.head).toBe(first.length + 1);
+    expect(instance.text).toBe(first + (mode === 'todo' ? '\n\n\n' : '\n') + rest);
+    expect(instance.state.selection.main.head).toBe(first.length + (mode === 'todo' ? 2 : 1));
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(4);
+    instance.focusAt(0);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(4);
   });
   it.each((['todo', 'source'] as const).flatMap(mode => ['- [ ]', '- [ ] ', '- [ ]   ', '* [ ]\t', '2. [ ] '].map(marker => ({ mode, marker }))))('$mode 空任务 $marker 的闭括号后按 Enter 直接清除符号', ({ mode, marker }) => {
     const prefix = `${marker.startsWith('2.') ? '1.' : '-'} [ ] 设计完整的UI/UX\n`;
@@ -37,8 +42,9 @@ describe('唯一文档编辑事务', () => {
     const cursor = prefix.length + marker.indexOf(']') + 1;
     instance.focusAt(cursor);
     instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    expect(instance.text).toBe(prefix);
-    expect(instance.state.selection.main.head).toBe(prefix.length);
+    expect(instance.text).toBe(prefix + (mode === 'todo' ? '\n' : ''));
+    expect(instance.state.selection.main.head).toBe(prefix.length + (mode === 'todo' ? 1 : 0));
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
     expect(instance.undo()).toBe(true);
     expect(instance.text).toBe(prefix + marker);
     expect(instance.state.selection.main.head).toBe(cursor);
@@ -47,8 +53,11 @@ describe('唯一文档编辑事务', () => {
     const instance = editor('- [ ] 父\n  - [ ]   \n  - [ ] 子');
     instance.focusAt(instance.text.indexOf('   \n') + 1);
     instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    expect(instance.text).toBe('- [ ] 父\n  \n  - [ ] 子');
-    expect(instance.state.selection.main.head).toBe('- [ ] 父\n  '.length);
+    expect(instance.text).toBe('- [ ] 父\n\n  \n\n  - [ ] 子');
+    expect(instance.state.selection.main.head).toBe('- [ ] 父\n\n  '.length);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(3);
+    instance.focusAt(0);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(3);
   });
   it.each(['```\n- [ ]\n```', '正文 [ ]', '- [ ] 正文'])('空任务识别不接管代码或有正文的标记：%j', text => {
     const instance = editor(text);
@@ -56,15 +65,19 @@ describe('唯一文档编辑事务', () => {
     expect(taskEnter(instance.view)).toBe(false);
     expect(instance.text).toBe(text);
   });
-  it('文末新建空任务后再按一次 Enter 直接退出任务，不增加空行', () => {
+  it('文末新建空任务后再按一次 Enter 退出为一个可见空段落', () => {
     const instance = editor('- [ ] 设计完整的UI/UX');
     instance.focusAt(instance.text.length);
     const enter = () => instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     enter();
-    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n- [ ] ');
+    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n\n- [ ] ');
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
     enter();
-    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n');
+    expect(instance.text).toBe('- [ ] 设计完整的UI/UX\n\n');
     expect(instance.state.selection.main.head).toBe(instance.text.length);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+    instance.focusAt(0);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
   });
   it('完成移动正文到文末归档，撤销恢复任务标记和布局', () => {
     const instance = editor('- [ ] 写作\n  正文\n- [ ] 校对');
@@ -109,9 +122,11 @@ describe('唯一文档编辑事务', () => {
     const instance = editor('- [ ] 甲\n- [ ] 乙\n  正文');
     instance.focusAt(7);
     expect(taskEnter(instance.view)).toBe(true);
-    expect(instance.text).toBe('- [ ] 甲\n- [ ] \n- [ ] 乙\n  正文');
+    expect(instance.text).toBe('- [ ] 甲\n\n- [ ] \n\n- [ ] 乙\n  正文');
     expect(taskEnter(instance.view)).toBe(true);
-    expect(instance.text).toBe('- [ ] 甲\n\n- [ ] 乙\n  正文');
+    expect(instance.text).toBe('- [ ] 甲\n\n\n\n- [ ] 乙\n  正文');
+    expect(instance.state.selection.main.head).toBe('- [ ] 甲\n\n'.length);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(4);
     instance.focusAt(instance.text.indexOf('乙') + 1);
     expect(indentTask(instance.view, 1)).toBe(true);
     expect(instance.text).toContain('  - [ ] 乙\n    正文');

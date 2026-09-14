@@ -9,7 +9,7 @@ import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } fr
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { archiveSections, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskToggleChanges, type DocumentModel } from '../markdown';
-import { actionsFacet, documentField, foldHistory, foldsField, modeFacet, resourcesFacet, setFolds, sourceViewFacet } from './state';
+import { actionsFacet, documentField, foldHistory, foldsField, modeFacet, resourcesFacet, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
 import { previewField } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension } from './source-scope';
@@ -84,7 +84,7 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, foldHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
+      documentField, foldsField, foldHistory, softBreaksField, softBreakHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       placeholder('写下第一件事，或输入 - [ ] 创建任务…'),

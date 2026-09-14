@@ -1,18 +1,21 @@
 <!doctype html>
 <html lang="zh-CN">
 <meta charset="UTF-8">
-<title>空任务回车验收</title>
+<title>段落编辑验收</title>
 <style>
   :root { --ink:#263027; --muted:#74806f; --accent:#537146; --surface:#fff; --surface-alt:#f0f3ed; --border:#d6ded1; --selection:#d8e7ca; }
   body { margin:24px; font-family:system-ui,sans-serif; }
   #editor { height:400px; max-width:900px; }
   pre { white-space:pre-wrap; }
 </style>
-<h1>空任务回车验收</h1>
-<p>选择模式重置样例；光标位于首个任务末尾。按一次 Enter 新建任务，再按一次应只留下空行。</p>
+<h1>段落编辑验收</h1>
+<p>光标位于首个任务末尾。Enter 新建任务，再按 Enter 转为空段落；Backspace 或 Delete 删除空段落及多余分隔。切换源码可核对每段之间的一行空白。</p>
 <button id="todo">重置预览模式</button>
 <button id="source">重置源码模式</button>
+<button id="toggle-source">切换当前文档源码</button>
+<button id="measure">测量当前行对齐</button>
 <div id="editor"></div>
 <pre id="result" aria-live="polite"></pre>
+<pre id="metrics" aria-live="polite"></pre>
 <script type="module" src="./browser-task-enter.ts"></script>
 </html>

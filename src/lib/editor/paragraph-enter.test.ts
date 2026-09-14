@@ -46,9 +46,22 @@ it('连续 Enter 每次增加一个可输入行，空文档也可继续输入', 
   expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(3);
   key('Backspace'); expect(instance.text).toBe('\n\n');
 });
-it.each(['- [ ] 任务', '- 条目', '> 引用'])('%s 继续使用容器换行规则', text => {
+it.each([
+  { text: '- [ ] 任务', expected: '- [ ] 任务\n\n- [ ] ', sourceExpected: '- [ ] 任务\n- [ ] ' },
+  { text: '- 条目', expected: '- 条目\n\n- ', sourceExpected: '- 条目\n- ' },
+  { text: '> 引用', expected: '> 引用\n> ', sourceExpected: '> 引用\n> ' },
+])('$text 按容器规则续项，源码使用原生换行', ({ text, expected, sourceExpected }) => {
   editor(text); key('Enter');
-  expect(instance.text.split('\n')).toHaveLength(2);
+  expect(instance.text).toBe(expected);
+  expect(instance.state.selection.main.head).toBe(expected.length);
+  expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+  expect(instance.undo()).toBe(true);
+  expect(instance.text).toBe(text);
+  instance.setMode('source');
+  instance.focusAt(text.length); key('Enter');
+  expect(instance.text).toBe(sourceExpected);
+  expect(instance.state.selection.main.head).toBe(sourceExpected.length);
+  expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
 });
 it('单行段内换行不折叠，切到源码后恢复完整分隔空行', () => {
   editor('第一段\n段内\n\n第二段');

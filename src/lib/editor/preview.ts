@@ -12,6 +12,7 @@ import { actionsFacet, documentField, foldsField, modeFacet, resourcesFacet } fr
 import { previewWindowField } from './viewport';
 import type { EditorOptions } from './types';
 import { CodeLanguageWidget } from './code-language';
+import { paragraphLayout } from './paragraphs';
 
 /** 共享行内排版只依赖源文和资源端口；无 focusAt 时生成可嵌入整行按钮的只读内容。 */
 interface InlineContext {
@@ -29,7 +30,7 @@ class ItemWidget extends WidgetType {
   eq(other: ItemWidget): boolean { return this.item.from === other.item.from && this.item.to === other.item.to && this.item.task?.checked === other.item.task?.checked && this.folded === other.folded && this.label === other.label; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('span');
-    wrapper.className = `fm-item-controls${this.folded ? ' is-folded' : ''}`;
+    wrapper.className = `fm-item-controls${this.item.task ? ' fm-task-controls' : ''}${this.folded ? ' is-folded' : ''}`;
     const actions = view.state.facet(actionsFacet);
     const fold = document.createElement('button');
     fold.type = 'button';
@@ -431,7 +432,7 @@ function buildPreview(state: EditorState): DecorationSet {
       let label = '•';
       if (/^\d/.test(marker)) { const number = orderedCounters.get(item.listFrom) ?? Number.parseInt(marker); orderedCounters.set(item.listFrom, number + 1); label = `${number}.`; }
       if (item.firstLineTo < window.from || overlapsHidden(item.from, item.firstLineTo)) continue;
-      ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.task.to : item.markerTo));
+      ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.contentFrom : item.markerTo));
       lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}`);
     }
     cached = { mode, folds, window, hidden: merged, decorations: Decoration.set(ranges, true) };
@@ -455,6 +456,23 @@ function buildPreview(state: EditorState): DecorationSet {
       const whitespace = line.text.match(/^[ \t]*/)?.[0].length ?? 0;
       const depth = item.depth + (heading ? 0 : 1);
       layout.set(line.from, { margin: `calc(var(--editor-font-size, 16px) * ${depth * 1.5})`, prefixTo: line.from + Math.min(whitespace, heading ? item.markerFrom - line.from : continuation) });
+    }
+  }
+  // 空正文及空续行尚不一定进入 ListItem.to；沿共享段落归属布局，输入首字不会再触发横移。
+  const paragraphs = paragraphLayout(state);
+  for (const paragraph of paragraphs.paragraphs) {
+    if (paragraph.from > window.to) break;
+    if (!paragraph.item || paragraph.kind === 'literal' || paragraph.to < window.from) continue;
+    const first = state.doc.lineAt(Math.max(paragraph.from, window.from)).number;
+    const last = state.doc.lineAt(Math.min(paragraph.to, window.to)).number;
+    for (let number = first; number <= last; number++) {
+      const line = state.doc.line(number);
+      if (line.from === paragraph.item.moveFrom) continue;
+      const whitespace = line.text.match(/^[ \t]*/)?.[0].length ?? 0;
+      layout.set(line.from, {
+        margin: `calc(var(--editor-font-size, 16px) * ${(paragraph.item.depth + 1) * 1.5})`,
+        prefixTo: line.from + Math.min(whitespace, paragraph.indent.length),
+      });
     }
   }
   const replacedBlocks: { from: number; to: number }[] = [];
@@ -578,25 +596,12 @@ function buildPreview(state: EditorState): DecorationSet {
     for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child);
   };
   visit(model.tree.topNode);
-  // 仅移除分隔空行前的换行，保留后一条换行作为可见段落边界。
-  // 每两个空行保留一个可输入空段落，使连续 Enter 仍能逐次增加可见行。
-  let firstVisibleLine = state.doc.lineAt(Math.max(0, window.from)).number;
-  // 窗口从连续空行中间开始时仍从同一对空行起点计算，避免滚动改变投影奇偶性。
-  while (firstVisibleLine > 2 && !state.doc.line(firstVisibleLine - 1).text.trim()) firstVisibleLine--;
-  const lastVisibleLine = state.doc.lineAt(Math.min(state.doc.length, window.to)).number;
-  for (let number = Math.max(2, firstVisibleLine); number < Math.min(state.doc.lines, lastVisibleLine + 1); number++) {
-    const line = state.doc.line(number);
-    if (line.text.trim()) continue;
-    let node: SyntaxNode | null = model.tree.resolveInner(line.from, 1);
-    let literal = false;
-    while (node) {
-      if (/^(FencedCode|CodeBlock|MathBlock|Table|Blockquote)$/.test(node.name)) { literal = true; break; }
-      node = node.parent;
-    }
-    const from = state.doc.line(number - 1).to;
-    if (literal || overlapsHidden(from, line.to + 1) || replacedBlocks.some(block => from >= block.from && from < block.to)) continue;
-    ranges.push(Decoration.replace({ paragraphSeparator: true }).range(from, line.to));
-    number++;
+  // 段落模型是源码分隔的唯一来源；投影只隐藏分隔空行，不再从视口或光标推断空段落。
+  for (const separator of paragraphs.separators) {
+    if (separator.from > window.to) break;
+    if (separator.to < window.from || overlapsHidden(separator.from, separator.to)
+      || replacedBlocks.some(block => separator.from >= block.from && separator.from < block.to)) continue;
+    ranges.push(Decoration.replace({ paragraphSeparator: true }).range(separator.from, separator.blankTo));
   }
   for (const [from, entry] of layout) {
     if (overlapsHidden(from, from + 1) || replacedBlocks.some(block => from >= block.from && from < block.to)) continue;
@@ -617,6 +622,9 @@ export const previewField = StateField.define<DecorationSet>({
     while (cursor.value) {
       if (cursor.value.spec.paragraphSeparator) atoms.push(Decoration.replace({}).range(cursor.from, cursor.to + 1));
       cursor.next();
+    }
+    if (view.state.facet(modeFacet) !== 'source') {
+      for (const lineBreak of paragraphLayout(view.state).lineBreaks) atoms.push(Decoration.replace({}).range(lineBreak.from, lineBreak.to));
     }
     return Decoration.set(atoms, true);
   })],
