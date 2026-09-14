@@ -21,7 +21,7 @@ it('导入的闭合空围栏保持空框，首次点击才创建正文行', () =
   const empty = instance.view.dom.querySelector<HTMLElement>('[aria-label="空代码块"]')!;
   expect(empty).not.toBeNull();
   empty.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-  expect(instance.text).toBe('正文\n\n```ts\n\n```');
+  expect(instance.text).toBe('正文\n\n```ts\n\n```\n\n');
   expect(instance.state.doc.lineAt(instance.state.selection.main.head).text).toBe('');
   expect(instance.view.dom.querySelector('input[aria-label="代码块语言"]')).not.toBeNull();
   expect(instance.view.contentDOM.textContent).not.toContain('```');
@@ -32,7 +32,9 @@ it('仅编辑代码时在框外显示语言输入，离开代码后隐藏且不�
   const instance = editor(source);
   expect(instance.view.dom.querySelector('input[aria-label="代码块语言"]')).toBeNull();
   expect(instance.view.dom.querySelector('.fm-code-language')).toBeNull();
+  const lineCount = instance.view.contentDOM.querySelectorAll('.cm-line').length;
   instance.focusAt(source.indexOf('const'));
+  expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(lineCount);
   const input = instance.view.dom.querySelector<HTMLInputElement>('input[aria-label="代码块语言"]')!;
   expect(input).not.toBeNull();
   expect(input.closest('.fm-code-line')).toBeNull();

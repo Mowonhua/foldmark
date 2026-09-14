@@ -583,7 +583,8 @@ describe('App 真实编辑与文件闭环', () => {
     expect(input).not.toBeNull();
     input.focus(); input.value = 'javascript';
     input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
-    const expected = '# 代码\n\n```javascript\nconsole.log(1)\n```';
+    // 预览模式补全围栏时保留块后续写段落，保存和重启均应保留其分隔空行。
+    const expected = '# 代码\n\n```javascript\nconsole.log(1)\n```\n\n';
     await savedText(firstProject, expected);
     await remount();
     expect((await files.read(firstProject.path)).text).toBe(expected);

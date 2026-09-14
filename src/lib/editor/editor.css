@@ -12,7 +12,7 @@
 .fm-h1 { font-size: 1.8em; }.fm-h2 { font-size: 1.45em; }.fm-h3 { font-size: 1.18em; }
 .fm-em { font-style: italic; }.fm-strong { font-weight: 650; }.fm-strike { text-decoration: line-through; }
 .fm-code { font-family: ui-monospace, Consolas, monospace; font-size: .88em; background: var(--surface-alt); border-radius: 4px; padding: 2px 3px; }
-.cm-editor .fm-code-line { position: relative; background: transparent; font-family: ui-monospace, Consolas, monospace; font-size: .88em; padding: 0 14px; border-left: 1px solid var(--muted); border-right: 1px solid var(--muted); }
+.cm-editor .fm-code-line, .cm-editor .fm-math-size-line { position: relative; background: transparent; font-family: ui-monospace, Consolas, monospace; font-size: .88em; padding: 0 14px; border-left: 1px solid var(--muted); border-right: 1px solid var(--muted); }
 /* drawSelection 的选区层位于正文下方（当前 z-index 为 -2）。代码底色单独放到更低层，
    行本身不能建立堆叠上下文，否则底色仍会整体盖住选区；伪元素不参与鼠标命中。 */
 .cm-editor .fm-code-line::before { content: ''; position: absolute; inset: 0; z-index: -3; background: var(--surface-alt); pointer-events: none; }
@@ -20,8 +20,9 @@
 .cm-editor .fm-code-end { border-bottom: 1px solid var(--muted); padding-bottom: 10px; }
 .cm-editor .fm-code-fence { height: 0; min-height: 0; padding: 0; line-height: 0; overflow: hidden; }
 .cm-editor .fm-empty-code { min-height: calc(1.8em + 20px); cursor: text; }
-.fm-code-language { display: flex; justify-content: flex-end; padding: 8px 0 12px; line-height: 1.4; }
-.fm-code-language input { width: 150px; max-width: 100%; padding: 5px 10px; border: 1px solid transparent; border-radius: 0; font: 12px/1.4 ui-monospace, Consolas, monospace; text-align: center; }
+/* 语言控件覆盖在后续正文上方，外层不参与行高；仅输入框本身接收指针事件。 */
+.fm-code-language { position: relative; height: 0; min-height: 0; padding: 0; line-height: 0; overflow: visible; z-index: 2; pointer-events: none; }
+.fm-code-language input { position: absolute; top: 8px; right: 0; pointer-events: auto; width: 150px; max-width: 100%; padding: 5px 10px; border: 1px solid transparent; border-radius: 0; font: 12px/1.4 ui-monospace, Consolas, monospace; text-align: center; }
 .fm-code-language input { border-bottom-color: var(--border); background: var(--surface); color: var(--text); }
 .cm-editor .fm-quote { border-left: 3px solid var(--border); color: var(--muted); padding-left: 16px; }
 .fm-list-line { padding-top: 4px; padding-bottom: 4px; }
@@ -42,6 +43,9 @@
 .fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
 .fm-math-block { overflow-x: auto; text-align: center; padding: 10px 0; cursor: text; }
+.fm-math-frame { position: relative; }
+.fm-math-size-line { visibility: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fm-math-frame > .fm-math-block { position: absolute; inset: 0; box-sizing: border-box; overflow: auto; display: grid; align-items: safe center; }
 /* 块间距由编辑器控制，避免叠加 KaTeX 默认的上下 1em 外边距。 */
 .fm-math-block .katex-display { margin: 0; }
 .fm-math-inline { cursor: text; }.fm-math-error { color: var(--danger); border-bottom: 1px dotted currentColor; }

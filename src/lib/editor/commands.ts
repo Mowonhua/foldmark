@@ -3,10 +3,10 @@
  * 定义范围：代码围栏补全、任务首行续项、正文换行和整项缩进。
  */
 import type { EditorView, KeyBinding } from '@codemirror/view';
-import type { SyntaxNode } from '@lezer/common';
 import { indentItemChanges } from '../markdown';
 import { documentField, modeFacet } from './state';
 import { editParagraph } from './paragraph-editing';
+import { completeFencedBlock, fencedBlockEnter } from './fenced-block-editing';
 
 /**
  * 函数职责：在预览正文中插入段落分隔或段内换行。
@@ -19,34 +19,12 @@ export function paragraphEnter(view: EditorView, soft = false): boolean {
 }
 
 /**
- * 函数职责：在未闭合的 Markdown 开围栏末尾换行，并补齐匹配的闭围栏。
+ * 函数职责：补全尚无有效正文的代码或公式开围栏。
  * 输入说明：仅接管 todo、source 中的单个空选区；组合输入及已有闭围栏交给默认行为。
  * 输出说明：返回是否接管 Enter；成功时以一笔可撤销事务插入空代码行和闭围栏，光标停在代码行缩进之后。
- * 实现思路：通过当前语法树确认开围栏身份与未闭合状态，保留围栏长度、字符与空白缩进；坐标使用文档内部的单字符换行。
+ * 实现思路：委托共享块编辑器确认开围栏身份，保留围栏字符及结构缩进。
  */
-export function codeFenceEnter(view: EditorView): boolean {
-  const { state } = view;
-  if (view.composing || state.facet(modeFacet) === 'archive' || state.selection.ranges.length !== 1 || !state.selection.main.empty) return false;
-  const pos = state.selection.main.head;
-  const line = state.doc.lineAt(pos);
-  if (pos !== line.to) return false;
-  const opening = /^([\t ]*)(`{3,}|~{3,})[^\r\n]*$/.exec(line.text);
-  if (!opening) return false;
-  const markerFrom = line.from + opening[1].length;
-  let node: SyntaxNode | null = state.field(documentField).tree.resolveInner(markerFrom, 1);
-  while (node && node.name !== 'FencedCode') node = node.parent;
-  if (!node) return false;
-  const marks = node.getChildren('CodeMark');
-  // 只有当前行确为唯一开围栏时才补全；代码正文中的短围栏和已有闭围栏不属于输入触发点。
-  if (marks.length !== 1 || marks[0].from !== markerFrom) return false;
-  const indent = opening[1];
-  view.dispatch({
-    changes: { from: pos, insert: `\n${indent}\n${indent}${opening[2]}` },
-    selection: { anchor: pos + 1 + indent.length },
-    userEvent: 'input',
-  });
-  return true;
-}
+export function codeFenceEnter(view: EditorView): boolean { return completeFencedBlock(view); }
 
 /**
  * 函数职责：仅在单光标位于任务首行时接管列表输入。
@@ -93,9 +71,9 @@ export function indentTask(view: EditorView, direction: 1 | -1): boolean {
 export const taskKeymap: KeyBinding[] = [
   { key: 'Backspace', run: view => editParagraph(view, 'backspace') },
   { key: 'Delete', run: view => editParagraph(view, 'delete') },
-  { key: 'Enter', run: view => codeFenceEnter(view) || taskEnter(view) || paragraphEnter(view) },
-  { key: 'Mod-Enter', run: view => view.state.facet(modeFacet) === 'todo' && (codeFenceEnter(view) || taskEnter(view) || paragraphEnter(view)) },
-  { key: 'Shift-Enter', run: view => taskEnter(view, true) || paragraphEnter(view, true) },
+  { key: 'Enter', run: view => fencedBlockEnter(view) || taskEnter(view) || paragraphEnter(view) },
+  { key: 'Mod-Enter', run: view => view.state.facet(modeFacet) === 'todo' && (fencedBlockEnter(view) || taskEnter(view) || paragraphEnter(view)) },
+  { key: 'Shift-Enter', run: view => view.state.facet(modeFacet) === 'todo' && fencedBlockEnter(view) || taskEnter(view, true) || paragraphEnter(view, true) },
   { key: 'Tab', run: view => indentTask(view, 1) },
   { key: 'Shift-Tab', run: view => indentTask(view, -1) },
 ];

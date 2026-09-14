@@ -6,6 +6,16 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 let instance: EditorController;
 afterEach(() => { instance?.destroy(); document.body.replaceChildren(); });
+it.each(['e=mc', 'e=mc\n  +1'])('公式渲染保留正文行布局且不产生额外空文本行：%s', body => {
+  const text = '- [ ] A\n  $$\n  ' + body + '\n  $$\n\n  below';
+  instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });
+  instance.focusAt(text.indexOf('e=mc'));
+  const editing = [...instance.view.dom.querySelectorAll('.fm-math-edit-line')].map(line => line.textContent);
+  instance.focusAt(text.length);
+  expect([...instance.view.dom.querySelectorAll('.fm-math-size-line')].map(line => line.textContent)).toEqual(editing);
+  expect([...instance.view.contentDOM.querySelectorAll('.cm-line')].filter(line => !line.textContent)).toHaveLength(0);
+  expect(instance.text).toBe(text);
+});
 it('归档保留父任务上下文时，已完成子任务仍有独立的行缩进', () => {
   const text = '# 今天\n\n- [ ] 父任务\n\n  父任务正文\n\n  - [ ] 未完成子任务\n  - [x] 已完成子任务\n';
   instance = new EditorController(document.body, { text, mode: 'archive', onChange: () => {} });
@@ -21,13 +31,13 @@ it('列表内块沿容器缩进且整行替换公式，不留下前导空白行'
   const text = '- [ ] 标题\n  ```\n  ggg = fun()\n  ```\n\n  $$\n  a=b\n  $$\n\n  > 引用\n\n  - [ ] 子项\n    ```\n      nested()\n    ```\n\n末尾';
   instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });
   instance.focusAt(text.length);
-  const code = [...instance.view.dom.querySelectorAll<HTMLElement>('.fm-code-start')];
+  const code = [...instance.view.dom.querySelectorAll<HTMLElement>('.fm-code-line.fm-code-start')];
   expect(code[0].style.marginLeft).not.toBe('');
   expect(code[1].style.marginLeft).not.toBe(code[0].style.marginLeft);
   expect(code[0].textContent).toBe('ggg = fun()');
   expect(code[1].textContent).toBe('  nested()');
   expect(instance.view.dom.querySelector<HTMLElement>('.fm-quote')!.style.marginLeft).toBe(code[0].style.marginLeft);
-  expect(instance.view.dom.querySelector<HTMLElement>('.fm-math-block')!.style.marginLeft).toBe(code[0].style.marginLeft);
+  expect(instance.view.dom.querySelector<HTMLElement>('.fm-math-frame')!.style.marginLeft).toBe(code[0].style.marginLeft);
   const mathFrom = text.indexOf('  $$');
   let wholeLine = false;
   instance.state.field(previewField).between(mathFrom, mathFrom + 4, (from, to, value) => {

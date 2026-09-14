@@ -1,10 +1,11 @@
 /**
- * 文件职责：管理列表标记手势及空任务正文的指针定位。
+ * 文件职责：管理列表标记手势及空任务、空段落的指针定位。
  * 定义范围：指针状态机、正文焦点和同列表可见插入边界，不直接修改正文。
  */
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { getHiddenRanges } from '../markdown';
 import { actionsFacet, documentField, modeFacet } from './state';
+import { paragraphAt, paragraphLayout } from './paragraphs';
 
 interface DragSession {
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
@@ -42,7 +43,7 @@ class MarkerGestures {
   private down = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
-    if (!marker) { this.focusEmptyTask(event); return; }
+    if (!marker) { this.focusEmptyContent(event); return; }
     if (!this.view.dom.contains(marker)) return;
     event.preventDefault();
     const from = Number(marker.dataset.listMarker);
@@ -56,17 +57,27 @@ class MarkerGestures {
     try { marker.setPointerCapture?.(event.pointerId); } catch { /* 浏览器拒绝非活动指针时，现有全局取消路径仍有效。 */ }
   };
   /**
-   * 空任务的整行源码被标记控件替换，浏览器可能把右侧空白命中到后面的隐藏分隔。
+   * 空任务和空段落没有可命中的正文字符，浏览器可能把右侧空白命中到后面的隐藏分隔。
    * 在指针捕获阶段直接定位正文端点，同时覆盖控件列内空白；按钮和修饰键交回原有手势。
    * 每次从当前模型读取坐标，避免控件复用或任务移动后使用旧位置。
    */
-  private focusEmptyTask(event: PointerEvent): void {
+  private focusEmptyContent(event: PointerEvent): void {
     if (this.view.state.readOnly || this.view.state.facet(modeFacet) !== 'todo'
       || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as Element;
     if (target.closest('button, a')) return;
     const line = target.closest('.cm-line');
     if (!line || !this.view.contentDOM.contains(line)) return;
+    const emptyFrom = line.getAttribute('data-empty-paragraph-from');
+    if (emptyFrom !== null) {
+      const layout = paragraphLayout(this.view.state);
+      const paragraph = layout.paragraphs[paragraphAt(layout, Number(emptyFrom))];
+      if (paragraph?.kind === 'empty') {
+        event.preventDefault(); this.cancel();
+        this.view.state.facet(actionsFacet).focusAt(paragraph.contentFrom);
+        return;
+      }
+    }
     const checkbox = line.querySelector<HTMLElement>('[role=checkbox][data-list-marker]');
     if (!checkbox || event.clientX < checkbox.getBoundingClientRect().right) return;
     const from = Number(checkbox.dataset.listMarker);

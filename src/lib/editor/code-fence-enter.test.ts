@@ -6,6 +6,7 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { afterEach, describe, expect, it } from 'vitest';
 import { codeFenceEnter, taskKeymap } from './commands';
 import { EditorController, type EditorOptions } from './index';
+import { paragraphLayout } from './paragraphs';
 
 // jsdom 无布局能力；事务测试不依赖几何信息。
 Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
@@ -25,13 +26,19 @@ describe('代码围栏自动闭合', () => {
   it('真实 Enter 键先执行围栏命令，并保留任务正文缩进', () => {
     const instance = editor('- [ ] 示例\n  ```js');
     instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    expect(instance.text).toBe('- [ ] 示例\n  ```js\n  \n  ```');
+    expect(instance.text).toBe('- [ ] 示例\n  ```js\n  \n  ```\n\n  ');
     expect(instance.state.doc.lineAt(instance.state.selection.main.head).number).toBe(3);
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    expect(instance.state.selection.main.head).toBe(instance.text.length);
+    expect(paragraphLayout(instance.state).paragraphs.at(-1)).toMatchObject({ kind: 'empty', indent: '  ' });
+    const at = instance.state.selection.main.head;
+    instance.view.dispatch({ changes: { from: at, insert: '后续' }, selection: { anchor: at + 2 }, userEvent: 'input.type' });
+    expect(instance.text).toBe('- [ ] 示例\n  ```js\n  \n  ```\n\n  后续');
   });
   it.each(['todo', 'source'] as const)('%s 模式回车补齐代码行与闭围栏，单次撤销恢复开围栏', mode => {
     const instance = editor('```typescript', mode);
     expect(taskKeymap.find(binding => binding.key === 'Enter')!.run!(instance.view)).toBe(true);
-    expect(instance.text).toBe('```typescript\n\n```');
+    expect(instance.text).toBe('```typescript\n\n```' + (mode === 'todo' ? '\n\n' : ''));
     expect(instance.state.selection.main.head).toBe('```typescript\n'.length);
     expect(instance.undo()).toBe(true);
     expect(instance.text).toBe('```typescript');
@@ -40,13 +47,14 @@ describe('代码围栏自动闭合', () => {
     const instance = editor(opening);
     expect(codeFenceEnter(instance.view)).toBe(true);
     const marker = opening.trim().match(/^(`+|~+)/)![0];
-    expect(instance.text).toBe(`${opening}\n  \n  ${marker}`);
+    expect(instance.text).toBe(`${opening}\n  \n  ${marker}\n\n  `);
     expect(instance.state.selection.main.head).toBe(opening.length + 3);
+    expect(paragraphLayout(instance.state).paragraphs.at(-1)).toMatchObject({ kind: 'empty', contentFrom: instance.text.length });
   });
   it('CRLF 输入规范化后使用 CodeMirror 文档坐标定位光标', () => {
     const instance = editor('正文\r\n\r\n```');
     expect(codeFenceEnter(instance.view)).toBe(true);
-    expect(instance.text).toBe('正文\n\n```\n\n```');
+    expect(instance.text).toBe('正文\n\n```\n\n```\n\n');
     expect(instance.state.doc.lineAt(instance.state.selection.main.head).number).toBe(4);
     expect(instance.state.selection.main.head).toBe('正文\n\n```\n'.length);
   });

@@ -13,6 +13,8 @@ import { previewWindowField } from './viewport';
 import type { EditorOptions } from './types';
 import { CodeLanguageWidget } from './code-language';
 import { paragraphLayout } from './paragraphs';
+import { activateFencedBlock, fencedBlocks, pendingFencedBlock } from './fenced-blocks';
+import { removeEmptyFencedBlock } from './fenced-block-editing';
 
 /** 共享行内排版只依赖源文和资源端口；无 focusAt 时生成可嵌入整行按钮的只读内容。 */
 interface InlineContext {
@@ -82,23 +84,23 @@ class NoteWidget extends WidgetType {
 
 /** 已闭合但没有正文行的围栏显示空框；用户首次激活时才插入可编辑空行，读取预览不改写文件。 */
 class EmptyCodeWidget extends WidgetType {
-  constructor(readonly from: number) { super(); }
-  eq(other: EmptyCodeWidget): boolean { return this.from === other.from; }
+  constructor(readonly from: number, readonly kind: 'code' | 'math' = 'code') { super(); }
+  eq(other: EmptyCodeWidget): boolean { return this.from === other.from && this.kind === other.kind; }
   toDOM(view: EditorView): HTMLElement {
     const element = document.createElement('div');
-    element.className = 'fm-code-line fm-code-start fm-code-end fm-empty-code';
-    element.setAttribute('aria-label', '空代码块');
+    element.className = `fm-code-line fm-code-start fm-code-end fm-empty-code${this.kind === 'math' ? ' fm-math-edit-line' : ''}`;
+    element.setAttribute('aria-label', this.kind === 'math' ? '空公式块' : '空代码块');
     if (view.state.readOnly) return element;
     element.tabIndex = 0; element.setAttribute('role', 'button');
     const activate = (event: Event): void => {
       event.preventDefault();
-      const line = view.state.doc.lineAt(this.from);
-      const prefix = line.text.slice(0, this.from - line.from);
-      view.dispatch({ changes: { from: line.to, insert: `\n${prefix}` }, selection: { anchor: line.to + 1 + prefix.length }, userEvent: 'input' });
-      view.focus();
+      activateFencedBlock(view, this.from);
     };
     element.addEventListener('mousedown', activate);
-    element.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') activate(event); });
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') activate(event);
+      if (event.key === 'Backspace' && removeEmptyFencedBlock(view, this.from)) event.preventDefault();
+    });
     return element;
   }
   ignoreEvent(): boolean { return true; }
@@ -130,9 +132,31 @@ class IndentedWidget extends WidgetType {
 
 const mathCache = new Map<string, string>();
 class MathWidget extends WidgetType {
-  constructor(readonly expression: string, readonly block: boolean, readonly from: number, readonly valid: boolean) { super(); }
-  eq(other: MathWidget): boolean { return this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid; }
-  toDOM(view: EditorView): HTMLElement { return this.render(inlineContext(view)); }
+  constructor(readonly expression: string, readonly block: boolean, readonly from: number, readonly valid: boolean, readonly source = '') { super(); }
+  eq(other: MathWidget): boolean { return this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid && this.source === other.source; }
+  toDOM(view: EditorView): HTMLElement {
+    const context = inlineContext(view);
+    if (this.block) context.focusAt = () => { activateFencedBlock(view, this.from); };
+    const rendered = this.render(context);
+    if (!this.block) return rendered;
+    const block = fencedBlocks(view.state).find(block => block.nodeFrom === this.from);
+    if (!block) return rendered;
+    const frame = document.createElement('div');
+    frame.className = 'fm-math-frame';
+    // 用不可见的正文副本保留编辑态行高和自动折行；公式排版不参与文档高度计算。
+    // 高公式在同一视口内滚动，不能在离开编辑态时推动后续段落。
+    const source = view.state.sliceDoc(block.bodyFrom, block.bodyTo).split('\n');
+    source.forEach((text, index) => {
+      const line = document.createElement('div');
+      line.className = `fm-math-size-line${index === 0 ? ' fm-code-start' : ''}${index === source.length - 1 ? ' fm-code-end' : ''}`;
+      line.setAttribute('aria-hidden', 'true');
+      line.textContent = text.startsWith(block.indent) ? text.slice(block.indent.length) : text;
+      if (!line.textContent) line.append(document.createElement('br'));
+      frame.append(line);
+    });
+    frame.append(rendered);
+    return frame;
+  }
   render(context: InlineContext): HTMLElement {
     const element = document.createElement(this.block ? 'div' : 'span');
     element.className = this.block ? 'fm-math-block' : 'fm-math-inline';
@@ -460,8 +484,12 @@ function buildPreview(state: EditorState): DecorationSet {
   }
   // 空正文及空续行尚不一定进入 ListItem.to；沿共享段落归属布局，输入首字不会再触发横移。
   const paragraphs = paragraphLayout(state);
+  const editableBlocks = new Map(fencedBlocks(state).map(block => [block.nodeFrom, block]));
   for (const paragraph of paragraphs.paragraphs) {
     if (paragraph.from > window.to) break;
+    if (paragraph.kind === 'empty' && paragraph.to >= window.from && !overlapsHidden(paragraph.from, paragraph.to + 1)) {
+      ranges.push(Decoration.line({ attributes: { 'data-empty-paragraph-from': String(paragraph.from) } }).range(paragraph.from));
+    }
     if (!paragraph.item || paragraph.kind === 'literal' || paragraph.to < window.from) continue;
     const first = state.doc.lineAt(Math.max(paragraph.from, window.from)).number;
     const last = state.doc.lineAt(Math.min(paragraph.to, window.to)).number;
@@ -476,15 +504,18 @@ function buildPreview(state: EditorState): DecorationSet {
     }
   }
   const replacedBlocks: { from: number; to: number }[] = [];
-  const blockReplacement = (node: SyntaxNode, widget: WidgetType): void => {
+  const blockReplacement = (node: SyntaxNode, widget: WidgetType, includeLineBreak = false): void => {
     const line = state.doc.lineAt(node.from);
     // 吃掉缩进空白所在的整行，避免在块控件前残留一个有行高的文本片段。
     // 同行存在列表标记时保留该片段，任务控件仍必须可操作。
     const from = /^[ \t]*$/.test(model.text.slice(line.from, node.from)) ? line.from : node.from;
     if (overlapsHidden(from, node.to)) return;
     const margin = layout.get(line.from)?.margin ?? '';
-    ranges.push(Decoration.replace({ widget: new IndentedWidget(widget, margin), block: true }).range(from, node.to));
-    replacedBlocks.push({ from, to: node.to });
+    // 公式整体替换需包含闭围栏后的换行，否则块控件与段落分隔之间会残留空文本行。
+    const separator = includeLineBreak ? paragraphs.separators.find(separator => separator.from === node.to) : undefined;
+    const to = includeLineBreak && state.doc.lineAt(node.to).to === node.to ? Math.min((separator?.blankTo ?? node.to) + 1, state.doc.length) : node.to;
+    ranges.push(Decoration.replace({ widget: new IndentedWidget(widget, margin), block: true, inclusiveEnd: false }).range(from, to));
+    replacedBlocks.push({ from, to });
   };
   const spacedLines = new Set<number>();
   const separateBlock = (node: SyntaxNode): void => {
@@ -507,6 +538,8 @@ function buildPreview(state: EditorState): DecorationSet {
     if (node.to < window.from || node.from > window.to) return;
     const hiddenRange = overlappingRange(node.from, node.to);
     if (hiddenRange && node.from >= hiddenRange.from && node.to <= hiddenRange.to) return;
+    const pending = editableBlocks.get(node.from);
+    if ((node.name === 'FencedCode' || node.name === 'MathBlock') && pending && pendingFencedBlock(state, pending)) return;
     separateBlock(node);
     const name = node.name;
     const source = model.text.slice(node.from, node.to);
@@ -544,15 +577,36 @@ function buildPreview(state: EditorState): DecorationSet {
       // 链接内部 URL 属于同一个编辑结构，不能在其源码露出时再单独替换目标字符串。
       if (name !== 'URL') return;
     }
-    if (name === 'MathBlock' || name === 'InlineMath' || name === 'InlineMathUnclosed') {
+    if (name === 'MathBlock') {
+      const block = editableBlocks.get(node.from);
+      if (!block || overlapsHidden(node.from, node.to)) return;
+      if (pendingFencedBlock(state, block)) return;
+      if (!editing && block.hasBody) {
+        const expression = model.text.slice(block.bodyFrom, block.bodyTo).trim();
+        blockReplacement(node, expression ? new MathWidget(expression, true, node.from, block.closed, source) : new EmptyCodeWidget(node.from, 'math'), true);
+        return;
+      }
+      if (!block.hasBody) {
+        if (block.closed) blockReplacement(node, new EmptyCodeWidget(node.from, 'math'));
+        return;
+      }
+      for (const mark of block.marks) {
+        if (mark.wholeLine) lineStyle(mark.from, 'fm-code-fence');
+        hide(mark.from, mark.to);
+      }
+      const first = state.doc.lineAt(block.bodyFrom).number, last = state.doc.lineAt(block.bodyTo).number;
+      for (let number = first; number <= last; number++) {
+        lineStyle(state.doc.line(number).from, `fm-code-line fm-math-edit-line${number === first ? ' fm-code-start' : ''}${number === last ? ' fm-code-end' : ''}`);
+      }
+      return;
+    }
+    if (name === 'InlineMath' || name === 'InlineMathUnclosed') {
       if (name === 'InlineMathUnclosed' && editing && !overlapsHidden(node.from, node.to)) ranges.push(Decoration.mark({ class: 'fm-math-error', attributes: { title: '公式尚未闭合，请补充 $' } }).range(node.from, node.to));
       if (!editing && !overlapsHidden(node.from, node.to)) {
-        const block = name === 'MathBlock'; const delimiter = block ? '$$' : '$';
+        const delimiter = '$';
         const trimmed = source.trim(); const valid = name !== 'InlineMathUnclosed' && trimmed.length > delimiter.length && trimmed.endsWith(delimiter);
         const expression = trimmed.slice(delimiter.length, valid ? -delimiter.length : undefined).trim();
-        const widget = new MathWidget(expression, block, node.from, valid);
-        if (block) blockReplacement(node, widget);
-        else ranges.push(Decoration.replace({ widget }).range(node.from, node.to));
+        ranges.push(Decoration.replace({ widget: new MathWidget(expression, false, node.from, valid) }).range(node.from, node.to));
       }
       return;
     }
@@ -563,18 +617,17 @@ function buildPreview(state: EditorState): DecorationSet {
       let firstLine = state.doc.lineAt(node.from).number;
       let lastLine = state.doc.lineAt(node.to).number;
       // 代码正文直接使用原编辑器行；进入编辑也不展开围栏，完整源码模式在入口统一跳过预览。
-      const fenceLines = name === 'FencedCode' ? node.getChildren('CodeMark').map(mark => state.doc.lineAt(mark.from).number) : [];
-      const visibleLines = lastLine - firstLine + 1 - fenceLines.length;
-      const emptyClosed = visibleLines === 0 && fenceLines.length === 2;
-      if (visibleLines > 0) {
+      const sharedBlock = editableBlocks.get(node.from);
+      if (name === 'FencedCode' && sharedBlock && pendingFencedBlock(state, sharedBlock)) return;
+      const emptyClosed = !!sharedBlock?.closed && !sharedBlock.hasBody;
+      if (sharedBlock?.hasBody) {
         // 围栏单独作为零高行隐藏，不能替换到下一行起点；否则 CodeMirror 会吞掉代码首行的行装饰。
-        for (const number of fenceLines) {
-          const line = state.doc.line(number);
-          lineStyle(line.from, 'fm-code-fence');
-          hide(line.from, line.to);
+        for (const mark of sharedBlock.marks) {
+          if (mark.wholeLine) lineStyle(mark.from, 'fm-code-fence');
+          hide(mark.from, mark.to);
         }
-        if (fenceLines.includes(firstLine)) firstLine++;
-        if (fenceLines.includes(lastLine)) lastLine--;
+        firstLine = state.doc.lineAt(sharedBlock.bodyFrom).number;
+        lastLine = state.doc.lineAt(sharedBlock.bodyTo).number;
       }
       if (emptyClosed) {
         blockReplacement(node, new EmptyCodeWidget(node.from));
@@ -583,12 +636,14 @@ function buildPreview(state: EditorState): DecorationSet {
           lineStyle(state.doc.line(number).from, `fm-code-line${number === firstLine ? ' fm-code-start' : ''}${number === lastLine ? ' fm-code-end' : ''}`);
         }
       }
-      if (name === 'FencedCode' && editing && (visibleLines > 0 || emptyClosed)) {
+      if (name === 'FencedCode' && editing && (sharedBlock?.hasBody || emptyClosed)) {
         const info = node.getChild('CodeInfo');
         const language = info ? model.text.slice(info.from, info.to).match(/^\S*/)?.[0] ?? '' : '';
         if (!overlapsHidden(node.from, node.to)) {
-          // 使用独立块控件排在闭围栏之后，语言标记不占用代码边框内部或覆盖最后一行。
-          ranges.push(Decoration.widget({ widget: new CodeLanguageWidget(node.from, language), block: true, side: 1 }).range(node.to));
+          // 零高控件锚定闭围栏行前，浮在后续文字上方；不能放在行末分隔替换之后，
+          // 否则 CodeMirror 会为两种块边界之间的空片段生成一条额外文本行。
+          const anchor = sharedBlock?.closed ? state.doc.lineAt(node.to).from : Math.min(node.to + 1, state.doc.length);
+          ranges.push(Decoration.widget({ widget: new CodeLanguageWidget(node.from, language), block: true, side: -1 }).range(anchor));
         }
       }
       return;

@@ -38,13 +38,14 @@ export function setCodeLanguage(view: EditorView, from: number, language: string
 }
 
 /**
- * 结构职责：仅在编辑代码块时于框外右下方呈现语言输入。
+ * 结构职责：仅在编辑代码块时于框外右下方覆盖呈现语言输入，不占用后续正文行高。
  * 字段说明：from 和 language 来自同一围栏快照，用于控件复用及提交定位。
  * 约束条件：有效输入即时写回，连续输入可合并撤销；Enter 返回正文，Escape 恢复进入输入框时的语言。
  */
 export class CodeLanguageWidget extends WidgetType {
   constructor(readonly from: number, readonly language: string) { super(); }
   eq(other: CodeLanguageWidget): boolean { return this.from === other.from && this.language === other.language; }
+  get estimatedHeight(): number { return 0; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'fm-code-language';

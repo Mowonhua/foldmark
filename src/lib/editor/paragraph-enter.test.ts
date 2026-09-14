@@ -37,7 +37,7 @@ it('左右移动跳过隐藏分隔，退格一次合并段落', () => {
 });
 it('代码正文空行保留且 Enter 仍为单换行', () => {
   editor('```\na\n\nb\n```'); instance.focusAt(5); key('Enter');
-  expect(instance.text).toBe('```\na\n\n\nb\n```');
+  expect(instance.text).toBe('```\na\n\n\nb\n```\n\n');
   expect(instance.view.contentDOM.querySelectorAll('.fm-code-line')).toHaveLength(4);
 });
 it('连续 Enter 每次增加一个可输入行，空文档也可继续输入', () => {

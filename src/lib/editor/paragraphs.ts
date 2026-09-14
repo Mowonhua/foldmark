@@ -85,7 +85,9 @@ export function paragraphLayout(state: EditorState): ParagraphLayout {
   let needsParagraph = true;
   for (let number = 1; number <= doc.lines;) {
     const line = doc.line(number);
-    while (owners.length && owners.at(-1)!.moveTo <= line.from) owners.pop();
+    // AST 不把尾部空白纳入列表范围；空行仍可沿缩进承载该列表的待输入正文。
+    // 直到遇到真实的外部正文或新条目才放弃容器，避免输入首字时横向位置发生变化。
+    while (owners.length && owners.at(-1)!.moveTo <= line.from && line.text.trim()) owners.pop();
     while (itemIndex < model.items.length && model.items[itemIndex].from <= line.to) {
       const item = model.items[itemIndex++];
       while (owners.length && owners.at(-1)!.to < item.from) owners.pop();

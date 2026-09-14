@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { EditorController } from './index';
 import { setCodeLanguage } from './code-language';
+import { paragraphLayout } from './paragraphs';
 
 Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
@@ -45,8 +46,13 @@ describe('代码围栏编辑边界', () => {
   });
   it('单独开围栏可继续输入并回车自动闭合', () => {
     const instance = editor('```'); instance.focusAt(3); key(instance, 'Enter');
-    expect(instance.text).toBe('```\n\n```'); expect(instance.state.selection.main.head).toBe(4);
-    key(instance, 'Backspace'); expect(instance.text).toBe('```\n\n```');
+    expect(instance.text).toBe('```\n\n```\n\n'); expect(instance.state.selection.main.head).toBe(4);
+    key(instance, 'ArrowRight'); expect(instance.state.selection.main.head).toBe(instance.text.length);
+    key(instance, 'ArrowLeft'); expect(instance.state.selection.main.head).toBe(4);
+    key(instance, 'Backspace'); expect(instance.text).toBe('');
+    expect(paragraphLayout(instance.state).paragraphs).toMatchObject([{ kind: 'empty', contentFrom: 0 }]);
+    instance.view.dispatch({ changes: { from: 0, insert: '块外正文' }, userEvent: 'input.type' });
+    expect(instance.text).toBe('块外正文');
   });
   it('语言更新、撤销、粘贴事务和显式范围删除正常生效', () => {
     const instance = editor('```\nhello\n```'); instance.focusAt(4);
