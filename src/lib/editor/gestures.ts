@@ -1,6 +1,6 @@
 /**
- * 文件职责：管理列表原标记上的单击、拖动、取消与自动滚动。
- * 定义范围：指针状态机和同列表可见插入边界，不直接修改正文。
+ * 文件职责：管理列表标记手势及空任务正文的指针定位。
+ * 定义范围：指针状态机、正文焦点和同列表可见插入边界，不直接修改正文。
  */
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { getHiddenRanges } from '../markdown';
@@ -42,7 +42,8 @@ class MarkerGestures {
   private down = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
-    if (!marker || !this.view.dom.contains(marker)) return;
+    if (!marker) { this.focusEmptyTask(event); return; }
+    if (!this.view.dom.contains(marker)) return;
     event.preventDefault();
     const from = Number(marker.dataset.listMarker);
     const recent = this.lastClick;
@@ -54,6 +55,27 @@ class MarkerGestures {
     // 捕获保证拖出窗口后仍可收尾；无真实活动指针的测试事件允许回退到 window 监听。
     try { marker.setPointerCapture?.(event.pointerId); } catch { /* 浏览器拒绝非活动指针时，现有全局取消路径仍有效。 */ }
   };
+  /**
+   * 空任务的整行源码被标记控件替换，浏览器可能把右侧空白命中到后面的隐藏分隔。
+   * 在指针捕获阶段直接定位正文端点，同时覆盖控件列内空白；按钮和修饰键交回原有手势。
+   * 每次从当前模型读取坐标，避免控件复用或任务移动后使用旧位置。
+   */
+  private focusEmptyTask(event: PointerEvent): void {
+    if (this.view.state.readOnly || this.view.state.facet(modeFacet) !== 'todo'
+      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target as Element;
+    if (target.closest('button, a')) return;
+    const line = target.closest('.cm-line');
+    if (!line || !this.view.contentDOM.contains(line)) return;
+    const checkbox = line.querySelector<HTMLElement>('[role=checkbox][data-list-marker]');
+    if (!checkbox || event.clientX < checkbox.getBoundingClientRect().right) return;
+    const from = Number(checkbox.dataset.listMarker);
+    const item = this.view.state.field(documentField).tasks.find(item => item.from === from);
+    if (!item || item.contentFrom !== item.firstLineTo) return;
+    event.preventDefault();
+    this.cancel();
+    this.view.state.facet(actionsFacet).focusAt(item.contentFrom);
+  }
   private move = (event: PointerEvent): void => {
     const session = this.session;
     if (!session || event.pointerId !== session.pointerId) return;
