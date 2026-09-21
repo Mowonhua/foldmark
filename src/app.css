@@ -24,11 +24,13 @@ p{line-height:1.85}
 button svg{flex-shrink:0}
 /* 品牌区与工具栏共用高度，确保折叠按钮在桌面及窄屏布局中始终同轴。 */
 /* 窗口变窄只减少内容可用宽度；保持控件字号与留白稳定，避免跨断点时整片界面跳动。 */
-.app-shell{--topbar-height:67px;display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden}
-.app-shell.sidebar-hidden{grid-template-columns:1fr}
+.app-shell{--topbar-height:67px;display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden;transition:grid-template-columns .18s cubic-bezier(.215,.61,.355,1)}
+.app-shell.sidebar-hidden{grid-template-columns:0px minmax(0,1fr)}
+.app-shell.card-transitioning{transition:none}
+.sidebar-slot{grid-area:1 / 1;min-width:0;overflow:hidden}
 /* 窗口操作共用现有工具栏；弹窗从工具栏下方遮罩，保留窗口控制入口。 */
 body:has(.desktop-window) .modal-backdrop{top:54px}
-.sidebar{background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:0 16px 12px;min-height:0}
+.sidebar{width:232px;height:100%;background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:0 16px 12px;min-height:0}
 .brand{display:flex;align-items:center;gap:9px;height:var(--topbar-height);flex-shrink:0;margin-bottom:21px;padding:0 9px;border-bottom:1px solid transparent;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
 .brand>svg{flex-shrink:0}
@@ -57,7 +59,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .project-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
 .sidebar-bottom .icon-button{margin-left:auto;font-size:18px}
-.main-pane{min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.main-pane{grid-area:1 / 2;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .topbar{height:var(--topbar-height);min-height:var(--topbar-height);display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--divider-color,var(--line));gap:15px}
 .breadcrumb{display:flex;align-items:center;gap:13px;font-size:12px;white-space:nowrap;overflow:hidden}
 .crumb-label,.crumb-divider{color:var(--muted)}

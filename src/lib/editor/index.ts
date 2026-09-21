@@ -18,6 +18,7 @@ import { markerGestures } from './gestures';
 import { draftFencedBlocksField, draftFencedBlockHistory } from './fenced-block-state';
 import { taskKeymap } from './commands';
 import { contentVisibility } from './visibility';
+import { foldMotion } from './fold-motion';
 import { codeSelection } from './selection';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
@@ -85,7 +86,7 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures,
+      documentField, foldsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures, foldMotion,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       placeholder('写下第一件事，或输入 - [ ] 创建任务…'),
@@ -294,7 +295,9 @@ export class EditorController {
     if (willFold) folds.add(itemFrom); else folds.delete(itemFrom);
     const selection = this.state.selection.main;
     const intersects = selection.to > item.firstLineTo && selection.from < item.to;
-    this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
+    const change = () => this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
+    const motion = this.view.plugin(foldMotion);
+    if (motion) motion.run(change); else change();
   }
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };

@@ -42,6 +42,8 @@
 .fm-list-marker { border: none; background: transparent; min-width: 15px; height: 20px; font-size: 1em; }
 .fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
+.fm-fold-summary { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 18px; margin-left: 5px; padding: 0; border: 0; border-radius: var(--control-radius, 4px); background: transparent; opacity: .7; line-height: 1; vertical-align: middle; }
+.fm-fold-summary:hover, .fm-fold-summary:focus-visible { background: var(--hover); opacity: 1; }
 .fm-math-block { overflow-x: auto; text-align: center; padding: 10px 0; cursor: text; }
 .fm-math-frame { position: relative; }
 .fm-math-size-line { visibility: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }

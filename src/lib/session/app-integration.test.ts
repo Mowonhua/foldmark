@@ -589,7 +589,7 @@ describe('App 卡片模式', () => {
     await vi.waitFor(() => expect(button('退出卡片模式').getAttribute('aria-pressed')).toBe('true'));
     expect(document.querySelector('.app-shell.card-mode')).not.toBeNull();
     expect(document.querySelector('header.topbar')).toBeNull();
-    expect(document.querySelector('aside.sidebar')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('aside.sidebar')).toBeNull());
     expect(document.querySelector('.viewbar')).toBeNull();
     expect(button('退出卡片模式')).toBe(control);
     expect(documentInput()).toBe(editor);

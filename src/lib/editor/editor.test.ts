@@ -170,6 +170,20 @@ describe('唯一文档编辑事务', () => {
     expect(instance.state.field(foldsField).size).toBe(0);
     expect(instance.undo()).toBe(false);
   });
+  it('折叠省略号提供独立展开按钮且不改写正文', () => {
+    const source = '- [ ] 标题含普通省略号…\n  正文';
+    const instance = editor(source);
+    instance.toggleFold(0);
+    const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
+    expect(summary.textContent).toBe('');
+    expect(summary.querySelectorAll('svg circle')).toHaveLength(3);
+    expect(summary.getAttribute('aria-label')).toBe('展开折叠内容');
+    summary.click();
+    expect(instance.state.field(foldsField).size).toBe(0);
+    expect(instance.view.dom.querySelector('.fm-fold-summary')).toBeNull();
+    expect(instance.text).toBe(source);
+    expect(instance.undo()).toBe(false);
+  });
   it('归档只读但允许键盘恢复任务，恢复后回到原文位置', () => {
     const instance = editor('- [x] 完成\n- [ ] 待办');
     instance.setMode('archive');

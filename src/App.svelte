@@ -1,6 +1,8 @@
 <script lang="ts">
   /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
   import { onMount, tick } from 'svelte';
+  import { fly } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import WindowControls from './lib/WindowControls.svelte';
   import UpdatePanel from './lib/UpdatePanel.svelte';
   import { UpdateCoordinator } from './lib/updater/update-coordinator';
@@ -44,6 +46,7 @@
   let version = $state(0);
   let screen = $state<'project' | 'all'>('project');
   let sidebar = $state(true);
+  let reducedMotion = $state(false);
   // 卡片仅改变当前窗口布局，不写入项目配置；原侧栏状态和编辑器实例保留供退出恢复。
   let cardMode = $state(false);
   let cardTransitioning = $state(false);
@@ -600,6 +603,9 @@
   }
 
   onMount(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotionPreference = () => { reducedMotion = motionPreference.matches; };
+    updateMotionPreference(); motionPreference.addEventListener('change', updateMotionPreference);
     const colorPreference = window.matchMedia('(prefers-color-scheme: dark)');
     const updateSystemTheme = () => { systemDark = colorPreference.matches; };
     updateSystemTheme(); colorPreference.addEventListener('change', updateSystemTheme);
@@ -651,6 +657,7 @@
     const focus = () => { for (const session of sessions.values()) void session.saver.checkExternal(); };
     window.addEventListener('beforeunload', beforeUnload); window.addEventListener('focus', focus);
     return () => {
+      motionPreference.removeEventListener('change', updateMotionPreference);
       colorPreference.removeEventListener('change', updateSystemTheme);
       disposed = true; unlistenClose(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
       clearTimeout(searchTimer); clearTimeout(configTimer); clearTimeout(toastTimer);
@@ -662,10 +669,12 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
-<div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning}>
+<div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning}>
 
   {#if sidebar && !cardMode}
-    <aside class="sidebar" aria-label="项目导航">
+    <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
+    <div class="sidebar-slot">
+    <aside class="sidebar" aria-label="项目导航" inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
       <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
       <div class="sidebar-section"><span>项目</span><div class="project-actions">
@@ -690,6 +699,7 @@
       </nav>
       <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
     </aside>
+    </div>
   {/if}
 
   <main class="main-pane">

@@ -76,7 +76,16 @@ class NoteWidget extends WidgetType {
     const element = document.createElement(this.from === null ? 'span' : 'button');
     element.className = 'fm-hidden-note';
     element.textContent = this.label;
-    if (this.from !== null) element.addEventListener('click', () => view.state.facet(actionsFacet).toggleFold(this.from!));
+    if (this.from !== null) {
+      element.classList.add('fm-fold-summary');
+      // 使用居中图标而非正文的基线省略号，保持紧凑并明确这是可展开控件。
+      element.innerHTML = '<svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true"><circle cx="3" cy="6" r="1"/><circle cx="7" cy="6" r="1"/><circle cx="11" cy="6" r="1"/></svg>';
+      element.setAttribute('type', 'button');
+      element.setAttribute('aria-label', '展开折叠内容');
+      element.setAttribute('aria-expanded', 'false');
+      element.title = '展开折叠内容';
+      element.addEventListener('click', () => view.state.facet(actionsFacet).toggleFold(this.from!));
+    }
     return element;
   }
   ignoreEvent(): boolean { return true; }
@@ -424,7 +433,7 @@ function buildPreview(state: EditorState): DecorationSet {
   const merged: PreviewStructure['hidden'] = cached?.hidden ?? [];
   if (!cached) {
     for (const range of hiddenContentRanges(state)) {
-      const widget = range.kind === 'fold' ? new NoteWidget(' … 已折叠',range.itemFrom)
+      const widget = range.kind === 'fold' ? new NoteWidget('…',range.itemFrom)
         : range.itemFrom !== null && range.count ? new NoteWidget(`已完成 ${range.count} 项`) : undefined;
       merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
     }
