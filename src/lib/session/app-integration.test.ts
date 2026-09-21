@@ -24,7 +24,10 @@ const desktopBoundary = vi.hoisted(() => ({
   updateInstall: vi.fn(async () => {}),
   updateDownload: vi.fn(async (_progress: unknown) => {}),
   updateClose: vi.fn(async () => {}),
+  enterCard: vi.fn<() => Promise<void>>(async () => {}),
+  exitCard: vi.fn<() => Promise<void>>(async () => {}),
 }));
+vi.mock('../card-window', () => ({ createCardWindowController: () => ({ enter: desktopBoundary.enterCard, exit: desktopBoundary.exitCard }) }));
 vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path }));
@@ -183,6 +186,8 @@ beforeEach(() => {
   desktopBoundary.updateInstall.mockReset().mockResolvedValue(undefined);
   desktopBoundary.updateDownload.mockReset().mockResolvedValue(undefined);
   desktopBoundary.updateClose.mockReset().mockResolvedValue(undefined);
+  desktopBoundary.enterCard.mockReset().mockResolvedValue(undefined);
+  desktopBoundary.exitCard.mockReset().mockResolvedValue(undefined);
   // Node 的实验性同名全局不代表浏览器存储，固定使用 jsdom 的真实 Storage。
   const browserStorage = (globalThis as unknown as { jsdom: { window: { localStorage: Storage } } }).jsdom.window.localStorage;
   vi.stubGlobal('localStorage', browserStorage);
@@ -480,6 +485,177 @@ describe('App 主题导入与持久化', () => {
     systemDark = false; events.dispatchEvent(new Event('change')); await tick();
     systemDark = true; events.dispatchEvent(new Event('change')); await tick();
     expect(document.documentElement.style.getPropertyValue('--canvas')).toBe('#F8FAFC');
+  });
+});
+
+describe('App 卡片模式', () => {
+  /** 用可控完成点验证可见性事务，避免真实计时或 jsdom 缺少 WAAPI 掩盖调用顺序。 */
+  function controlledAnimation() {
+    let finish!: () => void;
+    let fail!: (error: Error) => void;
+    const finished = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
+    return { finished, finish, fail, cancel: vi.fn() };
+  }
+
+  it('淡出完成后才切换原生窗口，新布局在淡入完成前保持禁止交互', async () => {
+    desktopBoundary.enabled = true;
+    await start(['- [ ] 平滑切换\n']);
+    const shell = document.querySelector<HTMLElement>('.app-shell')!;
+    for (const entering of [true, false]) {
+      const fadeOut = controlledAnimation();
+      const fadeIn = controlledAnimation();
+      const animate = vi.fn().mockReturnValueOnce(fadeOut).mockReturnValueOnce(fadeIn);
+      Object.defineProperty(shell, 'animate', { value: animate, configurable: true });
+      const native = entering ? desktopBoundary.enterCard : desktopBoundary.exitCard;
+      const nativePending = controlledAnimation();
+      native.mockReturnValueOnce(nativePending.finished);
+      const control = button(entering ? '进入卡片模式' : '退出卡片模式');
+      try {
+        control.click(); control.click(); await tick();
+        expect(animate).toHaveBeenCalledOnce();
+        expect(native).not.toHaveBeenCalled();
+        expect(shell.inert).toBe(true);
+        expect(shell.classList.contains('card-mode')).toBe(!entering);
+
+        fadeOut.finish();
+        await vi.waitFor(() => expect(native).toHaveBeenCalledWith({ animate: true }));
+        expect(native).toHaveBeenCalledOnce();
+        expect(fadeOut.cancel).not.toHaveBeenCalled();
+        expect(animate).toHaveBeenCalledOnce();
+        expect(shell.classList.contains('card-mode')).toBe(!entering);
+
+        nativePending.finish();
+        await vi.waitFor(() => expect(animate).toHaveBeenCalledTimes(2));
+        expect(fadeOut.cancel).toHaveBeenCalledOnce();
+        expect(shell.classList.contains('card-mode')).toBe(entering);
+        expect(shell.inert).toBe(true);
+        expect(control.disabled).toBe(true);
+        expect(fadeIn.cancel).not.toHaveBeenCalled();
+      } finally { fadeOut.finish(); nativePending.finish(); fadeIn.finish(); }
+      await vi.waitFor(() => expect(shell.inert).toBe(false));
+      expect(control.disabled).toBe(false);
+      expect(fadeIn.cancel).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each(['淡出', '原生'] as const)('%s失败时清理透明动画并恢复交互，保留原模式', async stage => {
+    desktopBoundary.enabled = true;
+    await start(['- [ ] 可恢复的动画失败\n']);
+    const shell = document.querySelector<HTMLElement>('.app-shell')!;
+    const fadeOut = controlledAnimation();
+    const animate = vi.fn().mockReturnValue(fadeOut);
+    Object.defineProperty(shell, 'animate', { value: animate, configurable: true });
+    if (stage === '原生') desktopBoundary.enterCard.mockRejectedValueOnce(new Error('原生切换失败'));
+    button('进入卡片模式').click(); await tick();
+    expect(shell.inert).toBe(true);
+    if (stage === '淡出') fadeOut.fail(new Error('动画已取消'));
+    else fadeOut.finish();
+    await vi.waitFor(() => expect(shell.inert).toBe(false));
+    expect(fadeOut.cancel).toHaveBeenCalledOnce();
+    expect(animate).toHaveBeenCalledOnce();
+    expect(shell.classList.contains('card-mode')).toBe(false);
+    expect(button('进入卡片模式').disabled).toBe(false);
+    expect(desktopBoundary.enterCard).toHaveBeenCalledTimes(stage === '原生' ? 1 : 0);
+  });
+
+  it('减少动态效果时跳过布局动画，并让原生进入和退出跳过动画', async () => {
+    desktopBoundary.enabled = true;
+    const media = window.matchMedia.bind(window);
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ ...media(query), matches: query === '(prefers-reduced-motion: reduce)' }));
+    await start(['- [ ] 减少动态效果\n']);
+    const shell = document.querySelector<HTMLElement>('.app-shell')!;
+    const animate = vi.fn();
+    Object.defineProperty(shell, 'animate', { value: animate, configurable: true });
+    button('进入卡片模式').click();
+    await vi.waitFor(() => expect(button('退出卡片模式').disabled).toBe(false));
+    expect(desktopBoundary.enterCard).toHaveBeenCalledWith({ animate: false });
+    button('退出卡片模式').click();
+    await vi.waitFor(() => expect(button('进入卡片模式').disabled).toBe(false));
+    expect(desktopBoundary.exitCard).toHaveBeenCalledWith({ animate: false });
+    expect(animate).not.toHaveBeenCalled();
+    expect(shell.inert).toBe(false);
+  });
+
+  it('源码按钮右侧的同一按钮切换卡片布局，保留编辑器与编辑保存能力', async () => {
+    await start(['- [ ] 原任务\n']);
+    const editor = documentInput();
+    const control = button('进入卡片模式');
+    expect(control.closest('.statusbar-actions')).not.toBeNull();
+    expect(button('查看源码').compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(control.querySelector('svg')).not.toBeNull();
+    expect(control.getAttribute('aria-pressed')).toBe('false');
+
+    control.click(); await tick();
+    await vi.waitFor(() => expect(button('退出卡片模式').getAttribute('aria-pressed')).toBe('true'));
+    expect(document.querySelector('.app-shell.card-mode')).not.toBeNull();
+    expect(document.querySelector('header.topbar')).toBeNull();
+    expect(document.querySelector('aside.sidebar')).toBeNull();
+    expect(document.querySelector('.viewbar')).toBeNull();
+    expect(button('退出卡片模式')).toBe(control);
+    expect(documentInput()).toBe(editor);
+    expect(editor.getAttribute('contenteditable')).toBe('true');
+    expect(control.closest('footer')).not.toBeNull();
+    await paste('卡片中新增正文');
+    await vi.waitFor(async () => expect((await files.read(firstProject.path)).text).toContain('卡片中新增正文'));
+
+    control.click(); await tick();
+    await vi.waitFor(() => expect(button('进入卡片模式').getAttribute('aria-pressed')).toBe('false'));
+    expect(document.querySelector('.app-shell.card-mode')).toBeNull();
+    expect(document.querySelector('header.topbar')).not.toBeNull();
+    expect(document.querySelector('aside.sidebar')).not.toBeNull();
+    expect(document.querySelector('.viewbar')).not.toBeNull();
+    expect(documentInput()).toBe(editor);
+    expect(editor.textContent).toContain('卡片中新增正文');
+    expect(desktopBoundary.enterCard).not.toHaveBeenCalled();
+    expect(desktopBoundary.exitCard).not.toHaveBeenCalled();
+  });
+
+  it('原生进入或退出失败保留原模式，并允许用户重试', async () => {
+    desktopBoundary.enabled = true;
+    await start(['- [ ] 桌面任务\n']);
+    desktopBoundary.enterCard.mockRejectedValueOnce(new Error('进入卡片失败'));
+    button('进入卡片模式').click();
+    await vi.waitFor(() => expect(desktopBoundary.enterCard).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('进入卡片模式').disabled).toBe(false));
+    expect(document.querySelector('.app-shell.card-mode')).toBeNull();
+
+    button('进入卡片模式').click();
+    await vi.waitFor(() => expect(button('退出卡片模式').disabled).toBe(false));
+    expect(document.querySelector('.app-shell.card-mode')).not.toBeNull();
+    desktopBoundary.exitCard.mockRejectedValueOnce(new Error('退出卡片失败'));
+    button('退出卡片模式').click();
+    await vi.waitFor(() => expect(desktopBoundary.exitCard).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('退出卡片模式').disabled).toBe(false));
+    expect(document.querySelector('.app-shell.card-mode')).not.toBeNull();
+
+    button('退出卡片模式').click();
+    await vi.waitFor(() => expect(button('进入卡片模式').disabled).toBe(false));
+    expect(document.querySelector('.app-shell.card-mode')).toBeNull();
+    expect(desktopBoundary.enterCard).toHaveBeenCalledTimes(2);
+    expect(desktopBoundary.exitCard).toHaveBeenCalledTimes(2);
+  });
+
+  it('窗口切换等待期间禁止重复点击，完成后才更新模式', async () => {
+    desktopBoundary.enabled = true;
+    await start(['- [ ] 异步窗口任务\n']);
+    for (const entering of [true, false]) {
+      let finish!: () => void;
+      const pending = new Promise<void>(resolve => { finish = resolve; });
+      const transition = entering ? desktopBoundary.enterCard : desktopBoundary.exitCard;
+      transition.mockReturnValueOnce(pending);
+      const control = button(entering ? '进入卡片模式' : '退出卡片模式');
+      try {
+        // 连续事件在 Svelte 刷新 disabled 前到达，也只能启动一次窗口事务。
+        control.click(); control.click(); await tick();
+        expect(transition).toHaveBeenCalledOnce();
+        expect(control.disabled).toBe(true);
+        expect(document.querySelector('.app-shell')?.classList.contains('card-mode')).toBe(!entering);
+        control.click();
+        expect(transition).toHaveBeenCalledOnce();
+      } finally { finish(); }
+      await vi.waitFor(() => expect(button(entering ? '退出卡片模式' : '进入卡片模式').disabled).toBe(false));
+      expect(document.querySelector('.app-shell')?.classList.contains('card-mode')).toBe(entering);
+    }
   });
 });
 

@@ -19,6 +19,7 @@
   import { validateAppConfig } from './lib/config-validation';
   import { applyTheme, builtInThemes, parseTheme } from './lib/themes';
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
+  import { createCardWindowController } from './lib/card-window';
 
   const desktop = isTauri();
   const TOAST_DURATION_MS = 3000;
@@ -43,6 +44,56 @@
   let version = $state(0);
   let screen = $state<'project' | 'all'>('project');
   let sidebar = $state(true);
+  // 卡片仅改变当前窗口布局，不写入项目配置；原侧栏状态和编辑器实例保留供退出恢复。
+  let cardMode = $state(false);
+  let cardTransitioning = $state(false);
+  let appShell: HTMLDivElement;
+  const cardWindow = desktop ? createCardWindowController() : undefined;
+
+  /**
+   * 函数职责：切换卡片布局，并在桌面环境同步窗口几何与置顶状态。
+   * 输入说明：同一按钮触发；切换未完成时忽略重复请求，鼠标触发后解除按钮焦点。
+   * 输出说明：原生操作成功后更新布局，失败保留当前入口并展示错误。
+   * 实现思路：先淡出布局，再由窗口控制器切换几何，成功后淡入新布局；减少动态效果时跳过动画。
+   */
+  async function toggleCardMode(event: MouseEvent): Promise<void> {
+    if (cardTransitioning) return;
+    cardTransitioning = true;
+    const button = event.currentTarget as HTMLButtonElement;
+    const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let transition: Animation | undefined;
+    try {
+      if (animate && appShell.animate) {
+        transition = appShell.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, easing: 'ease-out', fill: 'forwards' });
+        await transition.finished;
+      }
+      // 淡出保持到原生几何与新布局均已就绪，避免缩放期间旧侧栏和正文反复重排闪烁。
+      if (cardMode) await cardWindow?.exit({ animate });
+      else await cardWindow?.enter({ animate });
+      cardMode = !cardMode;
+      menuOpen = false;
+      searchOpen = false;
+      await tick();
+      transition?.cancel();
+      if (animate && appShell.animate) {
+        transition = appShell.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out', fill: 'forwards' });
+        await transition.finished;
+      }
+      // 鼠标进入卡片后底栏自动收起；键盘操作保留焦点，便于再次退出。
+      if (event.detail > 0) button.blur();
+    } catch (error) {
+      notify(`卡片模式切换失败：${errorMessage(error)}`);
+    } finally {
+      // 失败或动画取消也必须解除透明状态，确保重试入口不会留在不可见的窗口中。
+      transition?.cancel();
+      cardTransitioning = false;
+      // 原生调用期间 disabled 可能移走焦点；重新启用后恢复键盘退出入口。
+      if (event.detail === 0) {
+        await tick();
+        button.focus({ preventScroll: true });
+      }
+    }
+  }
   let projectFilter = $state('');
   let projectSearchOpen = $state(false);
   let draggedProjectId = $state<string | null>(null);
@@ -611,9 +662,9 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
-<div class="app-shell" class:sidebar-hidden={!sidebar} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling}>
+<div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning}>
 
-  {#if sidebar}
+  {#if sidebar && !cardMode}
     <aside class="sidebar" aria-label="项目导航">
       <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><svg width="27" height="29" viewBox="0 0 27 29" aria-hidden="true"><path d="M5 3h17v5H10v5h10v5H10v8H5z" fill="currentColor"/><path d="m17 22 5-5v9h-9z" fill="currentColor" opacity=".4"/></svg><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
@@ -642,7 +693,12 @@
   {/if}
 
   <main class="main-pane">
+    {#if cardMode}
+      <!-- 拖动区独占顶部留白，不覆盖编辑器；正文滚动后仍可选中文字。 -->
+      <div class="card-drag-region" data-tauri-drag-region={desktop ? true : undefined} aria-hidden="true"></div>
+    {/if}
     <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
+    {#if !cardMode}
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
       <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
       <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
@@ -660,6 +716,7 @@
         <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
       </div>{/if}
     </header>
+    {/if}
 
     {#if searchOpen}
       <section class="search-panel" data-global-search aria-label="跨项目搜索">
@@ -669,7 +726,7 @@
       </section>
     {/if}
 
-    {#if screen === 'project'}
+    {#if screen === 'project' && !cardMode}
       <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive]] as tab}<button class:tab-active={previewMode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
@@ -703,7 +760,15 @@
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
       </section>
     {/if}
-    <footer class="statusbar"><button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button>{#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button></footer>
+    <div class="statusbar-dock">
+      <footer class="statusbar" data-tauri-drag-region={desktop && cardMode ? true : undefined}>
+        <div class="statusbar-actions">
+          <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button>
+          <button class="card-button" aria-label={cardMode ? '退出卡片模式' : '进入卡片模式'} title={cardMode ? '退出卡片模式' : '进入卡片模式'} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
+        </div>
+        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button>
+      </footer>
+    </div>
   </main>
 </div>
 
