@@ -69,9 +69,9 @@
   /* 原生复选框保留焦点与 Space/整行点击语义；轨道只负责视觉，不另建交互状态。 */
   .update-control input {position:absolute;width:1px;height:1px;margin:0;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
   .switch-track {display:block;width:36px;height:22px;position:relative;border:1px solid var(--field-border,var(--line));border-radius:var(--control-radius,12px);background:var(--control-background,var(--surface));box-shadow:var(--field-shadow,none);transition:background .15s,border-color .15s}
-  .switch-thumb {position:absolute;inset:3px auto auto 3px;width:14px;height:14px;border-radius:max(0px,calc(var(--control-radius,12px) - 3px));background:var(--muted);transition:transform .15s,background .15s}
+  .switch-thumb {position:absolute;left:3px;top:50%;width:14px;height:14px;border-radius:max(0px,calc(var(--control-radius,12px) - 3px));background:var(--muted);transform:translateY(-50%);transition:transform .15s,background .15s}
   input:checked + .switch-track {background:var(--accent-soft)}
-  input:checked + .switch-track .switch-thumb {transform:translateX(14px);background:var(--accent)}
+  input:checked + .switch-track .switch-thumb {transform:translate(14px,-50%);background:var(--accent)}
   .update-option:hover input:not(:disabled) + .switch-track {border-color:var(--accent)}
   input:focus-visible + .switch-track {outline:2px solid var(--accent);outline-offset:3px}
   input:disabled + .switch-track {border-style:dashed}
