@@ -33,7 +33,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .sidebar{width:232px;height:100%;background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:0 16px 12px;min-height:0}
 .brand{display:flex;align-items:center;gap:9px;height:var(--topbar-height);flex-shrink:0;margin-bottom:21px;padding:0 9px;border-bottom:1px solid transparent;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
-.brand>svg{flex-shrink:0}
+.brand>img{flex-shrink:0}
 .icon-button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:23px;color:var(--muted);flex-shrink:0}
 .sidebar-close{margin-left:auto;padding:0;line-height:1;letter-spacing:normal}
 .nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink)}
@@ -69,7 +69,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .desktop-window{--topbar-height:54px}
 .desktop-window .topbar{padding-right:0;gap:12px;user-select:none}
 .desktop-window .breadcrumb{flex:1;min-width:40px;height:100%}
-.desktop-window .breadcrumb>span,.desktop-window .breadcrumb>strong,.desktop-window .brand>svg,.desktop-window .brand>span{pointer-events:none}
+.desktop-window .breadcrumb>span,.desktop-window .breadcrumb>strong,.desktop-window .brand>img,.desktop-window .brand>span{pointer-events:none}
 .desktop-window .brand{user-select:none}
 .desktop-window .top-actions{align-self:stretch;gap:8px;flex-shrink:0}
 .search-button{white-space:nowrap;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:8px;border-radius:5px}
@@ -255,7 +255,6 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 :root[data-monochrome=true] *, :root[data-monochrome=true] *::before, :root[data-monochrome=true] *::after{transition:none!important;animation:none!important;box-shadow:none!important;filter:none!important}
 :root[data-monochrome=true] button:disabled{opacity:1;text-decoration:line-through;border-style:dashed}
 :root[data-monochrome=true] .tabs button span{opacity:1}
-:root[data-monochrome=true] .brand svg [opacity]{opacity:1}
 :root[data-monochrome=true] .primary:hover:not(:disabled){outline:1px solid var(--accent);outline-offset:3px}
 :root[data-monochrome=true] .nav-active,:root[data-monochrome=true] .tab-active{outline:1px solid var(--accent);outline-offset:-1px}
 :root[data-monochrome=true] input,:root[data-monochrome=true] select{appearance:none}
