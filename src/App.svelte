@@ -21,6 +21,7 @@
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
 
   const desktop = isTauri();
+  const TOAST_DURATION_MS = 3000;
   const windowMaterial = new WindowMaterialController(document.documentElement, (material, theme) =>
     desktop ? invoke<boolean>('set_window_material', { material, theme: theme === 'system' ? null : theme }) : Promise.resolve(false));
   let files: FilePort;
@@ -155,7 +156,8 @@
   }
 
   function notify(message: string, undoable = false): void {
-    toast = message; toastUndo = undoable; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast = ''; }, 6000);
+    toast = message; toastUndo = undoable; clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast = ''; }, TOAST_DURATION_MS);
   }
 
   /**

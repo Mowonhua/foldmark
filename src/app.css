@@ -130,9 +130,10 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .result-arrow{margin-left:auto;color:var(--muted);opacity:0}
 .aggregate-task:hover .result-arrow{opacity:1}
 .all-clear{padding-top:60px;color:var(--muted);font-size:14px}
-.toast{position:fixed;z-index:60;left:50%;bottom:47px;transform:translateX(-50%);background:var(--ink);color:var(--canvas);display:flex;gap:15px;align-items:center;padding:12px 17px;border-radius:6px;font-size:12px;max-width:90vw}
-.toast button{color:var(--canvas);white-space:nowrap;font-size:12px}
-.toast button:hover{background:var(--canvas);color:var(--ink)}
+.toast{position:fixed;z-index:60;left:50%;bottom:47px;transform:translateX(-50%);background:var(--surface);color:var(--ink);display:flex;gap:10px;align-items:center;padding:10px 12px 10px 15px;border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,6px)) var(--floating-radius-top-right,var(--floating-radius,6px)) var(--floating-radius-bottom-right,var(--floating-radius,6px)) var(--floating-radius-bottom-left,var(--floating-radius,6px));box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color));font-size:12px;max-width:90vw}
+.toast button{color:var(--accent);white-space:nowrap;font-size:12px;padding:4px 6px;border-radius:var(--control-radius,4px)}
+.toast button[aria-label="关闭提示"]{color:var(--muted)}
+.toast button:hover{background:var(--control-hover-background,var(--hover))}
 .error-banner,.conflict-banner{padding:11px 25px;font-size:12px;line-height:1.7;background:var(--accent-soft);color:var(--accent)}
 .error-banner{color:var(--danger)}
 .error-banner button,.conflict-banner button{margin-left:16px;text-decoration:underline;font-size:12px}
@@ -224,14 +225,14 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
    弹窗必须保持为 app-shell 的兄弟节点，不能放入此过滤层；关闭弹窗即移除类并恢复清晰。 */
 .app-shell.modal-open{filter:blur(var(--backdrop-blur,0px))}
 .sidebar{box-shadow:var(--sidebar-shadow,none)}
-:is(.modal,.dropdown,.search-panel){border-color:var(--floating-border-top,var(--floating-border,var(--line))) var(--floating-border-right,var(--floating-border,var(--line))) var(--floating-border-bottom,var(--floating-border,var(--line))) var(--floating-border-left,var(--floating-border,var(--line)))}
+:is(.modal,.dropdown,.search-panel,.toast){border-color:var(--floating-border-top,var(--floating-border,var(--line))) var(--floating-border-right,var(--floating-border,var(--line))) var(--floating-border-bottom,var(--floating-border,var(--line))) var(--floating-border-left,var(--floating-border,var(--line)))}
 /* 不支持背景模糊时保留原有实色表面，避免透明浮层降低文字可读性。 */
 @supports (backdrop-filter:blur(1px)){
   .sidebar{background:var(--sidebar-background,var(--sidebar));backdrop-filter:blur(var(--sidebar-blur,0px)) var(--surface-filter)}
-  :is(.modal,.dropdown,.search-panel){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
+  :is(.modal,.dropdown,.search-panel,.toast){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
   .modal-backdrop{background:var(--backdrop-background,var(--backdrop))}
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not(.project-filter),select,textarea{background:var(--field-background,var(--surface))}
-  :is(.sidebar,.modal,.dropdown,.search-panel){background-image:var(--surface-image)}
+  :is(.sidebar,.modal,.dropdown,.search-panel,.toast){background-image:var(--surface-image)}
 }
 /* 控件只消费通用视觉变量；缺省值保留原外观，编辑器内联控件不参与表单效果。 */
 :is(.sidebar .icon-button,.topbar .icon-button,.search-button,.primary,.file-buttons button,.modal-actions button,.modal-close){border-radius:var(--control-radius,5px);box-shadow:var(--control-shadow,none)}
