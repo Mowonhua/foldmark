@@ -75,7 +75,7 @@
     box-shadow: var(--floating-shadow,0 8px 24px var(--shadow-color));
   }
 }
-@media (max-width: 640px) { .cm-editor .cm-content { padding: 24px 25px 120px; }.fm-group-prompt { gap: 6px; padding: 10px; white-space: normal; width: 90%; } }
+.fm-group-prompt { max-width: 90%; white-space: normal; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
