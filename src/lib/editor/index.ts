@@ -12,11 +12,12 @@ import { archiveSections, foldKey, getHiddenRanges, markdownExtensions, moveItem
 import { actionsFacet, documentField, foldHistory, foldsField, modeFacet, resourcesFacet, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
 import { previewField } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
-import { refreshSourceScope, sourceScopeExtension } from './source-scope';
+import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
 import { captureSourcePosition, restoreSourcePosition, setSourceReturn, sourcePositionHistory, sourceReturnField } from './source-position';
 import { markerGestures } from './gestures';
 import { draftFencedBlocksField, draftFencedBlockHistory } from './fenced-block-state';
 import { taskKeymap } from './commands';
+import { paragraphAt, paragraphLayout } from './paragraphs';
 import { contentVisibility } from './visibility';
 import { foldMotion } from './fold-motion';
 import { codeSelection } from './selection';
@@ -189,12 +190,34 @@ export class EditorController {
     this.view.focus();
   }
   insertTask(): void {
-    if (this.state.facet(modeFacet) === 'archive') this.setMode('todo');
-    const end = archiveSections(this.model)[0]?.from ?? this.state.doc.length;
-    const prefix = end && this.state.doc.sliceString(end - 1, end) !== '\n' ? '\n' : '';
-    const insert = `${prefix}- [ ] `;
-    const suffix = end < this.state.doc.length ? '\n\n' : '';
-    this.view.dispatch({ changes: { from: end, insert: insert + suffix }, selection: { anchor: end + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
+    if (this.state.facet(modeFacet) === 'archive' || this.state.facet(sourceViewFacet) === 'archive') this.setMode('todo');
+    const { state, model } = this;
+    const cursor = state.selection.main.head;
+    const line = state.doc.lineAt(cursor);
+    const layout = paragraphLayout(state);
+    const paragraph = layout.paragraphs[paragraphAt(layout, cursor)];
+    let position = line.to;
+    let indent = '';
+    const emptyLine = !line.text.trim() && paragraph?.kind !== 'literal';
+    if (!emptyLine) {
+      // 菜单失焦不改变编辑器选区；使用最内层完整条目，避免把其正文或子任务拆给新任务。
+      const item = model.items.filter(item => cursor >= item.from && cursor <= item.to).at(-1);
+      if (item) {
+        position = item.moveTo;
+        indent = state.doc.sliceString(state.doc.lineAt(item.from).from, item.markerFrom);
+      } else {
+        position = Math.min(state.doc.length, state.doc.lineAt(paragraph?.to ?? cursor).to + 1);
+      }
+    }
+    // 归档页的光标可能仍位于隐藏正文；新增待办只能落到可见分区边界。
+    const hiddenRanges = state.facet(modeFacet) === 'source' ? state.field(sourceScopeField) : getHiddenRanges(model, 'todo');
+    const hidden = hiddenRanges.find(range => position > range.from && position <= range.to);
+    if (hidden) { position = hidden.from; indent = ''; }
+    const prefix = !emptyLine && position && state.doc.sliceString(position - 1, position) !== '\n' ? '\n' : '';
+    const insert = `${prefix}${indent}- [ ] `;
+    const followingBreaks = /^\n*/.exec(state.doc.sliceString(position, position + 2))![0].length;
+    const suffix = position < state.doc.length ? '\n'.repeat(Math.max(0, 2 - followingBreaks)) : '';
+    this.view.dispatch({ changes: { from: position, insert: insert + suffix }, selection: { anchor: position + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
     this.view.focus();
   }
   undo(): boolean { return this.runHistory(undo); }

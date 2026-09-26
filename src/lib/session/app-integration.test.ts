@@ -918,6 +918,17 @@ describe('App 桌面主题模板下载', () => {
 });
 
 describe('App 真实编辑与文件闭环', () => {
+  it.each(['menu', 'shortcut'])('%s 在当前任务后新增，失焦后仍保留插入位置', async entry => {
+    const source = '- [ ] 甲\n- [ ] 乙\n- [ ] 丙';
+    await start([source], { [firstProject.id]: { mode: 'todo', cursor: source.indexOf('甲'), scrollTop: 0, folded: [] } });
+    if (entry === 'menu') await insertTask();
+    else await shortcut('n');
+    await paste('新任务');
+    await shortcut('s');
+    await savedText(firstProject, '- [ ] 甲\n- [ ] 新任务\n\n- [ ] 乙\n- [ ] 丙');
+    expect(document.activeElement).toBe(documentInput());
+  });
+
   it('状态栏当前页字数随编辑、撤销和项目切换更新，源码切换保留统计', async () => {
     await start(['中文 😀\n', '第二份\n']);
     const status = () => button('快捷键').textContent;
@@ -1140,7 +1151,7 @@ describe('App 真实编辑与文件闭环', () => {
     await savedText(firstProject, completed);
 
     await insertTask(); await paste('输入实际落盘');
-    const finalText = '# 甲清单\n\n- [ ] 持续编辑\n\n- [ ] 输入实际落盘\n\n# 归档\n\n- [x] 完成并重开\n';
+    const finalText = '# 甲清单\n- [ ] 输入实际落盘\n\n- [ ] 持续编辑\n\n# 归档\n\n- [x] 完成并重开\n';
     await savedText(firstProject, finalText);
     await remount();
     expect(documentInput().textContent).toContain('输入实际落盘');
@@ -1194,13 +1205,13 @@ describe('App 真实编辑与文件闭环', () => {
     await shortcut('z');
     expect(documentInput().textContent).not.toContain('乙的未保存草稿');
     await shortcut('s');
-    await savedText(secondProject, `${second}- [ ] `);
+    await savedText(secondProject, '# 乙清单\n- [ ] \n\n- [ ] 乙原始任务\n');
 
     await switchProject(firstProject);
     expect(documentInput().textContent).toContain('甲的未保存草稿');
     await shortcut('z'); await shortcut('s');
-    await savedText(firstProject, `${first}- [ ] `);
-    expect((await files.read(secondProject.path)).text).toBe(`${second}- [ ] `);
+    await savedText(firstProject, '# 甲清单\n- [ ] \n\n- [ ] 甲原始任务\n');
+    expect((await files.read(secondProject.path)).text).toBe('# 乙清单\n- [ ] \n\n- [ ] 乙原始任务\n');
     await switchProject(secondProject);
     expect(documentInput().textContent).toContain('乙原始任务');
     expect(documentInput().textContent).not.toContain('甲原始任务');
@@ -1290,7 +1301,7 @@ describe('跨项目反馈和搜索范围', () => {
     await switchProject(secondProject);
     await insertTask(); await paste('乙项目必须保留的编辑');
     await shortcut('s');
-    const savedSecond = `${second}- [ ] 乙项目必须保留的编辑`;
+    const savedSecond = '# 乙清单\n- [ ] 乙项目必须保留的编辑\n\n- [ ] 保留乙任务\n';
     await savedText(secondProject, savedSecond);
     await switchProject(firstProject);
     button('完成任务').click(); await tick();
@@ -1413,7 +1424,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     await files.create(secondProject.path,destination);
     vi.spyOn(BrowserFilePort.prototype,'chooseFile').mockResolvedValue(secondProject.path);
     await insertTask(); await paste('迁移时不能丢的草稿');
-    const draft = `${original}- [ ] 迁移时不能丢的草稿`;
+    const draft = '# 原清单\n- [ ] 迁移时不能丢的草稿\n\n- [ ] 旧任务\n';
     localStorage.removeItem(`foldmark:file:${firstProject.path}`);
     await shortcut('s');
     await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('FILE_NOT_FOUND'));
