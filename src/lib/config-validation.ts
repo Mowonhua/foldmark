@@ -18,6 +18,7 @@ export function validateAppConfig(value: unknown): AppConfig | null {
   const identities = new Set<string>(); const paths = new Set<string>();
   for (const project of value.projects) {
     if (!record(project) || !nonempty(project.id) || !nonempty(project.name) || !nonempty(project.path)) return fail();
+    if (project.archived !== undefined && typeof project.archived !== 'boolean') return fail();
     const path = project.path.replace(/\\/g, '/').toLocaleLowerCase();
     if (identities.has(project.id) || paths.has(path)) return fail();
     identities.add(project.id); paths.add(path);

@@ -4,7 +4,11 @@
  */
 
 /** 结构职责：承载持久化项目关联；路径只指向原文件，移除关联不得删除文件。 */
-export interface Project { id: string; name: string; path: string }
+export interface Project {
+  id: string; name: string; path: string;
+  /** 缺省为未归档；归档保留关联及阅读状态，但不参与导航、聚合和搜索。 */
+  archived?: boolean;
+}
 /** 结构职责：表示文档投影视图；源码仅显示来源视图范围，底层始终保留完整文本。 */
 export type ViewMode = 'todo' | 'archive' | 'source';
 import type { ThemeDefinition, ThemeMode } from './themes';

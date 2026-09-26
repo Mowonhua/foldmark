@@ -278,6 +278,127 @@ async function savedText(project: Project, expected: string): Promise<void> {
   await vi.waitFor(async () => expect((await files.read(project.path)).text).toBe(expected), { timeout: 5000 });
 }
 
+describe('项目归档与删除', () => {
+  function projectButton(project: Project): HTMLButtonElement | undefined {
+    return [...document.querySelectorAll<HTMLButtonElement>('.sidebar button')].find(candidate => candidate.title === project.path);
+  }
+
+  async function openProjectMenu(project: Project): Promise<void> {
+    const control = projectButton(project);
+    expect(control).toBeDefined();
+    control!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 80, clientY: 140 }));
+    await tick();
+  }
+
+  async function openArchivedProjects(): Promise<void> {
+    button('更多操作').click(); await tick();
+    button('查看归档项目').click(); await tick();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('归档项目');
+  }
+
+  it('归档非当前项目保留当前编辑，重启隐藏并可恢复且排除全部待办', async () => {
+    const secondText = '- [ ] 乙项目独有任务\n';
+    await start(['- [ ] 甲项目任务\n', secondText]);
+    await insertTask(); await paste('甲项目持续编辑');
+    await openProjectMenu(secondProject);
+    expect(button('删除项目')).toBeDefined();
+    button('归档项目').click(); await tick();
+    await vi.waitFor(() => expect(projectButton(secondProject)).toBeUndefined());
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(documentInput().textContent).toContain('甲项目持续编辑');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects.find(project => project.id === secondProject.id)).toMatchObject({ archived: true }));
+    expect((await files.read(secondProject.path)).text).toBe(secondText);
+    await remount();
+    expect(projectButton(secondProject)).toBeUndefined();
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.aggregate')?.textContent).toContain('甲项目任务'));
+    expect(document.querySelector('.aggregate')?.textContent).not.toContain('乙项目独有任务');
+    await openArchivedProjects();
+    button(/^恢复项目/).click(); await tick();
+    await vi.waitFor(() => expect(projectButton(secondProject)).toBeDefined());
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects.find(project => project.id === secondProject.id)?.archived ?? false).toBe(false));
+    button('关闭对话框').click(); await tick();
+    await switchProject(secondProject);
+    expect(documentInput().textContent).toContain('乙项目独有任务');
+    await remount();
+    expect(projectButton(secondProject)).toBeDefined();
+  });
+
+  it('归档当前项目保存编辑并切换到可用项目', async () => {
+    await start(['- [ ] 甲项目任务\n', '- [ ] 乙项目任务\n']);
+    await insertTask(); await paste('归档前的新正文');
+    await openProjectMenu(firstProject); button('归档项目').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(secondProject.name));
+    expect((await files.read(firstProject.path)).text).toContain('归档前的新正文');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects.find(project => project.id === firstProject.id)).toMatchObject({ archived: true }));
+    await remount();
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(secondProject.name);
+    expect(projectButton(firstProject)).toBeUndefined();
+  });
+
+  it.each(['归档项目', '删除项目'])('%s当前项目后可恢复已缓存项目并继续编辑', async operation => {
+    await start(['- [ ] 甲项目缓存任务\n', '- [ ] 乙项目任务\n']);
+    await switchProject(secondProject);
+    await openProjectMenu(secondProject); button(operation).click(); await tick();
+    if (operation === '删除项目') { button('删除项目').click(); await tick(); }
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name));
+    expect(documentInput().textContent).toContain('甲项目缓存任务');
+    await insertTask(); await paste('返回缓存项目后继续编辑');
+    await vi.waitFor(async () => expect((await files.read(firstProject.path)).text).toContain('返回缓存项目后继续编辑'));
+  });
+
+  it('归档最后项目后重启仍可通过更多操作恢复', async () => {
+    await start(['- [ ] 归档后可找回\n']);
+    await openProjectMenu(firstProject); button('归档项目').click(); await tick();
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects[0]).toMatchObject({ archived: true }));
+    expect(document.querySelector('[aria-label="Markdown 任务文档"]')).toBeNull();
+    // 无活动项目时不会挂载编辑器，因此在这个边界直接等待归档管理的公开入口。
+    await unmount(mounted!);
+    mounted = mount(App, { target: container }); await tick();
+    await vi.waitFor(() => expect(button('更多操作')).toBeDefined());
+    expect(projectButton(firstProject)).toBeUndefined();
+    await openArchivedProjects();
+    await vi.waitFor(() => expect(button(/^恢复项目/)).toBeDefined());
+    button(/^恢复项目/).click(); await tick();
+    await vi.waitFor(() => expect(projectButton(firstProject)).toBeDefined());
+    button('关闭对话框').click(); await tick();
+    await switchProject(firstProject);
+    expect(documentInput().textContent).toContain('归档后可找回');
+  });
+
+  it('正文与恢复数据保存失败时归档保留项目及唯一内存草稿', async () => {
+    const original = '- [ ] 磁盘原文\n';
+    await start([original]);
+    vi.spyOn(BrowserFilePort.prototype, 'saveRecovery').mockRejectedValue(new Error('FILE_PERMISSION: 恢复目录不可写'));
+    await insertTask(); await paste('归档不能丢失的草稿');
+    await openProjectMenu(firstProject); button('归档项目').click(); await tick();
+    await new Promise(resolve => setTimeout(resolve, 0)); await tick();
+    expect(projectButton(firstProject)).toBeDefined();
+    expect(documentInput().textContent).toContain('归档不能丢失的草稿');
+    expect((await files.loadConfig())?.projects[0].archived ?? false).toBe(false);
+    expect((await files.read(firstProject.path)).text).toBe(original);
+  });
+
+  it('删除非当前项目只移除选中关联，删除最后项目保留文件并清空编辑器', async () => {
+    const firstText = '- [ ] 甲项目任务\n';
+    const secondText = '- [ ] 乙项目任务\n';
+    await start([firstText, secondText]);
+    await openProjectMenu(secondProject); button('删除项目').click(); await tick();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('删除「乙项目」项目？');
+    button('删除项目').click(); await tick();
+    await vi.waitFor(() => expect(projectButton(secondProject)).toBeUndefined());
+    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(documentInput().textContent).toContain('甲项目任务');
+    expect((await files.read(secondProject.path)).text).toBe(secondText);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([firstProject.id]));
+    await openProjectMenu(firstProject); button('删除项目').click(); await tick();
+    button('删除项目').click(); await tick();
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projects).toEqual([]));
+    expect(document.querySelector('[aria-label="Markdown 任务文档"]')).toBeNull();
+    expect((await files.read(firstProject.path)).text).toBe(firstText);
+  });
+});
+
 describe('左栏项目拖动排序', () => {
   function projectButton(project: Project): HTMLButtonElement {
     return [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.title === project.path)!;
@@ -1014,7 +1135,7 @@ describe('项目操作失败与聚合视图边界', () => {
     vi.spyOn(BrowserFilePort.prototype, 'saveRecovery').mockRejectedValue(new Error('FILE_PERMISSION: 恢复目录不可写'));
     await insertTask(); await paste('只能保存在内存中的草稿');
     button('更多操作').click(); await tick(); button('移除项目关联').click(); await tick();
-    button('移除关联').click();
+    button('删除项目').click();
     await new Promise(resolve => setTimeout(resolve, 0)); await tick();
     expect(documentInput().textContent).toContain('只能保存在内存中的草稿');
     expect([...document.querySelectorAll<HTMLButtonElement>('button')].some(candidate => candidate.title === firstProject.path)).toBe(true);

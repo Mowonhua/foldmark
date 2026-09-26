@@ -277,3 +277,11 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 :root[data-corners=square] input[type=range]{appearance:none;height:4px;background:var(--canvas);border:1px solid var(--ink);margin:8px 0}
 :root[data-corners=square] input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:0}
 :root[data-corners=square] input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--ink);border:1px solid var(--canvas);border-radius:0}
+
+.project-context-menu{position:fixed;right:auto;z-index:40;max-width:calc(100vw - 16px)}
+.archived-project-list{margin-top:20px}
+.archived-project-row{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.archived-project-row>div{min-width:0;flex:1}
+.archived-project-row strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.archived-project-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);margin-top:5px}
+.archived-project-row button{flex-shrink:0;color:var(--accent);font-size:12px;padding:8px}

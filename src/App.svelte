@@ -127,7 +127,11 @@
   let fatal = $state('');
   let missing = $state<Project | null>(null);
   let menuOpen = $state(false);
-  let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | 'updates' | null>(null);
+  /** 右键目标独立于当前编辑会话，避免删除或归档错误的项目。 */
+  let projectMenu = $state<{ project: Project; x: number; y: number } | null>(null);
+  let removeTarget = $state<Project | null>(null);
+  let projectActionBusy = $state(false);
+  let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | 'archived-projects' | 'updates' | null>(null);
   let projectName = $state('');
   let projectPath = $state('');
   let createFile = $state(false);
@@ -142,7 +146,9 @@
   const selectedWindowMaterial = $derived((selectedTheme.monochrome ? 'opaque' :
     selectedTheme.appearance?.[resolvedThemeMode]?.['window-material'] ?? 'opaque') as WindowMaterial);
   let recovery = $state<{ project: Project; disk: FileSnapshot; text: string } | null>(null);
-  const visibleProjects = $derived(config.projects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
+  const availableProjects = $derived(config.projects.filter(project => !project.archived));
+  const archivedProjects = $derived(config.projects.filter(project => project.archived));
+  const visibleProjects = $derived(availableProjects.filter(project => project.name.toLocaleLowerCase().includes(projectFilter.toLocaleLowerCase())));
   const mode = $derived.by(() => { void version; return active?.ui.mode ?? 'todo'; });
   const previewMode = $derived.by(() => { void version; return mode === 'source' ? active?.ui.sourceView ?? 'todo' : mode; });
   const saveStatus = $derived.by(() => { void version; return active?.status; });
@@ -320,6 +326,7 @@
    * 归档整理必须在当前会话与保存器就绪后执行；查询坐标属于整理前快照，须先定位再让事务映射选区。
    */
   async function openProject(project: Project, position?: number, targetMode?: ViewMode): Promise<void> {
+    if (project.archived || projectActionBusy) return;
     const generation = ++openGeneration;
     captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = '';
     try {
@@ -413,7 +420,7 @@
     const generation = ++indexGeneration; indexing = true;
     const found: TaskResult[] = [];
     const allFound: AggregateResult[] = [];
-    for (const project of config.projects) {
+    for (const project of availableProjects) {
       if (generation !== indexGeneration) return;
       try {
         const text = sessions.get(project.id)?.state.doc.toString() ?? (await files.read(project.path)).text;
@@ -447,7 +454,8 @@
   }
 
   function openDialog(next: typeof dialog): void {
-    menuOpen = false; dialogError = ''; dialog = next;
+    menuOpen = false; projectMenu = null; dialogError = ''; dialog = next;
+    if (next === 'remove') removeTarget = active?.project ?? null;
     if (next === 'project') { projectName = ''; projectPath = ''; createFile = false; }
     if (next === 'rename') projectName = active?.project.name ?? '';
   }
@@ -486,16 +494,70 @@
     const project = config.projects.find(item => item.id === active!.project.id)!;
     project.name = projectName.trim(); active.project = project; version += 1; dialog = null; scheduleConfig();
   }
+  /**
+   * 函数职责：归档或解除指定项目的关联，统一维护会话生命周期。
+   * 输入说明：目标来自项目菜单；archive 为 true 时保留配置和阅读位置。
+   * 输出说明：保存失败保留项目；成功后只在移走当前会话时选择替代项目，不删除文件。
+   * 实现思路：先捕获并保存编辑状态，再停止目标监听、更新配置和刷新查询。
+   */
+  async function retireProject(project: Project, archive: boolean): Promise<void> {
+    if (projectActionBusy || !config.projects.some(item => item.id === project.id)) return;
+    projectMenu = null; projectActionBusy = true;
+    captureUI();
+    try {
+      const session = sessions.get(project.id);
+      if (session && !await session.saver.flush()) {
+        const message = '仍有未保存内容，请先处理保存失败或冲突，再归档或解除关联。';
+        if (dialog) dialogError = message; else notify(message);
+        return;
+      }
+      // 保存等待期间阻止编辑和项目切换；同时使此前尚未完成的文件读取失效。
+      ++openGeneration;
+      session?.stopWatch(); session?.saver.dispose(); sessions.delete(project.id);
+      indexCache.delete(project.id);
+      if (archive) project.archived = true;
+      else {
+        config.projects = config.projects.filter(item => item.id !== project.id);
+        delete config.projectViews[project.id];
+      }
+      const replaceActive = active?.project.id === project.id;
+      if (replaceActive) {
+        active = null; config.activeProjectId = null;
+        // 缓存会话恢复依赖同一个编辑器；仅在没有可打开项目时释放它。
+        if (!config.projects.some(item => !item.archived)) { editor?.destroy(); editor = undefined; }
+      }
+      if (missing?.id === project.id) { missing = null; fatal = ''; }
+      dialog = null;
+      // 立即撤销旧索引的发布资格，避免延迟搜索把已归档项目重新带回结果。
+      ++indexGeneration;
+      results = results.filter(item => item.projectId !== project.id);
+      aggregateResults = aggregateResults.filter(item => item.projectId !== project.id);
+      projectActionBusy = false;
+      const next = config.projects.find(item => !item.archived);
+      if (replaceActive && next && screen === 'project') await openProject(next);
+      scheduleConfig(); scheduleIndex();
+    } finally { projectActionBusy = false; }
+  }
   async function removeProject(): Promise<void> {
-    if (!active) return;
-    const session = active;
-    if (!await session.saver.flush()) { dialogError = '仍有未保存内容，请先处理保存失败或冲突，再移除关联。'; return; }
-    session.stopWatch(); session.saver.dispose();
-    sessions.delete(session.project.id); config.projects = config.projects.filter(item => item.id !== session.project.id);
-    delete config.projectViews[session.project.id]; active = null; config.activeProjectId = null; dialog = null;
-    if (config.projects[0]) await openProject(config.projects[0]);
-    else { editor?.destroy(); editor = undefined; }
-    scheduleConfig(); scheduleIndex();
+    if (removeTarget) await retireProject(removeTarget, false);
+  }
+  /** 恢复仅改变关联状态；不读取文件，失效路径仍由正常打开流程处理。 */
+  function restoreProject(project: Project): void {
+    project.archived = false; scheduleConfig(); scheduleIndex();
+  }
+  function showProjectMenu(event: MouseEvent, project: Project): void {
+    event.preventDefault();
+    if (projectActionBusy) return;
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    projectMenu = { project, x: Math.max(8, Math.min(event.clientX || bounds.left, window.innerWidth - 230)), y: Math.max(8, Math.min(event.clientY || bounds.bottom, window.innerHeight - 100)) };
+    menuOpen = false;
+    void tick().then(() => document.querySelector<HTMLElement>('[data-project-menu] button')?.focus());
+  }
+  /** 菜单关闭时回到原项目行；右键操作不改变当前文档。 */
+  function closeProjectMenu(): void {
+    const path = projectMenu?.project.path;
+    projectMenu = null;
+    if (path) [...document.querySelectorAll<HTMLButtonElement>('.project-list button')].find(button => button.title === path)?.focus();
   }
   async function relocate(): Promise<void> {
     const project = missing ?? active?.project;
@@ -591,12 +653,13 @@
     if (!target.closest('[data-project-search]')) closeProjectSearch();
     if (!target.closest('[data-global-search]')) searchOpen = false;
     if (!target.closest('[data-more-menu]')) menuOpen = false;
+    if (!target.closest('[data-project-menu]')) projectMenu = null;
   }
 
   function keydown(event: KeyboardEvent): void {
-    if (updateInstalling) { event.preventDefault(); return; }
+    if (updateInstalling || projectActionBusy) { event.preventDefault(); return; }
     if (event.isComposing) return;
-    if (event.key === 'Escape') { dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
+    if (event.key === 'Escape') { closeProjectMenu(); dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); openProjectSearch(); }
@@ -623,8 +686,9 @@
           config.projects = [{ id: 'welcome', name: '开始', path }]; config.activeProjectId = 'welcome';
         }
         if (disposed) return; configReady = true; ready = true;
-        const project = config.projects.find(item => item.id === config.activeProjectId) ?? config.projects[0];
+        const project = availableProjects.find(item => item.id === config.activeProjectId) ?? availableProjects[0];
         if (project) await openProject(project);
+        else config.activeProjectId = null;
         if (desktop) {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
           unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
@@ -670,7 +734,7 @@
 
 <svelte:window onkeydown={keydown} onclick={dismissPopovers} />
 
-<div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning}>
+<div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy}>
 
   {#if sidebar && !cardMode}
     <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
@@ -695,6 +759,8 @@
             ondragover={event => previewProjectDrop(event, project.id)} ondrop={event => dropProject(event, project.id)}
             ondragleave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) projectDropTarget = null; }}
             ondragend={() => { draggedProjectId = null; projectDropTarget = null; }}
+            oncontextmenu={event => showProjectMenu(event, project)}
+            onkeydown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); showProjectMenu(event as unknown as MouseEvent, project); } }}
             onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
@@ -724,7 +790,7 @@
         <hr/><button role="menuitem" onclick={() => openDialog('rename')}>重命名项目</button>
         <button role="menuitem" onclick={() => exportMarkdown()}>另存 Markdown 副本</button>
         <button role="menuitem" onclick={() => openDialog('remove')}>移除项目关联</button>
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>查看归档项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
       </div>{/if}
     </header>
     {/if}
@@ -753,7 +819,7 @@
     {/if}
     {#if screen === 'all'}
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
-        {#each config.projects as project}
+        {#each availableProjects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
           {#if projectResults.length}
             <section class="aggregate-group">
@@ -783,12 +849,28 @@
   </main>
 </div>
 
-{#if toast}<div class="toast" role="status" inert={updateInstalling}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>{/if}
+{#if projectMenu}
+  <div class="dropdown project-context-menu" data-project-menu role="menu" tabindex="-1" aria-label="项目操作" style:left={`${projectMenu.x}px`} style:top={`${projectMenu.y}px`}
+    onkeydown={event => {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+      }
+      if (event.key === 'Tab') projectMenu = null;
+    }}>
+    <button role="menuitem" onclick={() => { if (projectMenu) void retireProject(projectMenu.project, true); }}>归档项目</button>
+    <button role="menuitem" onclick={() => { const target = projectMenu?.project; openDialog('remove'); removeTarget = target ?? null; }}>删除项目</button>
+  </div>
+{/if}
+
+{#if toast}<div class="toast" role="status" inert={updateInstalling || projectActionBusy}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling && !projectActionBusy) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>{/if}
 
 {#if dialog}
   <div class="modal-backdrop" role="presentation">
     <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
-      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling || projectActionBusy} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       {#if dialog === 'project'}
         <p class="eyebrow">项目</p><h2 id="dialog-title">给一份清单一个位置</h2><p class="muted">关联已有 Markdown，或选择位置新建文件。</p>
         <label>项目名称<input placeholder="例如：工作、阅读、生活" bind:value={projectName}/></label>
@@ -799,7 +881,14 @@
       {:else if dialog === 'rename'}
         <h2 id="dialog-title">重命名项目</h2><label>项目名称<input bind:value={projectName}/></label><button class="primary" onclick={renameProject}>保存名称</button>
       {:else if dialog === 'remove'}
-        <h2 id="dialog-title">移除「{active?.project.name}」的关联？</h2><p>Markdown 文件会保留在原位置。你可以随时重新关联。</p><div class="modal-actions"><button onclick={() => dialog = null}>取消</button><button class="primary" onclick={removeProject}>移除关联</button></div>
+        <h2 id="dialog-title">删除「{removeTarget?.name}」项目？</h2><p>Markdown 文件会保留在原位置。你可以随时重新关联。</p><div class="modal-actions"><button onclick={() => dialog = null}>取消</button><button class="primary" disabled={projectActionBusy} onclick={removeProject}>删除项目</button></div>
+      {:else if dialog === 'archived-projects'}
+        <h2 id="dialog-title">归档项目</h2><p class="muted">恢复后，项目会重新显示在左侧列表中。</p>
+        <div class="archived-project-list">
+          {#each archivedProjects as project (project.id)}
+            <div class="archived-project-row"><div><strong>{project.name}</strong><small title={project.path}>{project.path}</small></div><button aria-label={`恢复项目：${project.name}`} onclick={() => restoreProject(project)}>恢复项目</button></div>
+          {:else}<p class="muted">暂无归档项目</p>{/each}
+        </div>
       {:else if dialog === 'settings'}
         <p class="eyebrow">阅读与外观</p><h2 id="dialog-title">让文字读起来更舒适</h2>
         <label>主题<select bind:value={config.preferences.themeId}>{#each themes as theme (theme.id)}<option value={theme.id}>{theme.name}</option>{/each}</select></label>

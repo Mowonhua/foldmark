@@ -2,6 +2,16 @@
 import { describe, expect, it } from 'vitest';
 import { validateAppConfig } from './config-validation';
 describe('配置边界', () => {
+  it('项目归档允许旧配置缺省和布尔值，拒绝其他类型', () => {
+    const project = { id: 'one', name: '项目', path: 'D:/清单.md' };
+    for (const candidate of [project, { ...project, archived: false }, { ...project, archived: true }]) {
+      const config = { projects: [candidate] };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+    for (const archived of ['false', 0, null, [], {}]) {
+      expect(() => validateAppConfig({ projects: [{ ...project, archived }] })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('更新偏好允许旧配置缺省并拒绝字符串布尔值', () => {
     const config = { projects: [], preferences: { autoCheckUpdates: false, autoDownloadUpdates: true } };
     expect(validateAppConfig(config)).toBe(config);
