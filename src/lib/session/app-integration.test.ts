@@ -8,6 +8,7 @@ import App from '../../App.svelte';
 import { BrowserFilePort, defaultPreferences } from '../browser-files';
 import { builtInThemes, paletteKeys, parseTheme, type ThemeDefinition } from '../themes';
 import type { AppConfig, Project, ProjectView } from '../contracts';
+import { setLocalePreference } from '../i18n';
 
 const desktopBoundary = vi.hoisted(() => ({
   enabled: false,
@@ -171,6 +172,7 @@ let container: HTMLDivElement;
 
 /** jsdom 没有排版引擎；只补充几何 API，不替换真实编辑器、保存器或 App 行为。 */
 beforeEach(() => {
+  setLocalePreference('zh-CN');
   desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
   desktopBoundary.resized = null; desktopBoundary.focused = null; desktopBoundary.maximized = false;
   desktopBoundary.minimize.mockClear();
@@ -202,6 +204,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   if (mounted) { await unmount(mounted); mounted = undefined; }
+  setLocalePreference('zh-CN');
   document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
 
@@ -500,6 +503,30 @@ async function chooseThemeSetting(name: string, value: string): Promise<void> {
   const select = themeControl(name); select.value = value;
   select.dispatchEvent(new Event('change', { bubbles: true })); await tick();
 }
+
+describe('界面语言设置', () => {
+  it('切换英文即时更新界面和编辑器，重启恢复语言且正文不变', async () => {
+    const original = '# 我的计划\n\n- [ ] 保留中文正文\n';
+    await start([original]);
+    button('设置').click(); await tick();
+    await chooseThemeSetting('语言', 'en');
+    expect(document.documentElement.lang).toBe('en');
+    expect(button('Settings')).toBeDefined();
+    expect(document.querySelector('[aria-label="Markdown task document"]')).not.toBeNull();
+    expect(themeControl('Language').value).toBe('en');
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.locale).toBe('en'));
+    expect((await files.read(firstProject.path)).text).toBe(original);
+    await unmount(mounted!);
+    mounted = mount(App, { target: container }); await tick();
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Markdown task document"]')).not.toBeNull());
+    expect(button('Settings')).toBeDefined();
+    button('Settings').click(); await tick();
+    expect(themeControl('Language').value).toBe('en');
+    await chooseThemeSetting('Language', 'zh-CN');
+    expect(button('设置')).toBeDefined();
+    expect((await files.read(firstProject.path)).text).toBe(original);
+  });
+});
 
 /** jsdom 的 File 缺少 text；只补文件读取边界，仍通过生产文件输入事件执行导入与校验。 */
 async function importThemeFile(content: string): Promise<void> {

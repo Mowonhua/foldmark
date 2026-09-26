@@ -2,6 +2,7 @@
  * 文件职责：将预览键盘意图转换为共享模型上的段落编辑。
  * 定义范围：段落拆分、任务续项与转正文、段落合并和空段落删除。
  */
+import { translate } from '../i18n';
 import { EditorView } from '@codemirror/view';
 import { findClusterBreak, type TransactionSpec } from '@codemirror/state';
 import { documentField, mapSoftBreaks, modeFacet, setSoftBreaks, softBreaksField } from './state';
@@ -64,7 +65,7 @@ function submit(view: EditorView, spec: TransactionSpec): boolean {
 
 /** 跨语法保护边界的合并不回落到逐字符删除，否则默认原子删除会绕过结构约束。 */
 function protect(view: EditorView): true {
-  view.dispatch({ effects: EditorView.announce.of('请先展开或切换到对应内容视图，再编辑此段落边界。') });
+  view.dispatch({ effects: EditorView.announce.of(translate('请先展开或切换到对应内容视图，再编辑此段落边界。')) });
   return true;
 }
 

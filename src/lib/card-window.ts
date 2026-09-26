@@ -4,6 +4,7 @@
  */
 import { currentMonitor, getCurrentWindow, LogicalSize, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
 import type { Window } from '@tauri-apps/api/window';
+import { translate } from './i18n';
 
 /**
  * 结构职责：限定卡片切换需要的原生窗口能力。
@@ -122,7 +123,7 @@ export function createCardWindowController(
       try { await step(); } catch (error) { errors.push(error); }
     }
     if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) throw new AggregateError(errors, '恢复窗口状态失败');
+    if (errors.length > 1) throw new AggregateError(errors, translate('恢复窗口状态失败'));
     snapshot = undefined;
     entered = false;
   }
@@ -166,7 +167,7 @@ export function createCardWindowController(
       entered = true;
     } catch (error) {
       try { await restore(); } catch (rollbackError) {
-        throw new AggregateError([error, rollbackError], '进入卡片模式失败，窗口恢复需要重试');
+        throw new AggregateError([error, rollbackError], translate('进入卡片模式失败，窗口恢复需要重试'));
       }
       throw error;
     }

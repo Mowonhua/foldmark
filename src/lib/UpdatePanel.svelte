@@ -3,6 +3,7 @@
    * 文件职责：呈现更新进度与用户操作入口。
    * 定义范围：更新状态展示和事件契约；网络、安装与保存由应用协调。
    */
+  import { t } from './i18n';
   import type { UpdateStatus } from './updater/contracts';
   /**
    * 结构职责：绑定应用持有的更新状态与持久化偏好。
@@ -20,42 +21,42 @@
   const progress = $derived(status.totalBytes ? Math.min(100, Math.floor((status.downloadedBytes ?? 0) / status.totalBytes * 100)) : undefined);
 </script>
 
-<p class="update-version">当前版本 <span>{currentVersion}</span></p>
+<p class="update-version">{$t('当前版本')} <span>{currentVersion}</span></p>
 {#if desktop}
   <div class="update-preferences">
     <label class="check-label update-option">
-      启动时检查更新
+      {$t('启动时检查更新')}
       <span class="update-control">
-        <input type="checkbox" role="switch" aria-label="启动时检查更新" checked={autoCheck} disabled={status.kind === 'installing'} onchange={event => onPreferences(event.currentTarget.checked, autoDownload)}/>
+        <input type="checkbox" role="switch" aria-label={$t('启动时检查更新')} checked={autoCheck} disabled={status.kind === 'installing'} onchange={event => onPreferences(event.currentTarget.checked, autoDownload)}/>
         <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
       </span>
     </label>
     <label class="check-label update-option">
-      自动下载更新
+      {$t('自动下载更新')}
       <span class="update-control">
-        <input type="checkbox" role="switch" aria-label="自动下载更新" checked={autoDownload} disabled={status.kind === 'installing'} onchange={event => onPreferences(autoCheck, event.currentTarget.checked)}/>
+        <input type="checkbox" role="switch" aria-label={$t('自动下载更新')} checked={autoDownload} disabled={status.kind === 'installing'} onchange={event => onPreferences(autoCheck, event.currentTarget.checked)}/>
         <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
       </span>
     </label>
   </div>
   <div class="update-status" role="status" aria-live="polite">
-    {#if status.kind === 'checking'}<p>正在检查更新…</p>
-    {:else if status.kind === 'current'}<p>当前已是最新版本。</p>
-    {:else if status.kind === 'available'}<p>发现新版本 {status.version}</p>
-    {:else if status.kind === 'downloading'}<p>正在下载 {status.version}…{progress === undefined ? '' : ` ${progress}%`}</p><progress aria-label="更新下载进度" max="100" value={progress}></progress>
-    {:else if status.kind === 'ready'}<p>新版本 {status.version} 已准备好安装。</p>
-    {:else if status.kind === 'installing'}<p>正在保存文档并安装更新，请稍候…</p>
-    {:else if status.kind === 'error'}<p class="dialog-error">更新未完成：{status.message}</p>{/if}
+    {#if status.kind === 'checking'}<p>{$t('正在检查更新…')}</p>
+    {:else if status.kind === 'current'}<p>{$t('当前已是最新版本。')}</p>
+    {:else if status.kind === 'available'}<p>{$t('发现新版本 {version}', { version: status.version ?? '' })}</p>
+    {:else if status.kind === 'downloading'}<p>{$t('正在下载 {version}…', { version: status.version ?? '' })}{progress === undefined ? '' : ` ${progress}%`}</p><progress aria-label={$t('更新下载进度')} max="100" value={progress}></progress>
+    {:else if status.kind === 'ready'}<p>{$t('新版本 {version} 已准备好安装。', { version: status.version ?? '' })}</p>
+    {:else if status.kind === 'installing'}<p>{$t('正在保存文档并安装更新，请稍候…')}</p>
+    {:else if status.kind === 'error'}<p class="dialog-error">{$t('更新未完成：{message}', { message: status.message ?? '' })}</p>{/if}
   </div>
-  {#if status.body}<details><summary>更新说明</summary><pre class="release-notes">{status.body}</pre></details>{/if}
+  {#if status.body}<details><summary>{$t('更新说明')}</summary><pre class="release-notes">{status.body}</pre></details>{/if}
   <div class="modal-actions update-actions">
-    {#if ['idle', 'current', 'checking'].includes(status.kind)}<button class="primary" disabled={busy} onclick={onCheck}>检查更新</button>{/if}
-    {#if status.kind === 'available'}<button class="primary" onclick={onDownload}>下载更新</button>{/if}
-    {#if status.kind === 'ready'}<button class="primary" onclick={onInstall}>安装并重启</button>{/if}
-    {#if status.kind === 'error'}<button class="primary" onclick={onRetry}>重试</button>{/if}
+    {#if ['idle', 'current', 'checking'].includes(status.kind)}<button class="primary" disabled={busy} onclick={onCheck}>{$t('检查更新')}</button>{/if}
+    {#if status.kind === 'available'}<button class="primary" onclick={onDownload}>{$t('下载更新')}</button>{/if}
+    {#if status.kind === 'ready'}<button class="primary" onclick={onInstall}>{$t('安装并重启')}</button>{/if}
+    {#if status.kind === 'error'}<button class="primary" onclick={onRetry}>{$t('重试')}</button>{/if}
   </div>
 {:else}
-  <p>检测与自动更新仅在桌面版中可用。</p>
+  <p>{$t('检测与自动更新仅在桌面版中可用。')}</p>
 {/if}
 
 <style>

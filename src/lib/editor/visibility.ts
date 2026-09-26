@@ -2,6 +2,7 @@
  * 文件职责：统一完成过滤与折叠的隐藏范围，约束不可见正文的键盘访问。
  * 定义范围：隐藏投影、原子光标范围和空选区删除保护；不改写 Markdown 语义。
  */
+import { translate } from '../i18n';
 import { EditorSelection, EditorState, Prec, Transaction, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { getHiddenRanges, type DocumentModel } from '../markdown';
@@ -122,7 +123,7 @@ export function protectHiddenDelete(view: EditorView, direction: -1 | 1): boolea
     return selection;
   });
   if (!protectedSelection) return false;
-  view.dispatch({ selection: EditorSelection.create(selections,view.state.selection.mainIndex), effects: EditorView.announce.of('已跳过隐藏内容；切换到对应视图或展开条目后可编辑。'), annotations: Transaction.addToHistory.of(false), scrollIntoView: true });
+  view.dispatch({ selection: EditorSelection.create(selections,view.state.selection.mainIndex), effects: EditorView.announce.of(translate('已跳过隐藏内容；切换到对应视图或展开条目后可编辑。')), annotations: Transaction.addToHistory.of(false), scrollIntoView: true });
   return true;
 }
 /**

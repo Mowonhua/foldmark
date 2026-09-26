@@ -1,6 +1,7 @@
 <script lang="ts">
   /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
   import { onMount, tick } from 'svelte';
+  import { t, setLocalePreference, type LocalePreference } from './lib/i18n';
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import appIcon from '../src-tauri/icons/icon.png';
@@ -87,7 +88,7 @@
       // 鼠标进入卡片后底栏自动收起；键盘操作保留焦点，便于再次退出。
       if (event.detail > 0) button.blur();
     } catch (error) {
-      notify(`卡片模式切换失败：${errorMessage(error)}`);
+      notify($t("卡片模式切换失败：{error}", { error: errorMessage(error) }));
     } finally {
       // 失败或动画取消也必须解除透明状态，确保重试入口不会留在不可见的窗口中。
       transition?.cancel();
@@ -180,6 +181,12 @@
     return { todo: model.tasks.length - archived, archive: archived };
   });
 
+  // 语言只改变界面文案；复用配置队列持久化，不重建编辑器或修改正文。
+  $effect(() => {
+    setLocalePreference(config.preferences.locale ?? 'zh-CN');
+    if (ready && configReady) scheduleConfig();
+  });
+
   $effect(() => {
     const p = config.preferences;
     applyTheme(document.documentElement, selectedTheme, p.theme, systemDark);
@@ -191,7 +198,7 @@
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
   // 显式明暗同步原生窗口；system 解除原生覆盖，避免 WebView 的媒体查询被上一次显式模式锁住。
   $effect(() => {
-    void windowMaterial.update(selectedWindowMaterial, config.preferences.theme).catch(error => { toast = `窗口材质应用失败：${errorMessage(error)}`; });
+    void windowMaterial.update(selectedWindowMaterial, config.preferences.theme).catch(error => { toast = $t("窗口材质应用失败：{error}", { error: errorMessage(error) }); });
   });
 
   /**
@@ -270,9 +277,9 @@
     if (!file || themeImportBusy) return;
     themeImportBusy = true; dialogError = '';
     try {
-      if (file.size > 65536) throw new Error('THEME_INVALID: 主题文件不能超过 64 KiB。');
+      if (file.size > 65536) throw new Error($t("THEME_INVALID: 主题文件不能超过 64 KiB。"));
       const theme = parseTheme(await file.text());
-      if (themes.some(existing => existing.id === theme.id)) throw new Error('THEME_DUPLICATE: 此主题 ID 已存在，请修改文件中的 id 或先移除已有主题。');
+      if (themes.some(existing => existing.id === theme.id)) throw new Error($t("THEME_DUPLICATE: 此主题 ID 已存在，请修改文件中的 id 或先移除已有主题。"));
       config.customThemes = [...(config.customThemes ?? []), theme];
       config.preferences.themeId = theme.id;
       await persistConfig();
@@ -291,15 +298,15 @@
     if (themeExportBusy) return;
     themeExportBusy = true; dialogError = '';
     // 内置 ID 改为可导入的自定义 ID，完整保留两个模式供用户编辑。
-    const template = { ...selectedTheme, id: `custom-${selectedTheme.id}`.slice(0, 64), name: `${selectedTheme.name}（自制）`.slice(0, 80) };
+    const template = { ...selectedTheme, id: `custom-${selectedTheme.id}`.slice(0, 64), name: $t("{name}（自制）", { name: selectedTheme.name }).slice(0, 80) };
     try {
       const text = JSON.stringify(template, null, 2);
       if (desktop) {
         const { save } = await import('@tauri-apps/plugin-dialog');
-        const path = await save({ title: '保存主题模板', defaultPath: `${template.id}.json`, filters: [{ name: 'JSON 主题', extensions: ['json'] }] });
+        const path = await save({ title: $t("保存主题模板"), defaultPath: `${template.id}.json`, filters: [{ name: $t("JSON 主题"), extensions: ['json'] }] });
         if (!path) return;
         await files.create(path, text);
-        notify('主题模板已保存');
+        notify($t("主题模板已保存"));
         return;
       }
       const url = URL.createObjectURL(new Blob([text], { type: 'application/json;charset=utf-8' }));
@@ -307,7 +314,7 @@
       document.body.append(anchor);
       try { anchor.click(); }
       finally { anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-    } catch (error) { dialogError = `主题模板保存失败：${errorMessage(error)}`; }
+    } catch (error) { dialogError = $t("主题模板保存失败：{error}", { error: errorMessage(error) }); }
     finally { themeExportBusy = false; }
   }
 
@@ -322,7 +329,7 @@
     const snapshot = JSON.parse(JSON.stringify(config)) as AppConfig;
     configQueue = configQueue.catch(() => {}).then(() => files.saveConfig(snapshot));
     try { await configQueue; configError = ''; return true; }
-    catch (error) { configError = `配置保存失败：${errorMessage(error)}`; notify(configError); return false; }
+    catch (error) { configError = $t("配置保存失败：{error}", { error: errorMessage(error) }); notify(configError); return false; }
   }
   function captureUI(): void {
     if (!active || !editor || switching) return;
@@ -354,21 +361,21 @@
         let draft: RecoveryDraft | null = null;
         let recoveryWarning = '';
         try { draft = await files.loadRecovery(project.path); }
-        catch (error) { recoveryWarning = `恢复草稿无法读取：${errorMessage(error)}`; }
+        catch (error) { recoveryWarning = $t("恢复草稿无法读取：{error}", { error: errorMessage(error) }); }
         if (generation !== openGeneration) return;
         const ui = freshUI(project);
         resourceDocumentPath = project.path;
         switching = true;
         if (!editor) editor = new EditorController(editorHost, {
           text: disk.text, mode: ui.mode, onChange: documentChanged,
-          onStatus: message => notify(message, message.includes('可撤销')),
+          onStatus: message => notify(message, message.includes($t("可撤销"))),
           resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
           openLink: openDocumentLink,
         });
         else editor.restoreState(editor.createState(disk.text, ui.mode));
         editor.setUIState(ui);
         const current: ProjectSession = {
-          project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: '所有更改已保存' },
+          project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: $t("所有更改已保存") },
           saver: undefined as unknown as SaveCoordinator,
         };
         current.saver = new SaveCoordinator({
@@ -385,7 +392,7 @@
         sessions.set(project.id, current); session = current;
         void files.watch(project.path, () => { void current.saver.checkExternal(); indexCache.delete(project.id); })
           .then(stop => { if (sessions.has(project.id)) current.stopWatch = stop; else stop(); })
-          .catch(error => notify(`文件监听暂不可用：${errorMessage(error)}`));
+          .catch(error => notify($t("文件监听暂不可用：{error}", { error: errorMessage(error) })));
         if (draft && draft.text !== disk.text) { recovery = { project, disk, text: draft.text }; dialog = 'recovery'; }
       }
       if (generation !== openGeneration) { switching = false; return; }
@@ -494,13 +501,13 @@
   async function choosePath(create: boolean): Promise<void> {
     try {
       const path = await files.chooseFile(create);
-      if (path) { projectPath = path; createFile = create; if (!projectName) projectName = path.split(/[\\/]/).pop()?.replace(/\.(md|markdown|txt)$/i, '') ?? '新项目'; }
+      if (path) { projectPath = path; createFile = create; if (!projectName) projectName = path.split(/[\\/]/).pop()?.replace(/\.(md|markdown|txt)$/i, '') ?? $t("新项目"); }
     } catch (error) { dialogError = errorMessage(error); }
   }
   async function addProject(): Promise<void> {
-    if (!projectName.trim() || !projectPath) { dialogError = '填写项目名称并选择 Markdown 文件。'; return; }
+    if (!projectName.trim() || !projectPath) { dialogError = $t("填写项目名称并选择 Markdown 文件。"); return; }
     try {
-      if (config.projects.some(item => item.path.replace(/\\/g, '/').toLocaleLowerCase() === projectPath.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到项目。');
+      if (config.projects.some(item => item.path.replace(/\\/g, '/').toLocaleLowerCase() === projectPath.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error($t("这个文件已经关联到项目。"));
       if (createFile) await files.create(projectPath, `# ${projectName.trim()}\n\n- [ ] \n`);
       else await files.read(projectPath);
       const project = { id: crypto.randomUUID(), name: projectName.trim(), path: projectPath };
@@ -525,7 +532,7 @@
     try {
       const session = sessions.get(project.id);
       if (session && !await session.saver.flush()) {
-        const message = '仍有未保存内容，请先处理保存失败或冲突，再归档或解除关联。';
+        const message = $t("仍有未保存内容，请先处理保存失败或冲突，再归档或解除关联。");
         if (dialog) dialogError = message; else notify(message);
         return;
       }
@@ -582,7 +589,7 @@
     if (!project) return;
     try {
       const path = await files.chooseFile(false); if (!path) return;
-      if (config.projects.some(item => item.id !== project.id && item.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error('这个文件已经关联到另一个项目。');
+      if (config.projects.some(item => item.id !== project.id && item.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error($t("这个文件已经关联到另一个项目。"));
       const disk = await files.read(path);
       const session = sessions.get(project.id);
       // 新文件与内存草稿可能不同；先持久化待恢复文本，打开后展示双方内容供选择。
@@ -593,10 +600,10 @@
       await openProject(project); scheduleConfig();
     } catch (error) { fatal = errorMessage(error); }
   }
-  async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify('已保存'); } }
-  async function exportMarkdown(text = active?.state.doc.toString() ?? '', name = `${active?.project.name ?? '清单'}.md`): Promise<void> {
+  async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify($t("已保存")); } }
+  async function exportMarkdown(text = active?.state.doc.toString() ?? '', name = `${active?.project.name ?? $t("清单")}.md`): Promise<void> {
     if (desktop) {
-      try { const path = await files.chooseFile(true); if (path) { await files.create(path, text); notify('副本已保存'); } }
+      try { const path = await files.chooseFile(true); if (path) { await files.create(path, text); notify($t("副本已保存")); } }
       catch (error) { notify(errorMessage(error)); }
       return;
     }
@@ -613,7 +620,7 @@
   }
   async function recoverDraft(): Promise<void> {
     if (!recovery || !active || !editor) return;
-    if (recovery.project.id !== active.project.id) { dialogError = '请先切换到草稿所属项目再恢复。'; return; }
+    if (recovery.project.id !== active.project.id) { dialogError = $t("请先切换到草稿所属项目再恢复。"); return; }
     editor.setText(recovery.text); active.state = editor.state;
     // 恢复操作来自已展示双方全文的对话框，表示采用草稿作为当前编辑内容。
     active.saver.changed(); dialog = null; recovery = null; version += 1;
@@ -623,7 +630,7 @@
     if (!editor || screen !== 'project') return;
     const position = editor.state.selection.main.head;
     const item = parseDocument(editor.text).items.filter(item => item.from <= position && item.to >= position).at(-1);
-    if (!item) { notify('请先将光标放在列表项中'); return; }
+    if (!item) { notify($t("请先将光标放在列表项中")); return; }
     if (action === 'fold') editor.toggleFold(item.from);
     else if (action === 'group') editor.toggleTask(item.from, true);
     else editor.moveItem(item.from, action);
@@ -635,7 +642,7 @@
         const slug = decodeURIComponent(url.slice(1)).toLocaleLowerCase();
         const heading = editor.model.headings.find(item => item.text.toLocaleLowerCase().replace(/\s+/g, '-') === slug);
         if (heading) editor.focusAt(heading.from);
-        else notify('未找到链接对应的章节');
+        else notify($t("未找到链接对应的章节"));
         return;
       }
       if (desktop) {
@@ -732,7 +739,7 @@
             // 关闭保存可能早于安装请求开始；安装已接管退出时，旧关闭请求不能销毁窗口。
             if (updateInstalling) return;
             if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
-            else notify('仍有正文或配置未保存，请处理保存失败后关闭。');
+            else notify($t("仍有正文或配置未保存，请处理保存失败后关闭。"));
           });
           // 更新初始化独立于正文加载；检查失败只进入更新面板，不使编辑器变为不可用。
           const { TauriUpdatePort } = await import('./lib/updater/tauri');
@@ -742,7 +749,7 @@
             beforeInstall: prepareUpdateInstall, afterInstallFailure: () => { updateInstalling = false; },
             onStatus: status => {
               updateStatus = status;
-              if (status.kind === 'ready') notify(`Foldmark ${status.version} 已下载，可在更新面板安装。`);
+              if (status.kind === 'ready') notify($t("Foldmark {version} 已下载，可在更新面板安装。", { version: status.version ?? packageInfo.version }));
             },
           });
           if (config.preferences.autoCheckUpdates ?? true) void updater.check();
@@ -771,16 +778,16 @@
   {#if sidebar && !cardMode}
     <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
     <div class="sidebar-slot">
-    <aside class="sidebar" aria-label="项目导航" inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
-      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
-      <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 7h8M6 10h8M6 13h5"/></svg> 全部待办 <svg class="shortcut" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7H5a2 2 0 1 1 2-2v10a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H7Z"/></svg></button>
-      <div class="sidebar-section"><span>项目</span><div class="project-actions">
+    <aside class="sidebar" aria-label={$t("项目导航")} inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
+      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
+      <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 7h8M6 10h8M6 13h5"/></svg> {$t("全部待办")} <svg class="shortcut" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7H5a2 2 0 1 1 2-2v10a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H7Z"/></svg></button>
+      <div class="sidebar-section"><span>{$t("项目")}</span><div class="project-actions">
         <div class="project-search" data-project-search>
-          <button class="icon-button" aria-label="查找项目" title="查找项目 (Ctrl P)" aria-expanded={projectSearchOpen} aria-controls="project-search-panel" onclick={() => projectSearchOpen ? closeProjectSearch() : openProjectSearch()}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg></button>
+          <button class="icon-button" aria-label={$t("查找项目")} title={$t("查找项目 (Ctrl P)")} aria-expanded={projectSearchOpen} aria-controls="project-search-panel" onclick={() => projectSearchOpen ? closeProjectSearch() : openProjectSearch()}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg></button>
         </div>
-        <button class="icon-button" aria-label="新增项目" onclick={() => openDialog('project')}><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 3v14M3 10h14"/></svg></button>
+        <button class="icon-button" aria-label={$t("新增项目")} onclick={() => openDialog('project')}><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 3v14M3 10h14"/></svg></button>
       </div></div>
-      {#if projectSearchOpen}<div id="project-search-panel" class="project-search-panel" data-project-search><input id="project-filter" class="project-filter" aria-label="快速查找项目" placeholder="查找项目…" bind:value={projectFilter} /></div>{/if}
+      {#if projectSearchOpen}<div id="project-search-panel" class="project-search-panel" data-project-search><input id="project-filter" class="project-filter" aria-label={$t("快速查找项目")} placeholder={$t("查找项目…")} bind:value={projectFilter} /></div>{/if}
       <nav class="project-list">
         {#each visibleProjects as project (project.id)}
           <button class="nav-item" class:nav-active={screen === 'project' && active?.project.id === project.id}
@@ -796,7 +803,7 @@
             onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
-      <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2-1.5.9-2-.6-2 3.4 1.5 1.4v1.8L2 12.3l2 3.4 2-.6 1.5.9.5 2h4l.5-2 1.5-.9 2 .6 2-3.4-1.5-1.4V9.1L18 7.7l-2-3.4-2 .6-1.5-.9-.5-2Z"/><circle cx="10" cy="10" r="3"/></svg></button></div>
+      <div class="sidebar-bottom"><button class="icon-button" aria-label={$t("设置")} onclick={() => openDialog('settings')}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2-1.5.9-2-.6-2 3.4 1.5 1.4v1.8L2 12.3l2 3.4 2-.6 1.5.9.5 2h4l.5-2 1.5-.9 2 .6 2-3.4-1.5-1.4V9.1L18 7.7l-2-3.4-2 .6-1.5-.9-.5-2Z"/><circle cx="10" cy="10" r="3"/></svg></button></div>
     </aside>
     </div>
   {/if}
@@ -809,48 +816,48 @@
     <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
     {#if !cardMode}
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
-      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
-      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
+      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label={$t("展开项目导航")} onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">{$t("工作空间")}</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? $t("全部待办") : active?.project.name ?? $t("欢迎")}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label={$t("未保存")} title={$t("未保存")}>*</span>{/if}</div>
+      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>{$t("搜索")}<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label={$t("更多操作")} aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
       {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
-        <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
-        <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>新增任务 <kbd>Ctrl N</kbd></button>
-        <button role="menuitem" onclick={() => currentItemAction('group')}>完成整组任务</button>
-        <button role="menuitem" onclick={() => currentItemAction('fold')}>折叠 / 展开当前项</button>
-        <button role="menuitem" onclick={() => currentItemAction('up')}>同级上移</button>
-        <button role="menuitem" onclick={() => currentItemAction('down')}>同级下移</button>
-        <hr/><button role="menuitem" onclick={() => openDialog('rename')}>重命名项目</button>
-        <button role="menuitem" onclick={() => exportMarkdown()}>另存 Markdown 副本</button>
-        <button role="menuitem" onclick={() => openDialog('remove')}>移除项目关联</button>
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>查看归档项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键</button>
+        <button role="menuitem" onclick={save}>{$t("保存")} <kbd>Ctrl S</kbd></button>
+        <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>{$t("新增任务")} <kbd>Ctrl N</kbd></button>
+        <button role="menuitem" onclick={() => currentItemAction('group')}>{$t("完成整组任务")}</button>
+        <button role="menuitem" onclick={() => currentItemAction('fold')}>{$t("折叠 / 展开当前项")}</button>
+        <button role="menuitem" onclick={() => currentItemAction('up')}>{$t("同级上移")}</button>
+        <button role="menuitem" onclick={() => currentItemAction('down')}>{$t("同级下移")}</button>
+        <hr/><button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>
+        <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
+        <button role="menuitem" onclick={() => openDialog('remove')}>{$t("移除项目关联")}</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button><button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>
       </div>{/if}
     </header>
     {/if}
 
     {#if searchOpen}
-      <section class="search-panel" data-global-search aria-label="跨项目搜索">
-        <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
-        <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> 包含归档</label>
-        <div class="search-results">{#each results.slice(0, resultLimit) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}{#if resultLimit < results.length}<button class="load-more" onclick={() => resultLimit += 100}>显示更多（还有 {results.length - resultLimit} 条）</button>{/if}</div>
+      <section class="search-panel" data-global-search aria-label={$t("跨项目搜索")}>
+        <div class="search-row"><input id="global-search" aria-label={$t("搜索所有项目")} placeholder={$t("搜索任务和正文…")} bind:value={query} /><button class="icon-button" aria-label={$t("关闭搜索")} onclick={() => searchOpen = false}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
+        <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> {$t("包含归档")}</label>
+        <div class="search-results">{#each results.slice(0, resultLimit) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? $t("已完成") : $t("待办")} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? $t("正在搜索…") : $t("没有匹配的任务")}</p>{/each}{#if resultLimit < results.length}<button class="load-more" onclick={() => resultLimit += 100}>{$t('显示更多（还有 {count} 条）', { count: results.length - resultLimit })}</button>{/if}</div>
       </section>
     {/if}
 
     {#if screen === 'project' && !cardMode}
-      <div class="viewbar"><div class="tabs" aria-label="文档视图">{#each [['todo','待办',counts.todo],['archive','归档',counts.archive]] as tab}<button class:tab-active={previewMode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
+      <div class="viewbar"><div class="tabs" aria-label={$t("文档视图")}>{#each [['todo',$t("待办"),counts.todo],['archive',$t("归档"),counts.archive]] as tab}<button class:tab-active={previewMode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
-    {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>重新定位文件</button>{/if}</div>{/if}
-    {#if configError}<div class="error-banner" role="alert">{configError}<button onclick={() => persistConfig()}>重试配置保存</button></div>{/if}
-    {#if active?.recoveryWarning}<div class="error-banner" role="alert">{active.recoveryWarning}。当前显示完好的 Markdown 原文件。</div>{/if}
-    {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">磁盘文件有新的修改，你的编辑已保留。<button onclick={() => openDialog('conflict')}>比较并处理</button></div>{/if}
-    {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">保存失败：{saveStatus.message}<button onclick={save}>重试保存</button><button onclick={() => exportMarkdown()}>另存副本</button><button onclick={relocate}>重新定位文件</button></div>{/if}
+    {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>{$t("重新定位文件")}</button>{/if}</div>{/if}
+    {#if configError}<div class="error-banner" role="alert">{configError}<button onclick={() => persistConfig()}>{$t("重试配置保存")}</button></div>{/if}
+    {#if active?.recoveryWarning}<div class="error-banner" role="alert">{active.recoveryWarning}{$t("。当前显示完好的 Markdown 原文件。")}</div>{/if}
+    {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">{$t("磁盘文件有新的修改，你的编辑已保留。")}<button onclick={() => openDialog('conflict')}>{$t("比较并处理")}</button></div>{/if}
+    {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">{$t('保存失败：{error}', { error: saveStatus.message })}<button onclick={save}>{$t("重试保存")}</button><button onclick={() => exportMarkdown()}>{$t("另存副本")}</button><button onclick={relocate}>{$t("重新定位文件")}</button></div>{/if}
 
     <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
     {#if !active && screen === 'project' && !fatal}
-      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>查看快捷键 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
+      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">{$t("为想法留白")}</p><h1>{$t("从一份清单开始。")}</h1><p>{$t("写下要做的事，完成后收进归档。")}<br/>{$t("你的 Markdown 文件，始终由你掌握。")}</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>{$t("关联或新建项目")}</button><button class="text-button" onclick={() => openDialog('help')}>{$t("查看快捷键")} <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
     {/if}
     {#if screen === 'all'}
-      <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
+      <section class="aggregate"><p class="eyebrow">{$t("工作空间")}</p><h1>{$t("全部待办")}<span>{aggregateResults.length}</span></h1><p class="muted">{$t("每件事都有自己的位置。选择一项，回到原文继续。")}</p>
         {#each availableProjects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
           {#if projectResults.length}
@@ -862,27 +869,27 @@
                 {/if}
                 <button class="aggregate-task" aria-label={result.title} class:aggregate-section-task={result.sectionFrom !== null} onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
               {/each}
-              {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}
+              {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>{$t('显示更多（还有 {count} 条）', { count: projectResults.length - (aggregateLimits[project.id] ?? 100) })}</button>{/if}
             </section>
           {/if}
         {/each}
-        {#if !aggregateResults.length}<p class="all-clear">{indexing ? '正在读取项目…' : '暂时没有待办。给自己留一点空闲。'}</p>{/if}
+        {#if !aggregateResults.length}<p class="all-clear">{indexing ? $t("正在读取项目…") : $t("暂时没有待办。给自己留一点空闲。")}</p>{/if}
       </section>
     {/if}
     <div class="statusbar-dock">
       <footer class="statusbar" data-tauri-drag-region={desktop && cardMode ? true : undefined}>
         <div class="statusbar-actions">
-          <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
-          <button class="card-button" aria-label={cardMode ? '退出卡片模式' : '进入卡片模式'} title={cardMode ? '退出卡片模式' : '进入卡片模式'} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
+          <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? $t("返回预览") : $t("查看源码")} title={mode === 'source' ? $t("返回预览") : $t("查看源码")} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
+          <button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
         </div>
-        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button aria-label="快捷键" title="当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键" onclick={() => openDialog('help')}>{#if screen === 'project' && active}{characterCount} 字 <span>·</span> Markdown{:else}快捷键{/if}</button>
+        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? $t("正在下载更新…") : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
       </footer>
     </div>
   </main>
 </div>
 
 {#if projectMenu}
-  <div class="dropdown project-context-menu" data-project-menu role="menu" tabindex="-1" aria-label="项目操作" style:left={`${projectMenu.x}px`} style:top={`${projectMenu.y}px`}
+  <div class="dropdown project-context-menu" data-project-menu role="menu" tabindex="-1" aria-label={$t("项目操作")} style:left={`${projectMenu.x}px`} style:top={`${projectMenu.y}px`}
     onkeydown={event => {
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
@@ -892,61 +899,62 @@
       }
       if (event.key === 'Tab') projectMenu = null;
     }}>
-    <button role="menuitem" onclick={() => { if (projectMenu) void retireProject(projectMenu.project, true); }}>归档项目</button>
-    <button role="menuitem" onclick={() => { const target = projectMenu?.project; openDialog('remove'); removeTarget = target ?? null; }}>删除项目</button>
+    <button role="menuitem" onclick={() => { if (projectMenu) void retireProject(projectMenu.project, true); }}>{$t("归档项目")}</button>
+    <button role="menuitem" onclick={() => { const target = projectMenu?.project; openDialog('remove'); removeTarget = target ?? null; }}>{$t("删除项目")}</button>
   </div>
 {/if}
 
-{#if toast}<div class="toast" role="status" inert={updateInstalling || projectActionBusy}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling && !projectActionBusy) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>{/if}
+{#if toast}<div class="toast" role="status" inert={updateInstalling || projectActionBusy}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling && !projectActionBusy) { editor?.undo(); toast = ''; } }}>{$t("撤销")}</button>{/if}<button aria-label={$t("关闭提示")} onclick={() => toast = ''}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>{/if}
 
 {#if dialog}
   <div class="modal-backdrop" role="presentation">
     <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
-      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling || projectActionBusy} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+      <button class="modal-close icon-button" aria-label={$t("关闭对话框")} disabled={updateInstalling || projectActionBusy} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       {#if dialog === 'project'}
-        <p class="eyebrow">项目</p><h2 id="dialog-title">给一份清单一个位置</h2><p class="muted">关联已有 Markdown，或选择位置新建文件。</p>
-        <label>项目名称<input placeholder="例如：工作、阅读、生活" bind:value={projectName}/></label>
-        <div class="file-buttons"><button onclick={() => choosePath(false)}>选择已有文件</button><button onclick={() => choosePath(true)}>新建清单文件</button></div>
+        <p class="eyebrow">{$t("项目")}</p><h2 id="dialog-title">{$t("给一份清单一个位置")}</h2><p class="muted">{$t("关联已有 Markdown，或选择位置新建文件。")}</p>
+        <label>{$t("项目名称")}<input placeholder={$t("例如：工作、阅读、生活")} bind:value={projectName}/></label>
+        <div class="file-buttons"><button onclick={() => choosePath(false)}>{$t("选择已有文件")}</button><button onclick={() => choosePath(true)}>{$t("新建清单文件")}</button></div>
         {#if projectPath}<p class="file-path">{projectPath}</p>{/if}
-        {#if !desktop}<p class="small muted">浏览器模式会导入文件副本。桌面应用直接关联本地原文件。</p>{/if}
-        <button class="primary" onclick={addProject}>添加项目</button>
+        {#if !desktop}<p class="small muted">{$t("浏览器模式会导入文件副本。桌面应用直接关联本地原文件。")}</p>{/if}
+        <button class="primary" onclick={addProject}>{$t("添加项目")}</button>
       {:else if dialog === 'rename'}
-        <h2 id="dialog-title">重命名项目</h2><label>项目名称<input bind:value={projectName}/></label><button class="primary" onclick={renameProject}>保存名称</button>
+        <h2 id="dialog-title">{$t("重命名项目")}</h2><label>{$t("项目名称")}<input bind:value={projectName}/></label><button class="primary" onclick={renameProject}>{$t("保存名称")}</button>
       {:else if dialog === 'remove'}
-        <h2 id="dialog-title">删除「{removeTarget?.name}」项目？</h2><p>Markdown 文件会保留在原位置。你可以随时重新关联。</p><div class="modal-actions"><button onclick={() => dialog = null}>取消</button><button class="primary" disabled={projectActionBusy} onclick={removeProject}>删除项目</button></div>
+        <h2 id="dialog-title">{$t('删除「{name}」项目？', { name: removeTarget?.name ?? '' })}</h2><p>{$t("Markdown 文件会保留在原位置。你可以随时重新关联。")}</p><div class="modal-actions"><button onclick={() => dialog = null}>{$t("取消")}</button><button class="primary" disabled={projectActionBusy} onclick={removeProject}>{$t("删除项目")}</button></div>
       {:else if dialog === 'archived-projects'}
-        <h2 id="dialog-title">归档项目</h2><p class="muted">恢复后，项目会重新显示在左侧列表中。</p>
+        <h2 id="dialog-title">{$t("归档项目")}</h2><p class="muted">{$t("恢复后，项目会重新显示在左侧列表中。")}</p>
         <div class="archived-project-list">
           {#each archivedProjects as project (project.id)}
-            <div class="archived-project-row"><div><strong>{project.name}</strong><small title={project.path}>{project.path}</small></div><button aria-label={`恢复项目：${project.name}`} onclick={() => restoreProject(project)}>恢复项目</button></div>
-          {:else}<p class="muted">暂无归档项目</p>{/each}
+            <div class="archived-project-row"><div><strong>{project.name}</strong><small title={project.path}>{project.path}</small></div><button aria-label={$t("恢复项目：{name}", { name: project.name })} onclick={() => restoreProject(project)}>{$t("恢复项目")}</button></div>
+          {:else}<p class="muted">{$t("暂无归档项目")}</p>{/each}
         </div>
       {:else if dialog === 'settings'}
-        <p class="eyebrow">阅读与外观</p><h2 id="dialog-title">让文字读起来更舒适</h2>
-        <label>主题<select bind:value={config.preferences.themeId}>{#each themes as theme (theme.id)}<option value={theme.id}>{theme.name}</option>{/each}</select></label>
-        <label>明暗模式<select bind:value={config.preferences.theme}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
-        <input class="offscreen" type="file" accept=".json,application/json" aria-label="导入主题文件" bind:this={themeInput} onchange={importTheme}/>
-        <div class="file-buttons"><button disabled={themeImportBusy || !configReady} onclick={() => themeInput?.click()}>{themeImportBusy ? '正在导入…' : '导入主题'}</button><button disabled={themeExportBusy || !configReady} onclick={exportThemeTemplate}>下载主题模板</button>{#if config.customThemes?.some(theme => theme.id === selectedTheme.id)}<button onclick={removeTheme}>移除主题</button>{/if}</div>
-        <label>正文字体<input bind:value={config.preferences.fontFamily}/></label>
-        <label>字号 <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
-        <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
+        <p class="eyebrow">{$t("阅读与外观")}</p><h2 id="dialog-title">{$t("让文字读起来更舒适")}</h2>
+        <label>{$t("语言")}<select value={['zh-CN', 'en', 'system'].includes(config.preferences.locale ?? '') ? config.preferences.locale : 'zh-CN'} onchange={event => config.preferences.locale = event.currentTarget.value as LocalePreference}><option value="zh-CN">简体中文</option><option value="en">English</option><option value="system">{$t("跟随系统")}</option></select></label>
+        <label>{$t("主题")}<select bind:value={config.preferences.themeId}>{#each themes as theme (theme.id)}<option value={theme.id}>{builtInThemes.some(builtIn => builtIn.id === theme.id) ? $t(theme.name) : theme.name}</option>{/each}</select></label>
+        <label>{$t("明暗模式")}<select bind:value={config.preferences.theme}><option value="system">{$t("跟随系统")}</option><option value="light">{$t("浅色")}</option><option value="dark">{$t("深色")}</option></select></label>
+        <input class="offscreen" type="file" accept=".json,application/json" aria-label={$t("导入主题文件")} bind:this={themeInput} onchange={importTheme}/>
+        <div class="file-buttons"><button disabled={themeImportBusy || !configReady} onclick={() => themeInput?.click()}>{themeImportBusy ? $t("正在导入…") : $t("导入主题")}</button><button disabled={themeExportBusy || !configReady} onclick={exportThemeTemplate}>{$t("下载主题模板")}</button>{#if config.customThemes?.some(theme => theme.id === selectedTheme.id)}<button onclick={removeTheme}>{$t("移除主题")}</button>{/if}</div>
+        <label>{$t("正文字体")}<input bind:value={config.preferences.fontFamily}/></label>
+        <label>{$t("字号")} <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
+        <label>{$t("正文宽度")} <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
       {:else if dialog === 'updates'}
-        <h2 id="dialog-title">应用更新</h2>
+        <h2 id="dialog-title">{$t("应用更新")}</h2>
         <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}
           autoCheck={config.preferences.autoCheckUpdates ?? true} autoDownload={config.preferences.autoDownloadUpdates ?? true}
           onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
           onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}/>
       {:else if dialog === 'help'}
-        <h2 id="dialog-title">快捷键</h2>
-        <dl class="shortcuts"><dt>Ctrl N</dt><dd>新增任务</dd><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>
+        <h2 id="dialog-title">{$t("快捷键")}</h2>
+        <dl class="shortcuts"><dt>Ctrl N</dt><dd>{$t("新增任务")}</dd><dt>Enter</dt><dd>{$t("继续任务；空任务退出列表")}</dd><dt>Shift Enter</dt><dd>{$t("在任务正文中换行")}</dd><dt>Tab / Shift Tab</dt><dd>{$t("整项缩进 / 反缩进")}</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>{$t("撤销 / 重做当前项目的编辑")}</dd><dt>Ctrl S</dt><dd>{$t("立即保存")}</dd><dt>Ctrl P</dt><dd>{$t("快速查找项目")}</dd><dt>Ctrl Shift F</dt><dd>{$t("跨项目搜索")}</dd></dl>
       {:else if dialog === 'conflict'}
-        <p class="eyebrow">外部修改</p><h2 id="dialog-title">选择要保留的内容</h2><p class="muted">可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。</p>
-        <div class="compare"><label>当前编辑<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>磁盘版本<textarea readonly value={active?.status.external?.text}></textarea></label></div>
-        <div class="modal-actions"><button onclick={() => exportMarkdown()}>另存当前副本</button><button onclick={() => resolveConflict(false)}>选用磁盘版本</button><button class="primary" onclick={() => resolveConflict(true)}>保留当前编辑</button></div>
+        <p class="eyebrow">{$t("外部修改")}</p><h2 id="dialog-title">{$t("选择要保留的内容")}</h2><p class="muted">{$t("可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。")}</p>
+        <div class="compare"><label>{$t("当前编辑")}<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>{$t("磁盘版本")}<textarea readonly value={active?.status.external?.text}></textarea></label></div>
+        <div class="modal-actions"><button onclick={() => exportMarkdown()}>{$t("另存当前副本")}</button><button onclick={() => resolveConflict(false)}>{$t("选用磁盘版本")}</button><button class="primary" onclick={() => resolveConflict(true)}>{$t("保留当前编辑")}</button></div>
       {:else if dialog === 'recovery'}
-        <p class="eyebrow">编辑恢复</p><h2 id="dialog-title">发现一份未写入文件的草稿</h2><p>草稿与磁盘内容均保留。恢复后可继续编辑，也可先另存草稿副本。</p>
-        <div class="compare"><label>恢复草稿<textarea readonly value={recovery?.text}></textarea></label><label>磁盘内容<textarea readonly value={recovery?.disk.text}></textarea></label></div>
-        <div class="modal-actions"><button onclick={() => exportMarkdown(recovery?.text)}>另存草稿副本</button><button onclick={() => { dialog = null; }}>暂不恢复</button><button class="primary" onclick={recoverDraft}>恢复草稿继续编辑</button></div>
+        <p class="eyebrow">{$t("编辑恢复")}</p><h2 id="dialog-title">{$t("发现一份未写入文件的草稿")}</h2><p>{$t("草稿与磁盘内容均保留。恢复后可继续编辑，也可先另存草稿副本。")}</p>
+        <div class="compare"><label>{$t("恢复草稿")}<textarea readonly value={recovery?.text}></textarea></label><label>{$t("磁盘内容")}<textarea readonly value={recovery?.disk.text}></textarea></label></div>
+        <div class="modal-actions"><button onclick={() => exportMarkdown(recovery?.text)}>{$t("另存草稿副本")}</button><button onclick={() => { dialog = null; }}>{$t("暂不恢复")}</button><button class="primary" onclick={recoverDraft}>{$t("恢复草稿继续编辑")}</button></div>
       {/if}
       {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
     </div>

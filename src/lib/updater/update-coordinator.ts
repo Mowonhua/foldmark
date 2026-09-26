@@ -2,6 +2,7 @@
  * 文件职责：协调更新检查、后台下载和保存后的用户安装请求。
  * 定义范围：更新状态机、并发去重及原生候选资源生命周期。
  */
+import { translate } from '../i18n';
 import type { UpdateCandidate, UpdateOptions, UpdateStatus } from './contracts';
 import { errorMessage } from '../session/save-coordinator';
 
@@ -153,7 +154,7 @@ export class UpdateCoordinator {
     if (this.disposed) return;
     try {
       const saved = await this.options.beforeInstall();
-      if (!saved) throw new Error('请先解决未保存的更改或文件冲突，再重试安装更新。');
+      if (!saved) throw new Error(translate('请先解决未保存的更改或文件冲突，再重试安装更新。'));
       if (this.disposed) { this.options.afterInstallFailure?.(); return; }
       // Windows 原生安装成功后直接退出；所有会话和配置必须在此前完成保存。
       await candidate.install();

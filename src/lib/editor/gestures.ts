@@ -2,6 +2,7 @@
  * 文件职责：管理列表标记手势及正文右侧、空任务、空段落的指针定位。
  * 定义范围：指针状态机、正文焦点、末尾空段落分隔和同列表可见插入边界。
  */
+import { locale, translate } from '../i18n';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { getHiddenRanges } from '../markdown';
@@ -178,7 +179,7 @@ class MarkerGestures {
       if (this.view.state.facet(modeFacet) !== 'todo') return;
       session.preview = document.createElement('div'); session.preview.className = 'fm-drag-preview';
       const item = this.view.state.field(documentField).items.find(item => item.from === session.from);
-      session.preview.textContent = item ? this.view.state.doc.sliceString(item.contentFrom, item.firstLineTo) || '空列表项' : '';
+      session.preview.textContent = item ? this.view.state.doc.sliceString(item.contentFrom, item.firstLineTo) || translate('空列表项') : '';
       session.line = document.createElement('div'); session.line.className = 'fm-drop-line';
       document.body.append(session.preview, session.line);
       document.body.classList.add('fm-dragging');
@@ -267,10 +268,12 @@ class MarkerGestures {
     const item = this.view.state.field(documentField).items.find(item => item.from === from);
     if (item?.task) entries.push([item.task.checked ? '恢复任务' : '完成整组', () => actions.toggleTask(from, !item.task?.checked)]);
     if (item?.task?.checked && this.view.state.field(documentField).tasks.some(child => child.from > item.from && child.to <= item.to && !child.task?.checked)) entries.push(['完成整组', () => actions.toggleTask(from, true)]);
-    const close = (): void => { menu.remove(); window.removeEventListener('pointerdown', outside, true); this.closeMenu = null; };
+    const close = (): void => { unsubscribe(); menu.remove(); window.removeEventListener('pointerdown', outside, true); this.closeMenu = null; };
     const outside = (event: Event): void => { if (!menu.contains(event.target as Node)) close(); };
     this.closeMenu = close;
-    for (const [label, action] of entries) { const button = document.createElement('button'); button.textContent = label; button.setAttribute('role', 'menuitem'); button.onclick = () => { close(); action(); }; menu.append(button); }
+    for (const [label, action] of entries) { const button = document.createElement('button'); button.textContent = translate(label); button.setAttribute('role', 'menuitem'); button.onclick = () => { close(); action(); }; menu.append(button); }
+    // 浮层不属于编辑器装饰，由本次菜单订阅负责刷新并在关闭时释放。
+    const unsubscribe = locale.subscribe(() => entries.forEach(([label], index) => { menu.children[index].textContent = translate(label); }));
     menu.addEventListener('keydown', event => { if (event.key === 'Escape') { close(); marker.focus(); } });
     document.body.append(menu); (menu.firstElementChild as HTMLElement).focus();
     window.addEventListener('pointerdown', outside, true);

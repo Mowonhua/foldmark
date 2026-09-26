@@ -9,6 +9,7 @@ import neumorphicPackage from '../../themes/neumorphic.json';
 import liquidGlassPackage from '../../themes/liquid-glass.json';
 import frostedGlassPackage from '../../themes/frosted-glass.json';
 import { applyAppearance, validateAppearance, type ThemeAppearance } from './theme-appearance';
+import { translate } from './i18n';
 
 /** 结构职责：区分明暗模式与系统偏好；主题身份独立保存，不随模式变化。 */
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -43,7 +44,7 @@ export const builtInThemes: readonly ThemeDefinition[] = [paperPackage, monoPack
  * 实现思路：按固定字段、颜色白名单和版本验证；主题 ID 唯一性由导入与配置集合边界保证。
  */
 export function validateTheme(value: unknown): ThemeDefinition {
-  const fail = (): never => { throw new Error('THEME_INVALID: 主题需包含 version: 1、唯一 id、名称及完整的浅色和深色六位十六进制配色。'); };
+  const fail = (): never => { throw new Error(`THEME_INVALID: ${translate('主题需包含 version: 1、唯一 id、名称及完整的浅色和深色六位十六进制配色。')}`); };
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return fail();
   const theme = value as Record<string, unknown>;
   if (theme.version !== 1 || typeof theme.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(theme.id)) return fail();
@@ -77,10 +78,10 @@ export function validateTheme(value: unknown): ThemeDefinition {
  * 实现思路：限制大小后解析 JSON 并调用统一校验。
  */
 export function parseTheme(text: string): ThemeDefinition {
-  if (text.length > 65536) throw new Error('THEME_INVALID: 主题文件不能超过 64 KiB。');
+  if (text.length > 65536) throw new Error(`THEME_INVALID: ${translate('主题文件不能超过 64 KiB。')}`);
   let value: unknown;
   try { value = JSON.parse(text.replace(/^\uFEFF/, '')); }
-  catch { throw new Error('THEME_INVALID: 主题文件不是有效的 JSON。'); }
+  catch { throw new Error(`THEME_INVALID: ${translate('主题文件不是有效的 JSON。')}`); }
   return validateTheme(value);
 }
 /**

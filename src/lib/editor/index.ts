@@ -2,6 +2,7 @@
  * 文件职责：承载唯一编辑视图与应用命令之间的协调入口。
  * 定义范围：编辑状态生命周期、公共编辑命令、界面状态恢复。
  */
+import { translate, locale } from '../i18n';
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory } from '@codemirror/commands';
@@ -51,6 +52,8 @@ export function getDocumentModel(state: EditorState): DocumentModel { return sta
 export class EditorController {
   readonly view: EditorView;
   private readonly mode = new Compartment();
+  private readonly language = new Compartment();
+  private readonly unsubscribeLocale: () => void;
   private readonly options: EditorOptions;
   private groupPrompt: HTMLElement | null = null;
   private positionGeneration = 0;
@@ -58,6 +61,7 @@ export class EditorController {
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
+    this.unsubscribeLocale = locale.subscribe(() => this.refreshLanguage());
     this.view.dom.addEventListener('keydown', this.historyKey, true);
     this.view.scrollDOM.addEventListener('wheel', this.cancelPositionRestore, { passive: true });
     this.view.scrollDOM.addEventListener('pointerdown', this.cancelPositionRestore);
@@ -90,10 +94,23 @@ export class EditorController {
       documentField, foldsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures, foldMotion,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
-      placeholder('写下第一件事，或输入 - [ ] 创建任务…'),
-      EditorView.contentAttributes.of({ 'aria-label': 'Markdown 任务文档', spellcheck: 'false' }),
+      this.language.of(this.languageExtensions()),
       EditorView.updateListener.of(update => { if (update.docChanged) this.options.onChange(update.state.doc.toString()); }),
     ] });
+  }
+
+  /** 语言仅影响界面扩展；重配置保留正文、选区、折叠和历史，不触发正文保存。 */
+  private languageExtensions(): Extension[] {
+    return [placeholder(translate('写下第一件事，或输入 - [ ] 创建任务…')), EditorView.contentAttributes.of({ 'aria-label': translate('Markdown 任务文档'), spellcheck: 'false' })];
+  }
+  private refreshLanguage(): void {
+    // 保留待确认操作及其事件绑定，只更新本控制器拥有的提示节点。
+    if (this.groupPrompt) {
+      this.groupPrompt.children[0].textContent = translate('还有未完成子任务');
+      this.groupPrompt.children[1].textContent = translate('完成整组');
+      this.groupPrompt.children[2].textContent = translate('取消');
+    }
+    this.view.dispatch({ effects: this.language.reconfigure(this.languageExtensions()), annotations: Transaction.addToHistory.of(false) });
   }
 
   private modeExtensions(mode: ViewMode, sourceView: 'todo' | 'archive' = mode === 'archive' ? 'archive' : 'todo'): Extension[] {
@@ -145,7 +162,7 @@ export class EditorController {
     const model = this.model;
     const sections = archiveSections(model);
     return model.tasks.some(item => taskIsArchived(model, item) && !sections.some(section => item.from >= section.headingTo && item.to <= section.to))
-      ? '暂缓整理归档：请检查源码中的代码围栏或 HTML 是否完整。' : null;
+      ? translate('暂缓整理归档：请检查源码中的代码围栏或 HTML 是否完整。') : null;
   }
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
@@ -159,6 +176,8 @@ export class EditorController {
   restoreState(state: EditorState, ui?: ProjectView): void {
     this.positionGeneration++;
     this.closeGroupPrompt(); this.view.setState(state);
+    // 后台项目保存的状态可能来自旧语言；复用其历史后再同步当前界面语言。
+    this.refreshLanguage();
     if (ui) this.setUIState(ui);
   }
   getUIState(): ProjectView {
@@ -256,23 +275,23 @@ export class EditorController {
       const completing = group || !item.task.checked;
       this.view.dispatch({ changes, selection, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
       this.closeGroupPrompt();
-      this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? '整组已完成，可撤销' : '任务已完成，可撤销' : '任务已恢复，可撤销'));
+      this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? translate('整组已完成，可撤销') : translate('任务已完成，可撤销') : translate('任务已恢复，可撤销')));
     } catch (error) {
       if (error instanceof Error && error.message.includes('TASK_GROUP_REQUIRED')) { this.showGroupPrompt(itemFrom); return; }
-      this.options.onStatus?.(error instanceof Error ? error.message : '任务操作失败');
+      this.options.onStatus?.(error instanceof Error ? error.message : translate('任务操作失败'));
     }
   }
 
   private showGroupPrompt(from: number): void {
     this.closeGroupPrompt();
     const prompt = document.createElement('div'); prompt.className = 'fm-group-prompt'; prompt.setAttribute('role', 'status');
-    const label = document.createElement('span'); label.textContent = '还有未完成子任务';
-    const complete = document.createElement('button'); complete.textContent = '完成整组'; complete.onclick = () => this.toggleTask(from, true);
-    const cancel = document.createElement('button'); cancel.textContent = '取消'; cancel.onclick = () => this.closeGroupPrompt();
+    const label = document.createElement('span'); label.textContent = translate('还有未完成子任务');
+    const complete = document.createElement('button'); complete.textContent = translate('完成整组'); complete.onclick = () => this.toggleTask(from, true);
+    const cancel = document.createElement('button'); cancel.textContent = translate('取消'); cancel.onclick = () => this.closeGroupPrompt();
     prompt.append(label, complete, cancel); this.view.dom.append(prompt); this.groupPrompt = prompt;
     // 捕获下一次按下，避免被触发本提示的 click 立即关闭，也避免正文阻止冒泡后漏掉外部操作。
     window.addEventListener('pointerdown', this.dismissGroupPrompt, true);
-    this.options.onStatus?.('还有未完成子任务，请选择“完成整组”');
+    this.options.onStatus?.(translate('还有未完成子任务，请选择“完成整组”'));
   }
 
   private dismissGroupPrompt = (event: Event): void => {
@@ -318,8 +337,8 @@ export class EditorController {
       this.view.dispatch({ changes, selection, effects: setFolds.of(folds), annotations: isolateHistory.of('full'), userEvent: 'move' });
       const moved = this.view.coordsAtPos(map(item.from));
       if (coords && moved) this.view.scrollDOM.scrollTop = scroll + moved.top - coords.top;
-      this.options.onStatus?.('条目已移动，可撤销');
-    } catch (error) { this.options.onStatus?.(error instanceof Error ? error.message : '无法移动条目'); }
+      this.options.onStatus?.(translate('条目已移动，可撤销'));
+    } catch (error) { this.options.onStatus?.(error instanceof Error ? error.message : translate('无法移动条目')); }
   }
 
   toggleFold(itemFrom: number): void {
@@ -337,6 +356,7 @@ export class EditorController {
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
   destroy(): void {
+    this.unsubscribeLocale();
     this.positionGeneration++; this.closeGroupPrompt();
     this.view.dom.removeEventListener('keydown', this.historyKey, true);
     this.view.dom.removeEventListener('keydown', this.cancelPositionRestore, true);

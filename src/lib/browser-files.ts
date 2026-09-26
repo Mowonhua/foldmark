@@ -2,6 +2,7 @@
  * 文件职责：提供浏览器预览环境的本地沙盒文件适配。
  * 定义范围：浏览器持久化、导入与演示初始文档；桌面环境不使用此适配器。
  */
+import { translate } from './i18n';
 import type { AppConfig, FilePort, FileSnapshot, RecoveryDraft } from './contracts';
 
 export const defaultPreferences = { theme: 'system' as const, themeId: 'paper', fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif', fontSize: 16, contentWidth: 800, autoCheckUpdates: true, autoDownloadUpdates: true };
@@ -16,17 +17,17 @@ export class BrowserFilePort implements FilePort {
   private key(path: string): string { return `foldmark:file:${path}`; }
   async read(path: string): Promise<FileSnapshot> {
     const value = localStorage.getItem(this.key(path));
-    if (value === null) throw new Error('FILE_NOT_FOUND: 文件无法读取，请重新定位');
+    if (value === null) throw new Error(`FILE_NOT_FOUND: ${translate('文件无法读取，请重新定位')}`);
     return JSON.parse(value) as FileSnapshot;
   }
   async write(path: string, text: string, expectedRevision: string): Promise<FileSnapshot> {
     const previous = await this.read(path);
-    if (previous.revision !== expectedRevision) throw new Error('FILE_CONFLICT: 文件已更改');
+    if (previous.revision !== expectedRevision) throw new Error(`FILE_CONFLICT: ${translate('文件已更改')}`);
     const snapshot = { path, text, revision: crypto.randomUUID() };
     localStorage.setItem(this.key(path), JSON.stringify(snapshot)); return snapshot;
   }
   async create(path: string, text: string): Promise<FileSnapshot> {
-    if (localStorage.getItem(this.key(path)) !== null) throw new Error('FILE_EXISTS: 文件已存在');
+    if (localStorage.getItem(this.key(path)) !== null) throw new Error(`FILE_EXISTS: ${translate('文件已存在')}`);
     const snapshot = { path, text: text.replace(/\r\n/g, '\n'), revision: crypto.randomUUID() };
     localStorage.setItem(this.key(path), JSON.stringify(snapshot)); return snapshot;
   }

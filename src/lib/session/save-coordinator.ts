@@ -2,6 +2,7 @@
  * 文件职责：协调单文档的自动保存、恢复快照和外部冲突。
  * 定义范围：保存状态、只读编辑器文本访问及文件端口调度。
  */
+import { translate } from '../i18n';
 import type { FilePort, FileSnapshot } from '../contracts';
 
 /** 结构职责：表示界面可解释的保存状态；冲突时保留最新磁盘快照供用户比较。 */
@@ -48,7 +49,7 @@ export class SaveCoordinator {
   changed(): void {
     if (this.disposed) return;
     clearTimeout(this.timer);
-    if (!this.conflict) this.options.onStatus({ kind: 'dirty', message: '未保存' });
+    if (!this.conflict) this.options.onStatus({ kind: 'dirty', message: translate('未保存') });
     // 恢复快照采用节流：连续输入也要定期落下最新草稿，不能无限重置等待时间。
     if (!this.recoveryTimer) this.recoveryTimer = setTimeout(() => {
       this.recoveryTimer = undefined;
@@ -79,7 +80,7 @@ export class SaveCoordinator {
         await this.persistRecovery();
         if (this.conflict) return false;
         const text = this.options.getText();
-        this.options.onStatus({ kind: 'saving', message: '正在保存…' });
+        this.options.onStatus({ kind: 'saving', message: translate('正在保存…') });
         this.baseline = await this.options.files.write(this.baseline.path, text, this.baseline.revision);
         this.preserveRecovery = false;
       }
@@ -87,14 +88,14 @@ export class SaveCoordinator {
       await this.recoveryQueue;
       if (!this.preserveRecovery) await this.options.files.clearRecovery(this.baseline.path);
       if (this.options.getText() !== this.baseline.text) return this.saveLatest();
-      this.options.onStatus({ kind: 'saved', message: '所有更改已保存' });
+      this.options.onStatus({ kind: 'saved', message: translate('所有更改已保存') });
       return true;
     } catch (error) {
       if (errorMessage(error).includes('FILE_CONFLICT')) {
         this.conflict = true;
         try {
           const external = await this.options.files.read(this.baseline.path);
-          this.options.onStatus({ kind: 'conflict', message: '文件在其他应用中已更改', external });
+          this.options.onStatus({ kind: 'conflict', message: translate('文件在其他应用中已更改'), external });
         } catch (readError) { this.reportError(readError); }
         return false;
       }
@@ -122,14 +123,14 @@ export class SaveCoordinator {
         this.options.reload(external.text, 'external');
         // 加载回调可能同步整理正文并安排保存，此时不能用磁盘快照覆盖真实的未保存状态。
         this.options.onStatus(this.hasLocalChanges
-          ? { kind: 'dirty', message: '未保存' }
-          : { kind: 'saved', message: '已加载外部修改' });
+          ? { kind: 'dirty', message: translate('未保存') }
+          : { kind: 'saved', message: translate('已加载外部修改') });
         return;
       }
       this.conflict = true;
       await this.persistRecovery();
       if (generation !== this.externalGeneration || this.disposed) return;
-      this.options.onStatus({ kind: 'conflict', message: '文件在其他应用中已更改', external });
+      this.options.onStatus({ kind: 'conflict', message: translate('文件在其他应用中已更改'), external });
     } catch (error) { if (generation === this.externalGeneration && !this.disposed) this.reportError(error); }
   }
 
@@ -142,7 +143,7 @@ export class SaveCoordinator {
     this.preserveRecovery = true;
     this.baseline = snapshot; this.conflict = false;
     this.options.reload(snapshot.text, 'accepted');
-    this.options.onStatus({ kind: 'saved', message: '已选用磁盘版本；原草稿保留在恢复数据中' });
+    this.options.onStatus({ kind: 'saved', message: translate('已选用磁盘版本；原草稿保留在恢复数据中') });
   }
 
   /** 明确保留本地时采用用户看到的外部基线，再次变更仍会触发冲突。 */

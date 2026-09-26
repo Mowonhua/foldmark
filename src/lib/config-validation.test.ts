@@ -2,6 +2,15 @@
 import { describe, expect, it } from 'vitest';
 import { validateAppConfig } from './config-validation';
 describe('配置边界', () => {
+  it('语言偏好兼容旧配置和未来语言，拒绝错误字段形状', () => {
+    for (const locale of [undefined, 'zh-CN', 'en', 'system', 'fr']) {
+      const config = { projects: [], preferences: { locale } };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+    for (const locale of [null, 42, true, [], {}]) {
+      expect(() => validateAppConfig({ projects: [], preferences: { locale } })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('项目归档允许旧配置缺省和布尔值，拒绝其他类型', () => {
     const project = { id: 'one', name: '项目', path: 'D:/清单.md' };
     for (const candidate of [project, { ...project, archived: false }, { ...project, archived: true }]) {

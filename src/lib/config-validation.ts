@@ -4,6 +4,7 @@
  */
 import type { AppConfig } from './contracts';
 import { builtInThemes, validateTheme } from './themes';
+import { translate } from './i18n';
 
 /**
  * 函数职责：拒绝会使界面崩溃或同文件形成双会话的配置。
@@ -13,7 +14,7 @@ import { builtInThemes, validateTheme } from './themes';
  */
 export function validateAppConfig(value: unknown): AppConfig | null {
   if (value === null) return null;
-  const fail = (): never => { throw new Error('STATE_CONFIG_INVALID: 项目配置格式无效，原配置已保留，请修复配置后重新打开应用。'); };
+  const fail = (): never => { throw new Error(`STATE_CONFIG_INVALID: ${translate('项目配置格式无效，原配置已保留，请修复配置后重新打开应用。')}`); };
   if (!record(value) || !Array.isArray(value.projects)) return fail();
   const identities = new Set<string>(); const paths = new Set<string>();
   for (const project of value.projects) {
@@ -38,6 +39,8 @@ export function validateAppConfig(value: unknown): AppConfig | null {
   if (value.preferences !== undefined) {
     if (!record(value.preferences)) return fail();
     const p = value.preferences;
+    // 旧配置允许缺省；未知语言标识由翻译层回退，便于跨版本共享配置。
+    if (p.locale !== undefined && typeof p.locale !== 'string') return fail();
     for (const flag of [p.autoCheckUpdates, p.autoDownloadUpdates]) if (flag !== undefined && typeof flag !== 'boolean') return fail();
     if (p.theme !== undefined && (typeof p.theme !== 'string' || !['light', 'dark', 'system'].includes(p.theme))) return fail();
     if (p.themeId !== undefined && (typeof p.themeId !== 'string' || !themeIds.has(p.themeId))) return fail();

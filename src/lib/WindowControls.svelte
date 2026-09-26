@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18n';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { errorMessage } from './session/save-coordinator';
@@ -9,7 +10,7 @@
    */
   /**
    * 结构职责：将原生窗口操作失败交给应用的统一提示入口。
-   * 字段说明：onerror 接收可直接展示的中文错误消息。
+   * 字段说明：onerror 接收可直接展示的当前语言错误消息。
    * 约束条件：仅在 Tauri 桌面环境挂载组件。
    */
   interface Props { onerror: (message: string) => void }
@@ -21,7 +22,7 @@
   /** 关闭只发送请求，让应用现有的 onCloseRequested 完成保存并决定是否销毁窗口。 */
   async function operate(action: 'minimize' | 'toggleMaximize' | 'close'): Promise<void> {
     try { await window[action](); }
-    catch (error) { onerror(`窗口操作失败：${errorMessage(error)}`); }
+    catch (error) { onerror($t('窗口操作失败：{message}', { message: errorMessage(error) })); }
   }
 
   onMount(() => {
@@ -33,7 +34,7 @@
       try {
         const value = await window.isMaximized();
         if (!disposed && current === revision) maximized = value;
-      } catch (error) { if (!disposed) onerror(`读取窗口状态失败：${errorMessage(error)}`); }
+      } catch (error) { if (!disposed) onerror($t('读取窗口状态失败：{message}', { message: errorMessage(error) })); }
     };
     // 监听器注册跨越异步边界；若组件已卸载，立即释放迟到的订阅。
     const retain = (unlisten: () => void) => { if (disposed) unlisten(); else listeners.push(unlisten); };
@@ -44,16 +45,16 @@
         await refreshMaximized();
         const value = await window.isFocused();
         if (!disposed) focused = value;
-      } catch (error) { if (!disposed) onerror(`监听窗口状态失败：${errorMessage(error)}`); }
+      } catch (error) { if (!disposed) onerror($t('监听窗口状态失败：{message}', { message: errorMessage(error) })); }
     })();
     return () => { disposed = true; for (const unlisten of listeners) unlisten(); };
   });
 </script>
 
-  <div class="window-controls" class:inactive={!focused} role="group" aria-label="窗口控制">
-    <button aria-label="最小化" title="最小化" onclick={() => operate('minimize')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6.5h10"/></svg></button>
-    <button aria-label={maximized ? '还原' : '最大化'} title={maximized ? '还原' : '最大化'} onclick={() => operate('toggleMaximize')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">{#if maximized}<path d="M3.5 3.5v-2h7v7h-2M1.5 3.5h7v7h-7z"/>{:else}<path d="M1.5 1.5h9v9h-9z"/>{/if}</svg></button>
-    <button class="window-close" aria-label="关闭窗口" title="关闭窗口" onclick={() => operate('close')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m1.5 1.5 9 9m0-9-9 9"/></svg></button>
+  <div class="window-controls" class:inactive={!focused} role="group" aria-label={$t('窗口控制')}>
+    <button aria-label={$t('最小化')} title={$t('最小化')} onclick={() => operate('minimize')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6.5h10"/></svg></button>
+    <button aria-label={$t(maximized ? '还原' : '最大化')} title={$t(maximized ? '还原' : '最大化')} onclick={() => operate('toggleMaximize')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">{#if maximized}<path d="M3.5 3.5v-2h7v7h-2M1.5 3.5h7v7h-7z"/>{:else}<path d="M1.5 1.5h9v9h-9z"/>{/if}</svg></button>
+    <button class="window-close" aria-label={$t('关闭窗口')} title={$t('关闭窗口')} onclick={() => operate('close')}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m1.5 1.5 9 9m0-9-9 9"/></svg></button>
   </div>
 
 <style>

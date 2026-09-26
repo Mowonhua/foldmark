@@ -3,6 +3,8 @@
  * 定义范围：视觉参数白名单、值校验和完整覆盖；不识别主题名称或风格。
  */
 
+import { translate } from './i18n';
+
 // 参数描述同时约束导入字段和根节点变量，防止两处白名单漂移。
 export const appearanceProperties = {
   // 所有原生滚动区域共用状态参数；缺省值由公共 CSS 回退，直角模式统一覆盖圆角。
@@ -103,7 +105,7 @@ export type ThemeAppearance = {
  * 实现思路：按参数类别限制数值范围与字符串语法，阴影最多四层。
  */
 export function validateAppearance(value: unknown): ThemeAppearance {
-  const fail = (): never => { throw new Error('THEME_INVALID: 视觉参数需使用支持的颜色、尺寸、字重、完成标记或最多四层的像素阴影。'); };
+  const fail = (): never => { throw new Error(`THEME_INVALID: ${translate('视觉参数需使用支持的颜色、尺寸、字重、完成标记或最多四层的像素阴影。')}`); };
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return fail();
   const source = value as Record<string, unknown>;
   const result: Record<string, string | number> = {};

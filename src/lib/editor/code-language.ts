@@ -2,6 +2,8 @@
  * 文件职责：提供代码围栏语言的就地编辑控件。
  * 定义范围：语言标记事务与代码框外的输入控件。
  */
+import { get } from 'svelte/store';
+import { translate, locale } from '../i18n';
 import { EditorView, WidgetType } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
 import type { SyntaxNode } from '@lezer/common';
@@ -43,16 +45,17 @@ export function setCodeLanguage(view: EditorView, from: number, language: string
  * 约束条件：有效输入即时写回，连续输入可合并撤销；Enter 返回正文，Escape 恢复进入输入框时的语言。
  */
 export class CodeLanguageWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly from: number, readonly language: string) { super(); }
-  eq(other: CodeLanguageWidget): boolean { return this.from === other.from && this.language === other.language; }
+  eq(other: CodeLanguageWidget): boolean { return this.uiLocale === other.uiLocale && this.from === other.from && this.language === other.language; }
   get estimatedHeight(): number { return 0; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'fm-code-language';
     wrapper.contentEditable = 'false';
     const input = document.createElement('input');
-    input.type = 'text'; input.value = this.language; input.placeholder = '代码语言';
-    input.setAttribute('aria-label', '代码块语言'); input.title = '输入语言，回车返回代码';
+    input.type = 'text'; input.value = this.language; input.placeholder = translate('代码语言');
+    input.setAttribute('aria-label', translate('代码块语言')); input.title = translate('输入语言，回车返回代码');
     input.autocomplete = 'off'; input.spellcheck = false;
     wrapper.dataset.from = String(this.from);
     let original = this.language;
@@ -60,7 +63,7 @@ export class CodeLanguageWidget extends WidgetType {
     const commit = (): boolean => {
       const saved = setCodeLanguage(view, Number(wrapper.dataset.from), input.value, changed ? 'join' : 'before');
       if (saved && input.value.trim() !== original) changed = true;
-      input.setCustomValidity(saved ? '' : '语言名称不能包含空白或围栏字符');
+      input.setCustomValidity(saved ? '' : translate('语言名称不能包含空白或围栏字符'));
       return saved;
     };
     input.addEventListener('focus', () => { original = input.value; changed = false; });
@@ -81,6 +84,10 @@ export class CodeLanguageWidget extends WidgetType {
     dom.dataset.from = String(this.from);
     const input = dom.querySelector('input')!;
     if (document.activeElement !== input) input.value = this.language;
+    input.placeholder = translate('代码语言');
+    input.setAttribute('aria-label', translate('代码块语言'));
+    input.title = translate('输入语言，回车返回代码');
+    if (input.validity.customError) input.setCustomValidity(translate('语言名称不能包含空白或围栏字符'));
     return true;
   }
   ignoreEvent(): boolean { return true; }

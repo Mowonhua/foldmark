@@ -2,6 +2,8 @@
  * 文件职责：把同一 Markdown 状态投影为可编辑的就地预览。
  * 定义范围：语法装饰、任务控件、公式与表格的惰性 DOM 渲染。
  */
+import { get } from 'svelte/store';
+import { translate, locale } from '../i18n';
 import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
@@ -28,8 +30,9 @@ function inlineContext(view: EditorView): InlineContext {
 }
 
 class ItemWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly item: ListItem, readonly folded: boolean, readonly label: string) { super(); }
-  eq(other: ItemWidget): boolean { return this.item.from === other.item.from && this.item.to === other.item.to && this.item.task?.checked === other.item.task?.checked && this.folded === other.folded && this.label === other.label; }
+  eq(other: ItemWidget): boolean { return this.uiLocale === other.uiLocale && this.item.from === other.item.from && this.item.to === other.item.to && this.item.task?.checked === other.item.task?.checked && this.folded === other.folded && this.label === other.label; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('span');
     wrapper.className = `fm-item-controls${this.item.task ? ' fm-task-controls' : ''}${this.folded ? ' is-folded' : ''}`;
@@ -38,7 +41,7 @@ class ItemWidget extends WidgetType {
     fold.type = 'button';
     fold.className = 'fm-fold-button';
     fold.innerHTML = `<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="${this.folded ? 'm7 4 6 6-6 6Z' : 'm4 7 6 6 6-6Z'}"/></svg>`;
-    fold.setAttribute('aria-label', this.folded ? '展开条目' : '折叠条目');
+    fold.setAttribute('aria-label', this.folded ? translate('展开条目') : translate('折叠条目'));
     fold.setAttribute('aria-expanded', String(!this.folded));
     fold.dataset.fold = String(this.item.from);
     if (this.item.to <= this.item.firstLineTo) { fold.disabled = true; fold.classList.add('is-empty'); fold.tabIndex = -1; }
@@ -50,13 +53,13 @@ class ItemWidget extends WidgetType {
     if (this.item.task) {
       marker.setAttribute('role', 'checkbox');
       marker.setAttribute('aria-checked', String(this.item.task.checked));
-      marker.setAttribute('aria-label', this.item.task.checked ? '恢复任务' : '完成任务');
+      marker.setAttribute('aria-label', this.item.task.checked ? translate('恢复任务') : translate('完成任务'));
       // 可见完成标记由 CSS 主题变量绘制；名称和状态由 ARIA 提供，不依赖具体字形。
       // 指针单击由拖动状态机在松开时判定；键盘产生 detail=0 的 click 独立激活。
       marker.addEventListener('click', event => { event.preventDefault(); if (event.detail === 0) actions.toggleTask(this.item.from); });
     } else {
       marker.textContent = this.label;
-      marker.setAttribute('aria-label', '列表项标记，按 Alt 和方向键排序');
+      marker.setAttribute('aria-label', translate('列表项标记，按 Alt 和方向键排序'));
     }
     marker.addEventListener('keydown', event => {
       if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
@@ -70,8 +73,9 @@ class ItemWidget extends WidgetType {
 }
 
 class NoteWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly label: string, readonly from: number | null = null) { super(); }
-  eq(other: NoteWidget): boolean { return this.label === other.label && this.from === other.from; }
+  eq(other: NoteWidget): boolean { return this.uiLocale === other.uiLocale && this.label === other.label && this.from === other.from; }
   toDOM(view: EditorView): HTMLElement {
     const element = document.createElement(this.from === null ? 'span' : 'button');
     element.className = 'fm-hidden-note';
@@ -81,9 +85,9 @@ class NoteWidget extends WidgetType {
       // 使用居中图标而非正文的基线省略号，保持紧凑并明确这是可展开控件。
       element.innerHTML = '<svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true"><circle cx="3" cy="6" r="1"/><circle cx="7" cy="6" r="1"/><circle cx="11" cy="6" r="1"/></svg>';
       element.setAttribute('type', 'button');
-      element.setAttribute('aria-label', '展开折叠内容');
+      element.setAttribute('aria-label', translate('展开折叠内容'));
       element.setAttribute('aria-expanded', 'false');
-      element.title = '展开折叠内容';
+      element.title = translate('展开折叠内容');
       element.addEventListener('click', () => view.state.facet(actionsFacet).toggleFold(this.from!));
     }
     return element;
@@ -93,12 +97,13 @@ class NoteWidget extends WidgetType {
 
 /** 已闭合但没有正文行的围栏显示空框；用户首次激活时才插入可编辑空行，读取预览不改写文件。 */
 class EmptyCodeWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly from: number, readonly kind: 'code' | 'math' = 'code') { super(); }
-  eq(other: EmptyCodeWidget): boolean { return this.from === other.from && this.kind === other.kind; }
+  eq(other: EmptyCodeWidget): boolean { return this.uiLocale === other.uiLocale && this.from === other.from && this.kind === other.kind; }
   toDOM(view: EditorView): HTMLElement {
     const element = document.createElement('div');
     element.className = `fm-code-line fm-code-start fm-code-end fm-empty-code${this.kind === 'math' ? ' fm-math-edit-line' : ''}`;
-    element.setAttribute('aria-label', this.kind === 'math' ? '空公式块' : '空代码块');
+    element.setAttribute('aria-label', this.kind === 'math' ? translate('空公式块') : translate('空代码块'));
     if (view.state.readOnly) return element;
     element.tabIndex = 0; element.setAttribute('role', 'button');
     const activate = (event: Event): void => {
@@ -128,8 +133,9 @@ class BlockGapWidget extends WidgetType {
 
 /** 块控件沿用所属列表的布局；坐标和事件仍由原控件负责，缩进不写回源文。 */
 class IndentedWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly widget: WidgetType, readonly margin: string) { super(); }
-  eq(other: IndentedWidget): boolean { return this.margin === other.margin && this.widget.constructor === other.widget.constructor && this.widget.eq(other.widget); }
+  eq(other: IndentedWidget): boolean { return this.uiLocale === other.uiLocale && this.margin === other.margin && this.widget.constructor === other.widget.constructor && this.widget.eq(other.widget); }
   toDOM(view: EditorView): HTMLElement {
     const element = this.widget.toDOM(view);
     element.style.marginLeft = this.margin;
@@ -141,8 +147,9 @@ class IndentedWidget extends WidgetType {
 
 const mathCache = new Map<string, string>();
 class MathWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly expression: string, readonly block: boolean, readonly from: number, readonly valid: boolean, readonly source = '') { super(); }
-  eq(other: MathWidget): boolean { return this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid && this.source === other.source; }
+  eq(other: MathWidget): boolean { return this.uiLocale === other.uiLocale && this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid && this.source === other.source; }
   toDOM(view: EditorView): HTMLElement {
     const context = inlineContext(view);
     if (this.block) context.focusAt = () => { activateFencedBlock(view, this.from); };
@@ -171,7 +178,7 @@ class MathWidget extends WidgetType {
     element.className = this.block ? 'fm-math-block' : 'fm-math-inline';
     element.setAttribute('aria-label', this.expression);
     try {
-      if (!this.valid) throw new Error('公式尚未闭合');
+      if (!this.valid) throw new Error(translate('公式尚未闭合'));
       const key = `${this.block}:${this.expression}`;
       let markup = mathCache.get(key);
       if (!markup) {
@@ -184,7 +191,7 @@ class MathWidget extends WidgetType {
     } catch (error) {
       element.classList.add('fm-math-error');
       element.textContent = `${this.block ? '$$' : '$'}${this.expression}${this.valid ? (this.block ? '$$' : '$') : ''}`;
-      element.title = error instanceof Error ? error.message : '公式无法排版';
+      element.title = error instanceof Error ? error.message : translate('公式无法排版');
     }
     if (context.focusAt) element.addEventListener('mousedown', event => { event.preventDefault(); context.focusAt!(this.from + (this.block ? 2 : 1)); });
     return element;
@@ -276,8 +283,9 @@ function linkWidget(node: SyntaxNode, model: DocumentModel): LinkWidget | null {
 }
 
 class LinkWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly label: string, readonly url: string, readonly from: number, readonly image: boolean, readonly title = '', readonly inline?: InlineLabel) { super(); }
-  eq(other: LinkWidget): boolean { return this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image && this.title === other.title; }
+  eq(other: LinkWidget): boolean { return this.uiLocale === other.uiLocale && this.label === other.label && this.url === other.url && this.from === other.from && this.image === other.image && this.title === other.title; }
   toDOM(view: EditorView): HTMLElement { return this.render(inlineContext(view)); }
   render(context: InlineContext, from = this.inline?.from, to = this.inline?.to): HTMLElement {
     const resources = context.resources;
@@ -297,7 +305,7 @@ class LinkWidget extends WidgetType {
     // 聚合任务的整行按钮负责定位，内部链接不生成第二个可交互目标。
     if (!context.focusAt) { if (this.title) link.title = this.title; return link; }
     if (url) link.setAttribute('href', url);
-    link.title = this.title ? `${this.title} · 点击编辑；Ctrl + 点击打开链接` : '点击编辑；Ctrl + 点击打开链接';
+    link.title = this.title ? `${this.title} · ${translate('点击编辑；Ctrl + 点击打开链接')}` : translate('点击编辑；Ctrl + 点击打开链接');
     link.setAttribute('rel', 'noopener noreferrer'); link.setAttribute('target', '_blank');
     link.addEventListener('click', event => {
       if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); context.focusAt!(this.from + 1); return; }
@@ -362,8 +370,9 @@ export function renderTaskTitle(model: DocumentModel, item: ListItem, resources:
 }
 
 class TableWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
   constructor(readonly source: string, readonly from: number, readonly node: SyntaxNode) { super(); }
-  eq(other: TableWidget): boolean { return this.source === other.source && this.from === other.from; }
+  eq(other: TableWidget): boolean { return this.uiLocale === other.uiLocale && this.source === other.source && this.from === other.from; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div'); wrapper.className = 'fm-table-wrap';
     const table = document.createElement('table');
@@ -407,12 +416,13 @@ class TableWidget extends WidgetType {
 
 interface PreviewStructure {
   mode: string;
+  language: string;
   folds: ReadonlySet<number>;
   window: { from: number; to: number };
   hidden: { from: number; to: number; widget: NoteWidget | undefined; block: boolean }[];
   decorations: DecorationSet;
 }
-/** 选区变化不改变列表结构，复用整份文档的过滤和控件装饰。 */
+/** 选区变化复用结构；语言属于控件身份，切换后必须重建装饰及对应 DOM 文案。 */
 const structureCache = new WeakMap<DocumentModel, PreviewStructure>();
 
 /**
@@ -429,12 +439,12 @@ function buildPreview(state: EditorState): DecorationSet {
   const ranges: Range<Decoration>[] = [];
   const window = state.field(previewWindowField);
   let cached = structureCache.get(model);
-  if (cached?.mode !== mode || cached.folds !== folds || cached.window !== window) cached = undefined;
+  if (cached?.language !== get(locale) || cached.mode !== mode || cached.folds !== folds || cached.window !== window) cached = undefined;
   const merged: PreviewStructure['hidden'] = cached?.hidden ?? [];
   if (!cached) {
     for (const range of hiddenContentRanges(state)) {
       const widget = range.kind === 'fold' ? new NoteWidget('…',range.itemFrom)
-        : range.itemFrom !== null && range.count ? new NoteWidget(`已完成 ${range.count} 项`) : undefined;
+        : range.itemFrom !== null && range.count ? new NoteWidget(translate('已完成 {count} 项', { count: range.count })) : undefined;
       merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
     }
     // 过滤范围右端是下一条可见行的起点；块替换不能吞掉该行的缩进、标题等行装饰。
@@ -468,7 +478,7 @@ function buildPreview(state: EditorState): DecorationSet {
       ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.contentFrom : item.markerTo));
       lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}`);
     }
-    cached = { mode, folds, window, hidden: merged, decorations: Decoration.set(ranges, true) };
+    cached = { mode, language: get(locale), folds, window, hidden: merged, decorations: Decoration.set(ranges, true) };
     structureCache.set(model, cached);
     ranges.length = 0;
   }
@@ -610,7 +620,7 @@ function buildPreview(state: EditorState): DecorationSet {
       return;
     }
     if (name === 'InlineMath' || name === 'InlineMathUnclosed') {
-      if (name === 'InlineMathUnclosed' && editing && !overlapsHidden(node.from, node.to)) ranges.push(Decoration.mark({ class: 'fm-math-error', attributes: { title: '公式尚未闭合，请补充 $' } }).range(node.from, node.to));
+      if (name === 'InlineMathUnclosed' && editing && !overlapsHidden(node.from, node.to)) ranges.push(Decoration.mark({ class: 'fm-math-error', attributes: { title: translate('公式尚未闭合，请补充 $') } }).range(node.from, node.to));
       if (!editing && !overlapsHidden(node.from, node.to)) {
         const delimiter = '$';
         const trimmed = source.trim(); const valid = name !== 'InlineMathUnclosed' && trimmed.length > delimiter.length && trimmed.endsWith(delimiter);

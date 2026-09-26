@@ -12,8 +12,11 @@ export interface Project {
 /** 结构职责：表示文档投影视图；源码仅显示来源视图范围，底层始终保留完整文本。 */
 export type ViewMode = 'todo' | 'archive' | 'source';
 import type { ThemeDefinition, ThemeMode } from './themes';
+import type { LocalePreference } from './i18n';
 /** 结构职责：保存阅读参数；theme 保留旧版明暗模式语义，themeId 缺省时使用纸面主题。 */
 export interface Preferences {
+  /** 界面语言；旧配置缺省为简体中文，system 跟随操作系统语言。 */
+  locale?: LocalePreference;
   theme: ThemeMode; themeId?: string; fontFamily: string; fontSize: number; contentWidth: number;
   /** 缺省为 true；仅桌面版启动后检查，关闭后仍允许手动检查。 */
   autoCheckUpdates?: boolean;
