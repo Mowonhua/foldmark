@@ -270,7 +270,7 @@ async function shortcut(key: string): Promise<void> {
 /** 通过更多操作菜单新增任务，保留与用户操作相同的编辑事务。 */
 async function insertTask(): Promise<void> {
   button('更多操作').click(); await tick();
-  button('新增任务').click(); await tick();
+  button(/^新增任务/).click(); await tick();
 }
 
 /** 等待可从文件端口重新读取的正文，避免将仅有 DOM 变化误判为已保存。 */
@@ -503,7 +503,7 @@ describe('App 更多操作菜单', () => {
     trigger.click(); await tick();
     expect(document.querySelector('[role="menu"]')).toBeNull();
     trigger.click(); await tick();
-    button('快捷键与使用帮助').click(); await tick();
+    button('快捷键').click(); await tick();
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
@@ -892,6 +892,86 @@ describe('App 桌面主题模板下载', () => {
 });
 
 describe('App 真实编辑与文件闭环', () => {
+  it('状态栏当前页字数随编辑、撤销和项目切换更新，源码切换保留统计', async () => {
+    await start(['中文 😀\n', '第二份\n']);
+    const status = () => button('快捷键').textContent;
+    expect(status()).toBe('3 字 · Markdown');
+    button('查看源码').click(); await tick();
+    expect(status()).toBe('3 字 · Markdown');
+    await paste('新增');
+    expect(status()).toBe('5 字 · Markdown');
+    await shortcut('z');
+    expect(status()).toBe('3 字 · Markdown');
+    await switchProject(secondProject);
+    expect(status()).toBe('3 字 · Markdown');
+    button(/^全部待办/).click(); await tick();
+    expect(status()).toBe('快捷键');
+  });
+
+  it('待办和归档各自计数，源码仅统计来源分区', async () => {
+    await start(['# 清单\n\n- [ ] 待办\n\n# 归档\n\n- [x] 已完成\n']);
+    const status = () => button('快捷键').textContent;
+    expect(status()).toBe('8 字 · Markdown');
+    button('查看源码').click(); await tick();
+    expect(status()).toBe('8 字 · Markdown');
+    button('返回预览').click(); await tick();
+    button(/^归档/).click(); await tick();
+    expect(status()).toBe('10 字 · Markdown');
+    button('查看源码').click(); await tick();
+    expect(status()).toBe('10 字 · Markdown');
+    button('返回预览').click(); await tick();
+    button(/^待办/).click(); await tick();
+    expect(status()).toBe('8 字 · Markdown');
+  });
+
+  it.each(['todo', 'source'] as const)('%s 视图通过 Ctrl N 新增任务并支持撤销', async mode => {
+    await start(['# 清单\n']);
+    if (mode === 'source') { button('查看源码').click(); await tick(); }
+    await shortcut('n');
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n- [ ] ');
+    expect(document.activeElement).toBe(documentInput());
+    await shortcut('z');
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n');
+  });
+
+  it('新增任务支持 Command N，并忽略组合输入、长按和额外修饰键', async () => {
+    await start(['# 清单\n']);
+    for (const modifiers of [{ isComposing: true }, { repeat: true }, { altKey: true }, { shiftKey: true }]) {
+      documentInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true, ...modifiers }));
+    }
+    button('查找项目').click(); await tick();
+    document.getElementById('project-filter')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true }));
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n');
+    documentInput().click(); await tick();
+    const event = new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true, cancelable: true });
+    documentInput().dispatchEvent(event); await tick();
+    expect(event.defaultPrevented).toBe(true);
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n- [ ] ');
+  });
+
+  it('快捷键弹窗仅显示按键说明，打开时和全部待办中不新增任务', async () => {
+    await start(['# 清单\n']);
+    const help = button('快捷键');
+    expect(help.closest('footer')).not.toBeNull();
+    expect(help.textContent).toBe('3 字 · Markdown');
+    help.click(); await tick();
+    const modal = document.querySelector('[role="dialog"]')!;
+    expect(modal.querySelector('h2')?.textContent).toBe('快捷键');
+    expect(modal.querySelectorAll('p')).toHaveLength(0);
+    expect(modal.querySelector('dl')?.textContent).toContain('Ctrl N新增任务');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await tick();
+    button(/^全部待办/).click(); await tick();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true }));
+    await switchProject(firstProject);
+    await shortcut('s');
+    await savedText(firstProject, '# 清单\n');
+  });
+
   it('项目搜索按需打开，搜索内部点击保留、外部点击关闭且清除隐藏筛选', async () => {
     await start(['# 甲\n', '# 乙\n']);
     expect(document.getElementById('project-filter')).toBeNull();

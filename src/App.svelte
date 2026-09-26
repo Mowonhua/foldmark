@@ -12,11 +12,12 @@
   import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { renderTaskTitle } from './lib/editor/preview';
+  import { sourceVisibleRanges } from './lib/editor/source-scope';
   import { BrowserFilePort, defaultPreferences, welcomeText } from './lib/browser-files';
   import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, RecoveryDraft, ViewMode } from './lib/contracts';
   import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
   import type { ProjectSession, TaskResult } from './lib/session/types';
-  import { archiveSections, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
+  import { archiveSections, getHiddenRanges, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel, ListItem } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
@@ -154,6 +155,23 @@
   const saveStatus = $derived.by(() => { void version; return active?.status; });
   // 按正文与磁盘基线比较，避免撤销回原文或仅恢复数据清理失败时误报未保存。
   const hasUnsavedChanges = $derived.by(() => { void version; return active?.saver.hasLocalChanges ?? false; });
+  const pageText = $derived.by(() => {
+    void version;
+    if (!active) return '';
+    const state = active.state;
+    // 源码沿用编辑器冻结的分区边界，避免编辑复选框后统计提前跳到另一页；折叠不影响字数。
+    if (mode === 'source') return sourceVisibleRanges(state).map(range => state.doc.sliceString(range.from, range.to)).join('');
+    const model = getDocumentModel(state);
+    let position = 0;
+    let text = '';
+    for (const hidden of getHiddenRanges(model, previewMode)) {
+      text += model.text.slice(position, hidden.from);
+      position = hidden.to;
+    }
+    return text + model.text.slice(position);
+  });
+  // 当前分区按非空白 Unicode 码点计数，保留原有 Markdown 标记计数口径。
+  const characterCount = $derived(Array.from(pageText.replace(/\s/gu, '')).length);
   const counts = $derived.by(() => {
     void version;
     if (!active) return { todo: 0, archive: 0 };
@@ -661,6 +679,14 @@
     if (event.isComposing) return;
     if (event.key === 'Escape') { closeProjectMenu(); dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
     if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() === 'n' && !event.shiftKey && !event.altKey) {
+      // 全部待办仍保留后台编辑器；只有当前项目且未被弹窗或独立输入框占用时才能追加任务。
+      if (dialog || screen !== 'project' || !active || !editor || editor.view.composing) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select')) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      editor.insertTask(); menuOpen = false;
+    }
     if (event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); openProjectSearch(); }
     if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); closeProjectSearch(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
@@ -782,7 +808,7 @@
       {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
-        <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>新增任务</button>
+        <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>新增任务 <kbd>Ctrl N</kbd></button>
         <button role="menuitem" onclick={() => currentItemAction('group')}>完成整组任务</button>
         <button role="menuitem" onclick={() => currentItemAction('fold')}>折叠 / 展开当前项</button>
         <button role="menuitem" onclick={() => currentItemAction('up')}>同级上移</button>
@@ -790,7 +816,7 @@
         <hr/><button role="menuitem" onclick={() => openDialog('rename')}>重命名项目</button>
         <button role="menuitem" onclick={() => exportMarkdown()}>另存 Markdown 副本</button>
         <button role="menuitem" onclick={() => openDialog('remove')}>移除项目关联</button>
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>查看归档项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键与使用帮助</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>新增项目</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>查看归档项目</button><button role="menuitem" onclick={() => openDialog('settings')}>阅读与外观</button><button role="menuitem" onclick={() => openDialog('updates')}>检查更新</button><button role="menuitem" onclick={() => openDialog('help')}>快捷键</button>
       </div>{/if}
     </header>
     {/if}
@@ -815,7 +841,7 @@
 
     <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
     {#if !active && screen === 'project' && !fatal}
-      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>了解编辑方式 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
+      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>查看快捷键 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
     {/if}
     {#if screen === 'all'}
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
@@ -843,7 +869,7 @@
           <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
           <button class="card-button" aria-label={cardMode ? '退出卡片模式' : '进入卡片模式'} title={cardMode ? '退出卡片模式' : '进入卡片模式'} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
         </div>
-        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button>
+        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button aria-label="快捷键" title="当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键" onclick={() => openDialog('help')}>{#if screen === 'project' && active}{characterCount} 字 <span>·</span> Markdown{:else}快捷键{/if}</button>
       </footer>
     </div>
   </main>
@@ -905,9 +931,8 @@
           onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
           onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}/>
       {:else if dialog === 'help'}
-        <p class="eyebrow">连续写作</p><h2 id="dialog-title">写下任务，逐件完成。</h2>
-        <dl class="shortcuts"><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>
-        <p>单击复选框完成任务；按住复选框、圆点或编号拖动同级排序。左侧三角折叠正文。父项仍有未完成子项时，在菜单选择“完成整组任务”。</p><p>完成的任务连同正文移到文件末尾的 # 归档 章节；恢复后移到待办末尾。查看源码只显示当前待办或归档分区，并定位到当前阅读位置；再次点击返回原视图和进入前的位置。公式支持 KaTeX 数学语法。</p>
+        <h2 id="dialog-title">快捷键</h2>
+        <dl class="shortcuts"><dt>Ctrl N</dt><dd>新增任务</dd><dt>Enter</dt><dd>继续任务；空任务退出列表</dd><dt>Shift Enter</dt><dd>在任务正文中换行</dd><dt>Tab / Shift Tab</dt><dd>整项缩进 / 反缩进</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>撤销 / 重做当前项目的编辑</dd><dt>Ctrl S</dt><dd>立即保存</dd><dt>Ctrl P</dt><dd>快速查找项目</dd><dt>Ctrl Shift F</dt><dd>跨项目搜索</dd></dl>
       {:else if dialog === 'conflict'}
         <p class="eyebrow">外部修改</p><h2 id="dialog-title">选择要保留的内容</h2><p class="muted">可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。</p>
         <div class="compare"><label>当前编辑<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>磁盘版本<textarea readonly value={active?.status.external?.text}></textarea></label></div>
