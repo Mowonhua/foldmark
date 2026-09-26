@@ -113,7 +113,9 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .muted{color:var(--muted)}
 .small{font-size:11px}
 .dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--floating-border,var(--line));padding:6px;border-radius:var(--floating-radius-top-left,var(--floating-radius,7px)) var(--floating-radius-top-right,var(--floating-radius,7px)) var(--floating-radius-bottom-right,var(--floating-radius,7px)) var(--floating-radius-bottom-left,var(--floating-radius,7px));width:222px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
-.dropdown button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:12px;text-align:left;padding:9px 11px;border-radius:4px}
+.dropdown button{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;font-size:12px;text-align:left;padding:9px 11px;border-radius:var(--control-radius,4px)}
+.dropdown button:hover:not(:disabled){background:var(--control-hover-background,var(--hover))}
+.dropdown button:focus-visible{outline-offset:-2px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
 .search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,8px)) var(--floating-radius-top-right,var(--floating-radius,8px)) var(--floating-radius-bottom-right,var(--floating-radius,8px)) var(--floating-radius-bottom-left,var(--floating-radius,8px));padding:14px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
@@ -164,6 +166,20 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .modal label:not(.check-label){font-size:12px;display:flex;flex-direction:column;gap:9px;margin:21px 0}
 .modal label span{color:var(--muted)}
 .modal input,.modal select{width:100%;font-size:13px}
+/* 选择器沿用输入框与浮层契约；弹出层进入 top layer，避免被设置面板的滚动容器裁切。 */
+.theme-select-field{margin:21px 0;min-width:0}
+.modal .theme-select-field label{margin:0 0 9px}
+.theme-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:0;padding:10px 12px;font-size:13px;text-align:left;background:var(--field-background,var(--surface));border:1px solid var(--field-border,var(--line));border-radius:var(--field-radius,5px);box-shadow:var(--field-shadow,none)}
+.theme-select-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.theme-select-trigger:hover:not(:disabled){background:var(--field-background,var(--surface));border-color:var(--accent)}
+.theme-select-trigger:focus-visible,.theme-select-trigger[aria-expanded=true]{outline:none;border-color:var(--accent)}
+.theme-select-popup.dropdown{position:fixed;inset:auto;margin:0;max-width:calc(100vw - 16px);overflow:auto;overscroll-behavior:contain;color:var(--ink)}
+.theme-select-popup::backdrop{background:transparent;pointer-events:none}
+.theme-select-popup .theme-select-option{min-height:36px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.theme-select-option>span:first-child{min-width:0}
+.theme-select-popup button.theme-select-option[aria-selected=true]{font-weight:600;color:var(--accent);background:var(--nav-active-background,var(--accent-soft))}
+.theme-select-popup button.theme-select-option[data-active=true]{background:var(--selection);color:var(--selection-ink)}
+.theme-select-check{flex-shrink:0;width:1em;text-align:center}
 .modal input[type=range]{padding:0;accent-color:var(--accent)}
 .file-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
 .file-buttons button,.modal-actions button:not(.primary){border:1px solid var(--control-border,var(--line));border-radius:5px;padding:10px 12px;font-size:12px}
@@ -224,6 +240,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 @supports (backdrop-filter:blur(1px)){
   .sidebar{background:var(--sidebar-background,var(--sidebar));backdrop-filter:blur(var(--sidebar-blur,0px)) var(--surface-filter)}
   :is(.modal,.dropdown,.search-panel,.toast){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
+  .dropdown{background-color:var(--menu-background,var(--floating-background,var(--surface)))}
   /* 卡片底栏覆盖正文，沿用浮层材质；未定义扩展的主题仍使用正文实色底。 */
   .card-mode .statusbar{background:var(--floating-background,var(--canvas));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter);background-image:var(--surface-image)}
   .modal-backdrop{background:var(--backdrop-background,var(--backdrop))}

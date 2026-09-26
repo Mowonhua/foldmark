@@ -48,6 +48,8 @@ export const appearanceProperties = {
   // 窗口内表面透明度与背景模糊独立配置，不替代操作系统的窗口合成。
   'sidebar-background': 'color',
   'floating-background': 'color',
+  // 菜单叠在其他浮层之上时可独立提高遮挡度；缺省继承浮层底色。
+  'menu-background': 'color',
   'sidebar-blur': 'length',
   'floating-blur': 'length',
   'control-shadow': 'shadow',

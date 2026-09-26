@@ -492,17 +492,65 @@ describe('左栏项目拖动排序', () => {
 });
 
 /** 从关联标签定位设置控件，测试不依赖组件状态或固定 DOM 排列。 */
-function themeControl(name: string): HTMLSelectElement {
-  const label = [...document.querySelectorAll('label')].find(candidate => candidate.firstChild?.textContent?.trim() === name);
-  const select = label?.querySelector('select');
+function themeControl(name: string): HTMLButtonElement {
+  const label = [...document.querySelectorAll('label')].find(candidate => candidate.textContent?.trim() === name);
+  const select = label ? document.getElementById(label.htmlFor) as HTMLButtonElement : null;
   if (!select) throw new Error(`找不到设置：${name}`);
   return select;
 }
 
 async function chooseThemeSetting(name: string, value: string): Promise<void> {
-  const select = themeControl(name); select.value = value;
-  select.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  const select = themeControl(name); select.click(); await tick();
+  const popup = document.getElementById(select.getAttribute('aria-controls')!)!;
+  const option = [...popup.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item => item.dataset.value === value);
+  if (!option) throw new Error(`找不到选项：${name} / ${value}`);
+  option.click(); await tick();
 }
+
+describe('主题下拉菜单', () => {
+  it('方向键只浏览，Escape 取消并保留设置弹窗，Enter 确认', async () => {
+    await start(['- [ ] 原始任务\n']);
+    button('设置').click(); await tick();
+    expect(document.activeElement).toBe(themeControl('语言'));
+    const control = themeControl('明暗模式');
+    const original = control.value;
+    control.focus();
+    const press = async (key: string) => {
+      control.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await tick();
+    };
+    await press('ArrowDown'); await press('End');
+    expect(control.value).toBe(original);
+    expect(document.getElementById(control.getAttribute('aria-activedescendant')!)?.textContent).toContain('深色');
+    await press('Escape');
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.activeElement).toBe(control);
+    await press('End'); await press('Enter');
+    expect(control.value).toBe('dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('文字检索、Tab 和外点不会提前修改值，鼠标确认后恢复焦点', async () => {
+    await start(['- [ ] 原始任务\n']);
+    button('设置').click(); await tick();
+    const control = themeControl('语言'); control.focus();
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true, cancelable: true })); await tick();
+    expect(document.getElementById(control.getAttribute('aria-activedescendant')!)?.textContent).toContain('English');
+    expect(control.value).toBe('zh-CN');
+    const tabKey = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    control.dispatchEvent(tabKey); await tick();
+    expect(tabKey.defaultPrevented).toBe(false);
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+    control.click(); await tick();
+    document.querySelector('[role="dialog"]')!.dispatchEvent(new Event('pointerdown', { bubbles: true })); await tick();
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+    await chooseThemeSetting('语言', 'en');
+    expect(document.activeElement).toBe(control);
+    expect(document.documentElement.lang).toBe('en');
+  });
+});
 
 describe('界面语言设置', () => {
   it('切换英文即时更新界面和编辑器，重启恢复语言且正文不变', async () => {
@@ -638,7 +686,9 @@ describe('App 主题导入与持久化', () => {
     });
     await remount(); button('设置').click(); await tick();
     expect(themeControl('主题').value).toBe('paper');
-    expect([...themeControl('主题').options].some(option => option.value === customTheme.id)).toBe(false);
+    themeControl('主题').click(); await tick();
+    expect([...document.querySelectorAll<HTMLElement>('[role="option"]')].some(option => option.dataset.value === customTheme.id)).toBe(false);
+    themeControl('主题').click(); await tick();
     expect(document.documentElement.dataset.corners).toBe('rounded');
     expect(document.documentElement.style.getPropertyValue('--control-shadow')).toBe('');
     expect(document.documentElement.style.getPropertyValue('--control-radius')).toBe('');

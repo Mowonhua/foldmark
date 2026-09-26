@@ -7,6 +7,7 @@
   import appIcon from '../src-tauri/icons/icon.png';
   import WindowControls from './lib/WindowControls.svelte';
   import UpdatePanel from './lib/UpdatePanel.svelte';
+  import ThemeSelect from './lib/ThemeSelect.svelte';
   import { UpdateCoordinator } from './lib/updater/update-coordinator';
   import type { UpdateStatus } from './lib/updater/contracts';
   import packageInfo from '../package.json';
@@ -487,8 +488,10 @@
   /** 对话框将键盘焦点限制在当前操作内，关闭时恢复触发控件。 */
   function modalFocus(node: HTMLElement) {
     const previous = document.activeElement as HTMLElement | null;
-    const focusable = () => [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, textarea, [tabindex="0"]')];
-    (node.querySelector<HTMLElement>('input, select, textarea') ?? focusable()[0] ?? node).focus();
+    const focusable = () => [...node.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')]
+      .filter(element => !element.closest('[hidden]') && getComputedStyle(element).display !== 'none');
+    // 设置页从首个选择器开始；隐藏的文件导入控件不能占据初始焦点或 Tab 循环。
+    (focusable().find(element => element.matches('[role="combobox"], input, select, textarea')) ?? focusable()[0] ?? node).focus();
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const elements = focusable(); const first = elements[0]; const last = elements.at(-1);
@@ -930,9 +933,12 @@
         </div>
       {:else if dialog === 'settings'}
         <p class="eyebrow">{$t("阅读与外观")}</p><h2 id="dialog-title">{$t("让文字读起来更舒适")}</h2>
-        <label>{$t("语言")}<select value={['zh-CN', 'en', 'system'].includes(config.preferences.locale ?? '') ? config.preferences.locale : 'zh-CN'} onchange={event => config.preferences.locale = event.currentTarget.value as LocalePreference}><option value="zh-CN">简体中文</option><option value="en">English</option><option value="system">{$t("跟随系统")}</option></select></label>
-        <label>{$t("主题")}<select bind:value={config.preferences.themeId}>{#each themes as theme (theme.id)}<option value={theme.id}>{builtInThemes.some(builtIn => builtIn.id === theme.id) ? $t(theme.name) : theme.name}</option>{/each}</select></label>
-        <label>{$t("明暗模式")}<select bind:value={config.preferences.theme}><option value="system">{$t("跟随系统")}</option><option value="light">{$t("浅色")}</option><option value="dark">{$t("深色")}</option></select></label>
+        <ThemeSelect id="settings-locale" label={$t("语言")} bind:value={() => config.preferences.locale ?? 'zh-CN', value => config.preferences.locale = value as LocalePreference}
+          options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'system', label: $t("跟随系统") }]} />
+        <ThemeSelect id="settings-theme" label={$t("主题")} bind:value={() => config.preferences.themeId ?? 'paper', value => config.preferences.themeId = value}
+          options={themes.map(theme => ({ value: theme.id, label: builtInThemes.some(builtIn => builtIn.id === theme.id) ? $t(theme.name) : theme.name }))} />
+        <ThemeSelect id="settings-mode" label={$t("明暗模式")} bind:value={() => config.preferences.theme, value => config.preferences.theme = value as 'system' | 'light' | 'dark'}
+          options={[{ value: 'system', label: $t("跟随系统") }, { value: 'light', label: $t("浅色") }, { value: 'dark', label: $t("深色") }]} />
         <input class="offscreen" type="file" accept=".json,application/json" aria-label={$t("导入主题文件")} bind:this={themeInput} onchange={importTheme}/>
         <div class="file-buttons"><button disabled={themeImportBusy || !configReady} onclick={() => themeInput?.click()}>{themeImportBusy ? $t("正在导入…") : $t("导入主题")}</button><button disabled={themeExportBusy || !configReady} onclick={exportThemeTemplate}>{$t("下载主题模板")}</button>{#if config.customThemes?.some(theme => theme.id === selectedTheme.id)}<button onclick={removeTheme}>{$t("移除主题")}</button>{/if}</div>
         <label>{$t("正文字体")}<input bind:value={config.preferences.fontFamily}/></label>

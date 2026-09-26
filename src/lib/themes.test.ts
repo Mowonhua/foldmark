@@ -7,6 +7,22 @@ import { appearanceProperties } from './theme-appearance';
 const palette = (color: string) => Object.fromEntries(paletteKeys.map(key => [key, color]));
 const custom = () => ({ version: 1, id: 'custom-test', name: '自制主题', light: palette('#F8FAFC'), dark: palette('#0A0A0A') });
 describe('主题文件', () => {
+  it('菜单底色可往返导入和配置保存，切换缺省、深色及双色时清理旧值', () => {
+    const appearance = { light: { 'menu-background': '#F2F7FCE6' }, dark: {} };
+    const theme = parseTheme(JSON.stringify({ ...custom(), appearance }));
+    expect(theme.appearance).toEqual(appearance);
+    expect(parseTheme(JSON.stringify(theme))).toEqual(theme);
+    const config = validateAppConfig({ projects: [], customThemes: [theme], preferences: { themeId: theme.id } });
+    expect(config?.customThemes?.[0].appearance).toEqual(appearance);
+    const root = document.createElement('div');
+    for (const [next, mode] of [[theme, 'dark'], [validateTheme(custom()), 'light'], [builtInThemes.find(item => item.id === 'mono')!, 'light']] as const) {
+      applyTheme(root, theme, 'light', false);
+      expect(root.style.getPropertyValue('--menu-background')).toBe('#F2F7FCE6');
+      applyTheme(root, next, mode, false);
+      expect(root.style.getPropertyValue('--menu-background')).toBe('');
+    }
+    expect(() => validateTheme({ ...custom(), appearance: { light: { 'menu-background': 'url(x)' }, dark: {} } })).toThrow('THEME_INVALID');
+  });
   it('滚动条参数可导入导出和恢复配置，明暗、旧主题及双色切换均清理缺省状态', () => {
     const appearance = {
       light: { 'scrollbar-track': 'transparent', 'scrollbar-thumb': '#52657880', 'scrollbar-thumb-hover': '#526578', 'scrollbar-thumb-active': '#365d91', 'scrollbar-radius': 6, 'scrollbar-thumb-shadow': 'inset 1px 1px 1px #ffffff80', 'scrollbar-track-shadow': 'none' },
