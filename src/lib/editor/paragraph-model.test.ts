@@ -73,6 +73,17 @@ describe('共享段落解码', () => {
 });
 
 describe('共同段落序列化', () => {
+  it.each([
+    [0, '\n\nA\n\nB', 0],
+    [1, 'A\n\n\n\nB', 3],
+    [2, 'A\n\nB\n\n', 6],
+  ])('空范围在第 %i 段前插入独立空段落', (index, expected, cursor) => {
+    const value = state('A\n\nB');
+    const next = value.update(replaceParagraphs(value, index, index - 1, [''], 0, 'input')).state;
+    expect(next.doc.toString()).toBe(expected);
+    expect(next.selection.main.head).toBe(cursor);
+    expect(contents(next)).toHaveLength(3);
+  });
   it('删除与空段落替换有不同语义', () => {
     const value = state('A\n\nX\n\nB');
     expect(value.update(replaceParagraphs(value, 1, 1, [], 0, 'delete')).newDoc.toString()).toBe('A\n\nB');

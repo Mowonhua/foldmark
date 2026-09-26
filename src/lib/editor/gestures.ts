@@ -1,11 +1,13 @@
 /**
- * 文件职责：管理列表标记手势及空任务、空段落的指针定位。
- * 定义范围：指针状态机、正文焦点和同列表可见插入边界，不直接修改正文。
+ * 文件职责：管理列表标记手势及正文右侧、空任务、空段落的指针定位。
+ * 定义范围：指针状态机、正文焦点、末尾空段落分隔和同列表可见插入边界。
  */
-import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
+import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { EditorSelection } from '@codemirror/state';
 import { getHiddenRanges } from '../markdown';
 import { actionsFacet, documentField, modeFacet } from './state';
-import { paragraphAt, paragraphLayout } from './paragraphs';
+import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
+import { hiddenContentRanges } from './visibility';
 
 interface DragSession {
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
@@ -16,11 +18,13 @@ interface DragSession {
 /** 指针压下不改变状态；超过阈值后禁止任何后续复选框单击，即使此次拖动取消。 */
 class MarkerGestures {
   private session: DragSession | null = null;
+  private paragraphAnchor: { position: number; x: number; y: number } | null = null;
   private frame = 0;
   private lastClick: { time: number; x: number; y: number; marker: HTMLElement } | null = null;
   private closeMenu: (() => void) | null = null;
   constructor(private readonly view: EditorView) {
     view.dom.addEventListener('pointerdown', this.down, true);
+    view.scrollDOM.addEventListener('mousedown', this.forwardBottomMouseDown);
     view.dom.addEventListener('contextmenu', this.context, true);
     window.addEventListener('pointermove', this.move);
     window.addEventListener('pointerup', this.up);
@@ -28,11 +32,38 @@ class MarkerGestures {
     window.addEventListener('keydown', this.key);
     window.addEventListener('blur', this.cancel);
   }
-  update(update: ViewUpdate): void { if (update.docChanged) { this.cancel(); this.closeMenu?.(); } }
+  update(update: ViewUpdate): void {
+    if (update.docChanged) {
+      const pending = this.paragraphAnchor;
+      this.cancel(); this.closeMenu?.();
+      if (pending) this.paragraphAnchor = { ...pending, position: update.changes.mapPos(pending.position) };
+    }
+    if (update.transactions.some(transaction => transaction.reconfigured)) this.paragraphAnchor = null;
+  }
+  /** 只供紧随本次 pointerdown 的 mousedown 消费；拖选建立后由选区样式持有并映射锚点。 */
+  takeParagraphAnchor(event: MouseEvent): number | null {
+    const pending = this.paragraphAnchor;
+    this.paragraphAnchor = null;
+    return pending && pending.x === event.clientX && pending.y === event.clientY ? pending.position : null;
+  }
+  /** 创建事务及焦点事务完成后才记录锚点，避免被同步 update 清除或重复映射。 */
+  private prepareParagraphSelection(event: PointerEvent, position: number): void {
+    this.view.state.facet(actionsFacet).focusAt(position);
+    this.paragraphAnchor = { position: this.view.state.selection.main.head, x: event.clientX, y: event.clientY };
+  }
+  /** CodeMirror 只监听 contentDOM；滚动容器留白必须转交同一鼠标起点，才能接续原生拖选。 */
+  private forwardBottomMouseDown = (event: MouseEvent): void => {
+    const pending = this.paragraphAnchor;
+    if (event.target !== this.view.scrollDOM || !pending || pending.x !== event.clientX || pending.y !== event.clientY) return;
+    // 阻止原容器的默认选区覆盖转交结果；此时已进入 mousedown，不会截断后续鼠标移动。
+    event.preventDefault();
+    this.view.contentDOM.dispatchEvent(new MouseEvent('mousedown', event));
+  };
   destroy(): void {
     this.cancel();
     this.closeMenu?.();
     this.view.dom.removeEventListener('pointerdown', this.down, true);
+    this.view.scrollDOM.removeEventListener('mousedown', this.forwardBottomMouseDown);
     this.view.dom.removeEventListener('contextmenu', this.context, true);
     window.removeEventListener('pointermove', this.move);
     window.removeEventListener('pointerup', this.up);
@@ -41,6 +72,7 @@ class MarkerGestures {
     window.removeEventListener('blur', this.cancel);
   }
   private down = (event: PointerEvent): void => {
+    this.paragraphAnchor = null;
     if (event.button !== 0) return;
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
     if (!marker) { this.focusEmptyContent(event); return; }
@@ -58,7 +90,7 @@ class MarkerGestures {
   };
   /**
    * 空任务和空段落没有可命中的正文字符，浏览器可能把右侧空白命中到后面的隐藏分隔。
-   * 在指针捕获阶段直接定位正文端点，同时覆盖控件列内空白；按钮和修饰键交回原有手势。
+   * 空段落在指针阶段准备编辑位置，再由 mousedown 接续拖选；任务控件列保留原有手势。
    * 每次从当前模型读取坐标，避免控件复用或任务移动后使用旧位置。
    */
   private focusEmptyContent(event: PointerEvent): void {
@@ -67,14 +99,25 @@ class MarkerGestures {
     const target = event.target as Element;
     if (target.closest('button, a')) return;
     const line = target.closest('.cm-line');
+    if (this.focusBelowContent(event, line)) return;
     if (!line || !this.view.contentDOM.contains(line)) return;
     const emptyFrom = line.getAttribute('data-empty-paragraph-from');
     if (emptyFrom !== null) {
       const layout = paragraphLayout(this.view.state);
-      const paragraph = layout.paragraphs[paragraphAt(layout, Number(emptyFrom))];
+      const index = paragraphAt(layout, Number(emptyFrom));
+      const paragraph = layout.paragraphs[index];
       if (paragraph?.kind === 'empty') {
-        event.preventDefault(); this.cancel();
-        this.view.state.facet(actionsFacet).focusAt(paragraph.contentFrom);
+        this.cancel();
+        // 单个尾换行可被无损解码为空段落，但尚无完整分隔；开始编辑时补齐，
+        // 避免后续文字被 Markdown 并入前一任务。已有分隔及段内软换行不受影响。
+        const previous = layout.paragraphs[index - 1];
+        if (previous && paragraph.from === previous.to + 1) {
+          const raw = this.view.state.doc.sliceString(paragraph.from, paragraph.to);
+          this.view.dispatch(replaceParagraphs(this.view.state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input'));
+          this.prepareParagraphSelection(event, this.view.state.selection.main.head);
+          return;
+        }
+        this.prepareParagraphSelection(event, paragraph.contentFrom);
         return;
       }
     }
@@ -86,6 +129,43 @@ class MarkerGestures {
     event.preventDefault();
     this.cancel();
     this.view.state.facet(actionsFacet).focusAt(item.contentFrom);
+  }
+
+  /**
+   * 视图底部可能是归档前的分隔行，而不是文件末尾；按可见段落确定编辑出口。
+   * 只接管正文宽度内、最后可见段落下方的容器或空白行，重复点击复用已有空段落。
+   */
+  private focusBelowContent(event: PointerEvent, line: Element | null): boolean {
+    const { state } = this.view, target = event.target as Element;
+    if (line ? line.textContent?.trim() || line.querySelector('[data-list-marker]')
+      : target !== this.view.contentDOM && target !== this.view.scrollDOM) return false;
+    const layout = paragraphLayout(state), hidden = hiddenContentRanges(state);
+    let index = layout.paragraphs.length - 1;
+    while (index >= 0 && hidden.some(range => layout.paragraphs[index].from >= range.from
+      && (layout.paragraphs[index].from < range.to || range.to === state.doc.length && layout.paragraphs[index].from === range.to))) index--;
+    const paragraph = layout.paragraphs[index];
+    // 字面块、软续行及仍有隐藏后代的条目继续使用各自的编辑契约。
+    if (!paragraph || paragraph.kind === 'literal' || paragraph.item && paragraph.item.to > paragraph.to
+      || layout.lineBreaks.some(br => br.to === paragraph.to)) return false;
+    const bounds = this.view.coordsAtPos(paragraph.to);
+    const content = this.view.contentDOM.getBoundingClientRect();
+    if (!bounds || event.clientY < bounds.bottom || event.clientX < content.left || event.clientX > content.right) return false;
+    const raw = state.doc.sliceString(paragraph.from, paragraph.to);
+    // 新建采用空范围插入，仅维护末段之后的分隔，保留前面紧凑列表的原始间距。
+    const spec = paragraph.kind === 'empty'
+      ? replaceParagraphs(state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input')
+      : replaceParagraphs(state, index + 1, index, [''], 0, 'input');
+    // 序列化只允许维护可见边界，不能借底部点击改写归档或把光标放入隐藏内容。
+    const planned = state.update({ ...spec, filter: false });
+    let touchesHidden = false;
+    planned.changes.iterChangedRanges((from, to) => {
+      if (hidden.some(range => from < range.to && to > range.from)) touchesHidden = true;
+    });
+    if (touchesHidden || hiddenContentRanges(planned.state).some(range => planned.newSelection.main.head >= range.from && planned.newSelection.main.head < range.to)) return false;
+    this.cancel();
+    if (planned.docChanged) this.view.dispatch(spec);
+    this.prepareParagraphSelection(event, planned.docChanged ? this.view.state.selection.main.head : planned.newSelection.main.head);
+    return true;
   }
   private move = (event: PointerEvent): void => {
     const session = this.session;
@@ -146,6 +226,7 @@ class MarkerGestures {
     this.frame = requestAnimationFrame(this.scroll);
   };
   private up = (event: PointerEvent): void => {
+    this.paragraphAnchor = null;
     const session = this.session;
     if (!session || event.pointerId !== session.pointerId) return;
     const actions = this.view.state.facet(actionsFacet);
@@ -159,8 +240,9 @@ class MarkerGestures {
       actions.toggleTask(session.from);
     }
   };
-  private key = (event: KeyboardEvent): void => { if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
+  private key = (event: KeyboardEvent): void => { this.paragraphAnchor = null; if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
   private cancel = (): void => {
+    this.paragraphAnchor = null;
     cancelAnimationFrame(this.frame);
     const session = this.session;
     this.session = null;
@@ -195,4 +277,45 @@ class MarkerGestures {
   };
 }
 
-export const markerGestures = ViewPlugin.fromClass(MarkerGestures);
+/** 只校正普通正文末排的右侧空白；折行前排和字内位置继续使用原生坐标命中。 */
+function textLineEnd(view: EditorView, target: EventTarget | null, event: MouseEvent): number | null {
+  if (!(target instanceof Element) || !target.matches('.cm-line') || !view.contentDOM.contains(target)) return null;
+  const sourceLine = view.state.doc.lineAt(view.posAtDOM(target, 0));
+  const layout = paragraphLayout(view.state);
+  const paragraph = layout.paragraphs[paragraphAt(layout, sourceLine.from)];
+  if (paragraph?.kind !== 'text' || paragraph.item) return null;
+  const end = view.coordsAtPos(sourceLine.to, -1);
+  return end && event.clientX > end.right && event.clientY >= end.top && event.clientY < end.bottom ? sourceLine.to : null;
+}
+
+/**
+ * 右侧空白可能命中隐藏分隔；在鼠标选区流程内纠正起点，不能阻止 pointerdown，
+ * 否则浏览器不会继续发送建立拖选所需的 mousedown。移动、滚动和释放仍由 CodeMirror 管理。
+ */
+const paragraphMouseSelection = EditorView.mouseSelectionStyle.of((view, event) => {
+  const prepared = view.plugin(markerGestures)?.takeParagraphAnchor(event) ?? null;
+  if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+    || view.state.readOnly || view.state.facet(modeFacet) !== 'todo') return null;
+  const end = prepared ?? textLineEnd(view, event.target, event);
+  if (end === null) return null;
+  let anchor = end, startSelection = view.state.selection;
+  return {
+    get(current, extend, multiple) {
+      // 拖动和自动滚动时事件 target 可能停留在旧节点，终点必须按当前坐标重新命中。
+      const corrected = current === event ? anchor
+        : textLineEnd(view, view.root.elementFromPoint?.(current.clientX, current.clientY) ?? null, current);
+      const hit = corrected === null ? view.posAndSideAtCoords({ x: current.clientX, y: current.clientY }, false)
+        : { pos: corrected, assoc: -1 };
+      const range = EditorSelection.range(anchor, hit.pos, hit.assoc);
+      if (extend) return startSelection.replaceRange(startSelection.main.extend(hit.pos, hit.pos, hit.assoc));
+      return multiple ? startSelection.addRange(range) : EditorSelection.create([range]);
+    },
+    update(update) {
+      if (!update.docChanged) return;
+      anchor = update.changes.mapPos(anchor);
+      startSelection = startSelection.map(update.changes);
+    },
+  };
+});
+
+export const markerGestures = ViewPlugin.fromClass(MarkerGestures, { provide: () => paragraphMouseSelection });

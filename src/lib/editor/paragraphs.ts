@@ -176,14 +176,15 @@ export function paragraphAt(layout: ParagraphLayout, position: number): number {
 
 /**
  * 函数职责：替换连续段落并统一维护相邻的一行分隔空行。
- * 输入说明：first/last 包含端点；replacement=[] 删除段落，[''] 保留一个空段落。
+ * 输入说明：first/last 包含端点；last=first-1 表示在 first 前插入，不替换已有段落。
+ * replacement=[] 删除段落，[''] 保留或插入一个空段落。
  * 输出说明：caret 数字相对替换内容以双换行连接后的偏移；before 回前段末尾，after 到后段内容起点。
  * 约束条件：没有替换内容时数字零按 before 处理；没有前段或后段时分别落在文首或文末。
  * 实现思路：仅重写选中段落和最近两侧分隔，不吞掉相邻空段落；文首文末不增加外围分隔。
  */
 export function replaceParagraphs(state: EditorState, first: number, last: number, replacement: readonly string[], caret: number | 'before' | 'after', userEvent: string): TransactionSpec {
   const { paragraphs } = paragraphLayout(state);
-  if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < first || last >= paragraphs.length) throw new RangeError('无效的段落替换范围');
+  if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || first > paragraphs.length || last < first - 1 || last >= paragraphs.length) throw new RangeError('无效的段落替换范围');
   const before = paragraphs[first - 1];
   const after = paragraphs[last + 1];
   const from = before?.to ?? 0;
