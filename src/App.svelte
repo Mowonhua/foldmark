@@ -677,7 +677,7 @@
     <div class="sidebar-slot">
     <aside class="sidebar" aria-label="项目导航" inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
       <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label="收起项目导航"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
-      <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><span aria-hidden="true">▤</span> 全部待办 <span class="shortcut">⌘</span></button>
+      <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 7h8M6 10h8M6 13h5"/></svg> 全部待办 <svg class="shortcut" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7H5a2 2 0 1 1 2-2v10a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H7Z"/></svg></button>
       <div class="sidebar-section"><span>项目</span><div class="project-actions">
         <div class="project-search" data-project-search>
           <button class="icon-button" aria-label="查找项目" title="查找项目 (Ctrl P)" aria-expanded={projectSearchOpen} aria-controls="project-search-panel" onclick={() => projectSearchOpen ? closeProjectSearch() : openProjectSearch()}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg></button>
@@ -698,7 +698,7 @@
             onclick={() => openProject(project)} title={project.path}><span class="project-name">{project.name}</span></button>
         {/each}
       </nav>
-      <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}>⚙</button></div>
+      <div class="sidebar-bottom"><button class="icon-button" aria-label="设置" onclick={() => openDialog('settings')}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2-1.5.9-2-.6-2 3.4 1.5 1.4v1.8L2 12.3l2 3.4 2-.6 1.5.9.5 2h4l.5-2 1.5-.9 2 .6 2-3.4-1.5-1.4V9.1L18 7.7l-2-3.4-2 .6-1.5-.9-.5-2Z"/><circle cx="10" cy="10" r="3"/></svg></button></div>
     </aside>
     </div>
   {/if}
@@ -712,7 +712,7 @@
     {#if !cardMode}
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
       <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label="展开项目导航" onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">工作空间</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? '全部待办' : active?.project.name ?? '欢迎'}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label="未保存" title="未保存">*</span>{/if}</div>
-      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}>···</button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
+      <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>搜索<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label="更多操作" aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
       {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>保存 <kbd>Ctrl S</kbd></button>
@@ -731,7 +731,7 @@
 
     {#if searchOpen}
       <section class="search-panel" data-global-search aria-label="跨项目搜索">
-        <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}>×</button></div>
+        <div class="search-row"><input id="global-search" aria-label="搜索所有项目" placeholder="搜索任务和正文…" bind:value={query} /><button class="icon-button" aria-label="关闭搜索" onclick={() => searchOpen = false}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
         <label class="check-label"><input type="checkbox" bind:checked={includeArchived}/> 包含归档</label>
         <div class="search-results">{#each results.slice(0, resultLimit) as result}<button class="search-result" onclick={() => locate(result)}><span>{result.checked ? '已完成' : '待办'} · {result.title}</span><small>{result.projectName}{result.section ? ` / ${result.section}` : ''}</small></button>{:else}<p class="muted">{indexing ? '正在搜索…' : '没有匹配的任务'}</p>{/each}{#if resultLimit < results.length}<button class="load-more" onclick={() => resultLimit += 100}>显示更多（还有 {results.length - resultLimit} 条）</button>{/if}</div>
       </section>
@@ -749,7 +749,7 @@
 
     <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
     {#if !active && screen === 'project' && !fatal}
-      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>了解编辑方式 →</button></section>
+      <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">为想法留白</p><h1>从一份清单开始。</h1><p>写下要做的事，完成后收进归档。<br/>你的 Markdown 文件，始终由你掌握。</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>关联或新建项目</button><button class="text-button" onclick={() => openDialog('help')}>了解编辑方式 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
     {/if}
     {#if screen === 'all'}
       <section class="aggregate"><p class="eyebrow">工作空间</p><h1>全部待办<span>{aggregateResults.length}</span></h1><p class="muted">每件事都有自己的位置。选择一项，回到原文继续。</p>
@@ -762,7 +762,7 @@
                 {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== projectResults[index - 1].sectionFrom)}
                   <h3 class="aggregate-section-heading"><span>{result.section}</span></h3>
                 {/if}
-                <button class="aggregate-task" class:aggregate-section-task={result.sectionFrom !== null} onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><span class="result-arrow">↗</span></button>
+                <button class="aggregate-task" aria-label={result.title} class:aggregate-section-task={result.sectionFrom !== null} onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
               {/each}
               {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>显示更多（还有 {projectResults.length - (aggregateLimits[project.id] ?? 100)} 条）</button>{/if}
             </section>
@@ -774,7 +774,7 @@
     <div class="statusbar-dock">
       <footer class="statusbar" data-tauri-drag-region={desktop && cardMode ? true : undefined}>
         <div class="statusbar-actions">
-          <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}>&lt;/&gt;</button>
+          <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? '返回预览' : '查看源码'} title={mode === 'source' ? '返回预览' : '查看源码'} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
           <button class="card-button" aria-label={cardMode ? '退出卡片模式' : '进入卡片模式'} title={cardMode ? '退出卡片模式' : '进入卡片模式'} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
         </div>
         {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? '更新已就绪' : updateStatus.kind === 'downloading' ? '正在下载更新…' : '发现新版本'}</button>{/if}<button onclick={() => openDialog('help')}>Markdown <span>·</span> KaTeX</button>
@@ -783,12 +783,12 @@
   </main>
 </div>
 
-{#if toast}<div class="toast" role="status" inert={updateInstalling}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}>×</button></div>{/if}
+{#if toast}<div class="toast" role="status" inert={updateInstalling}><span>{toast}</span>{#if toastUndo}<button onclick={() => { if (!updateInstalling) { editor?.undo(); toast = ''; } }}>撤销</button>{/if}<button aria-label="关闭提示" onclick={() => toast = ''}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>{/if}
 
 {#if dialog}
   <div class="modal-backdrop" role="presentation">
     <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
-      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling} onclick={() => dialog = null}>×</button>
+      <button class="modal-close icon-button" aria-label="关闭对话框" disabled={updateInstalling} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       {#if dialog === 'project'}
         <p class="eyebrow">项目</p><h2 id="dialog-title">给一份清单一个位置</h2><p class="muted">关联已有 Markdown，或选择位置新建文件。</p>
         <label>项目名称<input placeholder="例如：工作、阅读、生活" bind:value={projectName}/></label>
@@ -809,7 +809,6 @@
         <label>正文字体<input bind:value={config.preferences.fontFamily}/></label>
         <label>字号 <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
         <label>正文宽度 <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
-        <p class="small muted">外观自动保存。动画遵循系统的减少动态效果设置。</p>
       {:else if dialog === 'updates'}
         <h2 id="dialog-title">应用更新</h2>
         <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}

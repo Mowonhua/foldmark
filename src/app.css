@@ -34,12 +34,11 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .brand{display:flex;align-items:center;gap:9px;height:var(--topbar-height);flex-shrink:0;margin-bottom:21px;padding:0 9px;border-bottom:1px solid transparent;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
 .brand>img{flex-shrink:0}
-.icon-button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:23px;color:var(--muted);flex-shrink:0}
+.icon-button{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;color:var(--muted);flex-shrink:0}
 .sidebar-close{margin-left:auto;padding:0;line-height:1;letter-spacing:normal}
 .nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 11px;border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink)}
 .nav-active{background-color:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
 .all-nav{margin-bottom:30px}
-.all-nav>span:first-child{font-size:18px}
 .shortcut{margin-left:auto;font-size:12px;color:var(--muted)}
 .sidebar-section{position:relative;margin-bottom:6px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:1px}
 .project-actions{display:flex;align-items:center}
@@ -58,7 +57,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .project-drop-after::after{bottom:0}
 .project-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
-.sidebar-bottom .icon-button{margin-left:auto;font-size:18px}
+.sidebar-bottom .icon-button{margin-left:auto}
 .main-pane{grid-area:1 / 2;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .topbar{height:var(--topbar-height);min-height:var(--topbar-height);display:flex;align-items:center;justify-content:space-between;padding:0 31px;border-bottom:1px solid var(--divider-color,var(--line));gap:15px}
 .breadcrumb{display:flex;align-items:center;gap:13px;font-size:12px;white-space:nowrap;overflow:hidden}
@@ -83,7 +82,7 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .offscreen{display:none!important}
 .statusbar{height:30px;flex-shrink:0;border-top:1px solid var(--divider-color,var(--line));display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 6px;font-size:10px;color:var(--muted);gap:10px}
 .statusbar button{font-size:10px}
-.statusbar .source-button{display:block;font-family:monospace;font-size:14px;padding:3px 6px;border-radius:3px}
+.statusbar .source-button{display:inline-flex;align-items:center;justify-content:center;width:38px;height:26px;padding:0;border-radius:3px}
 .statusbar .source-active{color:var(--accent);background:var(--accent-soft)}
 .statusbar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .statusbar button span{padding:0 5px}
@@ -110,7 +109,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .eyebrow{font-size:10px!important;color:var(--muted);letter-spacing:2px;margin-bottom:15px}
 .primary{background:var(--accent);color:var(--canvas);padding:10px 20px;border-radius:5px;font-size:13px}
 .primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
-.text-button{display:block;margin:18px auto;font-size:12px;color:var(--muted)}
+.text-button{display:flex;align-items:center;justify-content:center;gap:4px;margin:18px auto;font-size:12px;color:var(--muted)}
 .muted{color:var(--muted)}
 .small{font-size:11px}
 .dropdown{position:absolute;z-index:20;right:20px;top:54px;background:var(--surface);border:1px solid var(--floating-border,var(--line));padding:6px;border-radius:var(--floating-radius-top-left,var(--floating-radius,7px)) var(--floating-radius-top-right,var(--floating-radius,7px)) var(--floating-radius-bottom-right,var(--floating-radius,7px)) var(--floating-radius-bottom-left,var(--floating-radius,7px));width:222px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
@@ -151,7 +150,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .all-clear{padding-top:60px;color:var(--muted);font-size:14px}
 .toast{position:fixed;z-index:60;left:50%;bottom:47px;transform:translateX(-50%);background:var(--surface);color:var(--ink);display:flex;gap:10px;align-items:center;padding:10px 12px 10px 15px;border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,6px)) var(--floating-radius-top-right,var(--floating-radius,6px)) var(--floating-radius-bottom-right,var(--floating-radius,6px)) var(--floating-radius-bottom-left,var(--floating-radius,6px));box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color));font-size:12px;max-width:90vw}
 .toast button{color:var(--accent);white-space:nowrap;font-size:12px;padding:4px 6px;border-radius:var(--control-radius,4px)}
-.toast button[aria-label="关闭提示"]{color:var(--muted)}
+.toast button[aria-label="关闭提示"]{display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
 .toast button:hover{background:var(--control-hover-background,var(--hover))}
 .error-banner,.conflict-banner{padding:11px 25px;font-size:12px;line-height:1.7;background:var(--accent-soft);color:var(--accent)}
 .error-banner{color:var(--danger)}
@@ -159,7 +158,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
 .modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,9px)) var(--floating-radius-top-right,var(--floating-radius,9px)) var(--floating-radius-bottom-right,var(--floating-radius,9px)) var(--floating-radius-bottom-left,var(--floating-radius,9px));box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
 .modal.wide{width:min(850px,100%)}
-.modal-close{position:absolute;right:14px;top:12px}
+.modal-close{position:absolute;right:14px;top:12px;padding:0}
 .modal>p{font-size:13px}
 .modal h2{margin-right:20px;margin-bottom:14px}
 .modal label:not(.check-label){font-size:12px;display:flex;flex-direction:column;gap:9px;margin:21px 0}

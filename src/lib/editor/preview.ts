@@ -37,7 +37,7 @@ class ItemWidget extends WidgetType {
     const fold = document.createElement('button');
     fold.type = 'button';
     fold.className = 'fm-fold-button';
-    fold.textContent = this.folded ? '▸' : '▾';
+    fold.innerHTML = `<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="${this.folded ? 'm7 4 6 6-6 6Z' : 'm4 7 6 6 6-6Z'}"/></svg>`;
     fold.setAttribute('aria-label', this.folded ? '展开条目' : '折叠条目');
     fold.setAttribute('aria-expanded', String(!this.folded));
     fold.dataset.fold = String(this.item.from);
