@@ -118,6 +118,41 @@ describe('唯一文档编辑事务', () => {
     instance.undo();
     expect(instance.text).toBe('- [ ] 父\n  - [ ] 子');
   });
+  it('整组确认在触发后保留，内部点击不关闭，外部点击仅取消确认', () => {
+    const text = '- [ ] 父\n  - [ ] 子';
+    const instance = editor(text);
+    const trigger = document.createElement('button');
+    trigger.onclick = () => instance.toggleTask(0);
+    document.body.append(trigger);
+    trigger.click();
+    const prompt = document.querySelector<HTMLElement>('.fm-group-prompt')!;
+    expect(prompt).not.toBeNull();
+    prompt.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    prompt.click();
+    expect(prompt.isConnected).toBe(true);
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    expect(prompt.isConnected).toBe(false);
+    expect(instance.text).toBe(text);
+    trigger.click();
+    document.querySelector<HTMLButtonElement>('.fm-group-prompt button')!.click();
+    expect(document.querySelector('.fm-group-prompt')).toBeNull();
+    expect(instance.text).toContain('- [x] 子');
+  });
+  it.each(['cancel', 'restore', 'destroy'] as const)('整组确认 %s 后释放外部点击监听', action => {
+    const instance = editor('- [ ] 父\n  - [ ] 子');
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    try {
+      instance.toggleTask(0);
+      const listener = add.mock.calls.find(([type, , capture]) => type === 'pointerdown' && capture === true)?.[1];
+      expect(listener).toBeDefined();
+      if (action === 'cancel') document.querySelectorAll<HTMLButtonElement>('.fm-group-prompt button')[1].click();
+      if (action === 'restore') instance.restoreState(instance.createState('- [ ] 另一个项目', 'todo'));
+      if (action === 'destroy') { instance.destroy(); editors.splice(editors.indexOf(instance), 1); }
+      expect(document.querySelector('.fm-group-prompt')).toBeNull();
+      expect(remove).toHaveBeenCalledWith('pointerdown', listener, true);
+    } finally { add.mockRestore(); remove.mockRestore(); }
+  });
   it('Enter 只处理任务首行，Shift Enter 保留正文结构，整项缩进包含后代', () => {
     const instance = editor('- [ ] 甲\n- [ ] 乙\n  正文');
     instance.focusAt(7);

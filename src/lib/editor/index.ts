@@ -157,7 +157,7 @@ export class EditorController {
   }
   restoreState(state: EditorState, ui?: ProjectView): void {
     this.positionGeneration++;
-    this.groupPrompt?.remove(); this.view.setState(state);
+    this.closeGroupPrompt(); this.view.setState(state);
     if (ui) this.setUIState(ui);
   }
   getUIState(): ProjectView {
@@ -232,7 +232,7 @@ export class EditorController {
       const selection = !item.task.checked && anchorInside ? { anchor: next?.contentFrom ?? model.text.length } : undefined;
       const completing = group || !item.task.checked;
       this.view.dispatch({ changes, selection, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
-      this.groupPrompt?.remove();
+      this.closeGroupPrompt();
       this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? '整组已完成，可撤销' : '任务已完成，可撤销' : '任务已恢复，可撤销'));
     } catch (error) {
       if (error instanceof Error && error.message.includes('TASK_GROUP_REQUIRED')) { this.showGroupPrompt(itemFrom); return; }
@@ -241,13 +241,25 @@ export class EditorController {
   }
 
   private showGroupPrompt(from: number): void {
-    this.groupPrompt?.remove();
+    this.closeGroupPrompt();
     const prompt = document.createElement('div'); prompt.className = 'fm-group-prompt'; prompt.setAttribute('role', 'status');
     const label = document.createElement('span'); label.textContent = '还有未完成子任务';
     const complete = document.createElement('button'); complete.textContent = '完成整组'; complete.onclick = () => this.toggleTask(from, true);
-    const cancel = document.createElement('button'); cancel.textContent = '取消'; cancel.onclick = () => prompt.remove();
+    const cancel = document.createElement('button'); cancel.textContent = '取消'; cancel.onclick = () => this.closeGroupPrompt();
     prompt.append(label, complete, cancel); this.view.dom.append(prompt); this.groupPrompt = prompt;
+    // 捕获下一次按下，避免被触发本提示的 click 立即关闭，也避免正文阻止冒泡后漏掉外部操作。
+    window.addEventListener('pointerdown', this.dismissGroupPrompt, true);
     this.options.onStatus?.('还有未完成子任务，请选择“完成整组”');
+  }
+
+  private dismissGroupPrompt = (event: Event): void => {
+    if (event.target instanceof Node && !this.groupPrompt?.contains(event.target)) this.closeGroupPrompt();
+  };
+
+  /** 所有退出路径共用清理，防止已切换或销毁的编辑器仍持有窗口监听。 */
+  private closeGroupPrompt(): void {
+    window.removeEventListener('pointerdown', this.dismissGroupPrompt, true);
+    this.groupPrompt?.remove(); this.groupPrompt = null;
   }
 
   moveItem(itemFrom: number, direction: 'up' | 'down'): void {
@@ -302,7 +314,7 @@ export class EditorController {
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
   destroy(): void {
-    this.positionGeneration++; this.groupPrompt?.remove();
+    this.positionGeneration++; this.closeGroupPrompt();
     this.view.dom.removeEventListener('keydown', this.historyKey, true);
     this.view.dom.removeEventListener('keydown', this.cancelPositionRestore, true);
     this.view.scrollDOM.removeEventListener('wheel', this.cancelPositionRestore);

@@ -140,6 +140,8 @@ describe('应用更新', () => {
       await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledOnce());
       button('安装并重启').click(); await tick();
       await vi.waitFor(() => expect(button('关闭对话框').disabled).toBe(true));
+      document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
       // 先完成普通关闭的配置，再让安装自己的配置保持未完成，避免以最终状态掩盖提前退出。
       releaseCloseConfig(); await close;
       await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledTimes(2));
@@ -277,6 +279,30 @@ async function insertTask(): Promise<void> {
 async function savedText(project: Project, expected: string): Promise<void> {
   await vi.waitFor(async () => expect((await files.read(project.path)).text).toBe(expected), { timeout: 5000 });
 }
+
+describe('弹窗外部关闭', () => {
+  it('桌面标题栏未被遮罩覆盖的区域也能关闭弹窗并恢复焦点', async () => {
+    desktopBoundary.enabled = true;
+    await start(['# 清单\n']);
+    const trigger = button('设置'); trigger.focus(); trigger.click(); await tick();
+    document.querySelector<HTMLElement>('.breadcrumb strong')!.click(); await tick();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+  it.each(['新增项目', '重命名项目', '移除项目关联', '查看归档项目', '阅读与外观', '检查更新', '快捷键'])('%s 内部点击保留，点击遮罩关闭', async label => {
+    await start(['# 清单\n']);
+    button('更多操作').click(); await tick();
+    button(label).click(); await tick();
+    const modal = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(modal).not.toBeNull();
+    modal.click(); await tick();
+    modal.querySelector<HTMLElement>('h2')!.click(); await tick();
+    expect(document.querySelector('[role="dialog"]')).toBe(modal);
+    document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect((await files.read(firstProject.path)).text).toBe('# 清单\n');
+  });
+});
 
 describe('项目归档与删除', () => {
   function projectButton(project: Project): HTMLButtonElement | undefined {
@@ -1308,13 +1334,17 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('RECOVERY_INVALID');
   });
 
-  it('暂不恢复后正常保存和重新打开仍可找到草稿', async () => {
+  it.each(['暂不恢复', '点击外部'])('%s后正常保存和重新打开仍可找到草稿', async dismissal => {
     await start(['# 原文件\n\n- [ ] 磁盘内容\n']);
     const disk = await files.read(firstProject.path);
     const draft = { path: firstProject.path, text: '# 未保存的恢复内容\n', baseRevision: disk.revision, savedAt: Date.now() };
     await files.saveRecovery(draft); await remount();
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    button('暂不恢复').click(); await tick(); await shortcut('s');
+    if (dismissal === '暂不恢复') button('暂不恢复').click();
+    else document.querySelector<HTMLElement>('.modal-backdrop')!.click();
+    await tick();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await shortcut('s');
     expect((await files.loadRecovery(firstProject.path))?.text).toBe(draft.text);
     await remount();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('未写入文件的草稿');
@@ -1341,6 +1371,12 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     await files.write(firstProject.path, external, baseline.revision);
     window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
     await vi.waitFor(() => expect(document.querySelector('.conflict-banner')).not.toBeNull());
+    button('比较并处理').click(); await tick();
+    document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('.conflict-banner')).not.toBeNull();
+    expect(documentInput().textContent).toContain('本地草稿');
+    expect((await files.read(firstProject.path)).text).toBe(external);
     button('比较并处理').click(); await tick();
     button('选用磁盘版本').click(); await tick();
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());

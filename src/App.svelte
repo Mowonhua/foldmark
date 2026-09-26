@@ -664,6 +664,12 @@
     void tick().then(() => document.getElementById('project-filter')?.focus());
   }
 
+  function dismissDialog(event: MouseEvent): void {
+    if (!dialog || updateInstalling || projectActionBusy) return;
+    // 捕获阶段先关闭已有弹窗，避免打开按钮的同一次点击立即将新弹窗关闭；桌面标题栏也算外部。
+    if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) dialog = null;
+  }
+
   /** 点击冒泡到窗口后再收起，确保菜单命令、项目选择和搜索结果定位先完成；触发按钮也属于弹窗内部。 */
   function dismissPopovers(event: MouseEvent): void {
     const target = event.target;
@@ -758,7 +764,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onclick={dismissPopovers} />
+<svelte:window onkeydown={keydown} onclickcapture={dismissDialog} onclick={dismissPopovers} />
 
 <div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy}>
 
