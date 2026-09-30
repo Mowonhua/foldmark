@@ -16,6 +16,7 @@ const desktopBoundary = vi.hoisted(() => ({
   resized: null as null | (() => void),
   focused: null as null | ((event: { payload: boolean }) => void),
   maximized: false,
+  invoke: vi.fn(async () => true),
   minimize: vi.fn(async () => {}),
   toggleMaximize: vi.fn(async () => {}),
   requestClose: vi.fn(async () => {}),
@@ -31,7 +32,7 @@ const desktopBoundary = vi.hoisted(() => ({
 vi.mock('../card-window', () => ({ createCardWindowController: () => ({ enter: desktopBoundary.enterCard, exit: desktopBoundary.exitCard }) }));
 vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path }));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path, invoke: desktopBoundary.invoke }));
 // 仅替换桌面 IO 与窗口事件边界，退出决策仍运行生产 App 代码。
 vi.mock('../files/tauri', async () => {
   const { BrowserFilePort } = await import('../browser-files');
@@ -198,6 +199,7 @@ beforeEach(() => {
   setLocalePreference('zh-CN');
   desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
   desktopBoundary.resized = null; desktopBoundary.focused = null; desktopBoundary.maximized = false;
+  desktopBoundary.invoke.mockReset().mockResolvedValue(true);
   desktopBoundary.minimize.mockClear();
   desktopBoundary.toggleMaximize.mockReset().mockImplementation(async () => {
     desktopBoundary.maximized = !desktopBoundary.maximized;
@@ -531,6 +533,33 @@ async function chooseThemeSetting(name: string, value: string): Promise<void> {
 }
 
 describe('主题下拉菜单', () => {
+  it('设置说明按需显示，Escape 先关闭帮助，主题管理收起时 Tab 不进入隐藏操作', async () => {
+    await start(['# 设置交互\n']); button('设置').click(); await tick();
+    const help = document.querySelector<HTMLDetailsElement>('.settings-help');
+    const manager = document.querySelector<HTMLDetailsElement>('.settings-theme-manager');
+    expect(help).not.toBeNull(); expect(manager).not.toBeNull();
+    expect(help!.open).toBe(false); expect(manager!.open).toBe(false);
+    expect(document.querySelector('#settings-keep-transparent-on-blur')?.getAttribute('role')).toBe('switch');
+    const summary = help!.querySelector<HTMLElement>('summary')!;
+    summary.click(); await tick(); expect(help!.open).toBe(true);
+    summary.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await tick();
+    expect(help!.open).toBe(false); expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.activeElement).toBe(summary);
+    summary.click(); await tick();
+    document.querySelector('#settings-theme')!.dispatchEvent(new Event('pointerdown', { bubbles: true })); await tick();
+    expect(help!.open).toBe(false);
+
+    const managerSummary = manager!.querySelector<HTMLElement>('summary')!;
+    managerSummary.focus();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    managerSummary.dispatchEvent(tab); await tick();
+    expect(tab.defaultPrevented).toBe(true); expect(document.activeElement).toBe(button('关闭对话框'));
+    managerSummary.click(); await tick(); expect(manager!.open).toBe(true);
+    const last = button('下载主题模板'); last.focus();
+    const expandedTab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    last.dispatchEvent(expandedTab); await tick();
+    expect(expandedTab.defaultPrevented).toBe(true); expect(document.activeElement).toBe(button('关闭对话框'));
+  });
   it('方向键只浏览，Escape 取消并保留设置弹窗，Enter 确认', async () => {
     await start(['- [ ] 原始任务\n']);
     button('设置').click(); await tick();
@@ -601,12 +630,19 @@ describe('界面语言设置', () => {
 
 /** jsdom 的 File 缺少 text；只补文件读取边界，仍通过生产文件输入事件执行导入与校验。 */
 async function importThemeFile(content: string): Promise<void> {
+  await openThemeManager();
   const input = document.querySelector<HTMLInputElement>('[aria-label="导入主题文件"]')!;
   const file = new File([content], 'custom-theme.json', { type: 'application/json' });
   Object.defineProperty(file, 'text', { value: async () => content });
   Object.defineProperty(input, 'files', { configurable: true, value: [file] });
   input.dispatchEvent(new Event('change', { bubbles: true })); await tick();
   await vi.waitFor(() => expect(button('导入主题').disabled).toBe(false));
+}
+
+/** 通过用户可见的折叠入口展开主题操作，避免在隐藏控件上触发导入或下载。 */
+async function openThemeManager(): Promise<void> {
+  const manager = document.querySelector<HTMLDetailsElement>('.settings-theme-manager')!;
+  if (!manager.open) { manager.querySelector<HTMLElement>('summary')!.click(); await tick(); }
 }
 
 describe('App 更多操作菜单', () => {
@@ -634,6 +670,31 @@ describe('App 更多操作菜单', () => {
 });
 
 describe('App 主题导入与持久化', () => {
+  it('失焦透明开关立即传到原生边界，保存重启后恢复并可关闭', async () => {
+    desktopBoundary.enabled = true;
+    await start(['# 失焦透明\n']); button('设置').click(); await tick();
+    await chooseThemeSetting('主题', 'frosted-glass');
+    const checkbox = document.querySelector<HTMLInputElement>('#settings-keep-transparent-on-blur');
+    expect(checkbox).not.toBeNull();
+    expect(checkbox!.checked).toBe(false);
+    checkbox!.click(); await tick();
+    await vi.waitFor(() => expect(desktopBoundary.invoke).toHaveBeenLastCalledWith('set_window_material', { material: 'acrylic', theme: null, keepTransparentOnBlur: true }));
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.keepTransparentOnBlur).toBe(true));
+    await remount(); button('设置').click(); await tick();
+    const restored = document.querySelector<HTMLInputElement>('#settings-keep-transparent-on-blur')!;
+    expect(restored.checked).toBe(true);
+    await chooseThemeSetting('明暗模式', 'dark');
+    await vi.waitFor(() => expect(desktopBoundary.invoke).toHaveBeenLastCalledWith('set_window_material', { material: 'acrylic', theme: 'dark', keepTransparentOnBlur: true }));
+    await chooseThemeSetting('主题', 'paper');
+    await vi.waitFor(() => expect(desktopBoundary.invoke).toHaveBeenLastCalledWith('set_window_material', { material: 'opaque', theme: 'dark', keepTransparentOnBlur: true }));
+    expect(document.documentElement.dataset.windowTransparent).toBe('false');
+    expect(restored.disabled).toBe(true);
+    await chooseThemeSetting('主题', 'liquid-glass');
+    expect(restored.disabled).toBe(false);
+    restored.click(); await tick();
+    await vi.waitFor(() => expect(desktopBoundary.invoke).toHaveBeenLastCalledWith('set_window_material', { material: 'acrylic', theme: 'dark', keepTransparentOnBlur: false }));
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.keepTransparentOnBlur).toBe(false));
+  });
   const customTheme: ThemeDefinition = {
     ...builtInThemes[0], id: 'custom-slate', name: '自制石板', corners: 'square',
     light: { ...builtInThemes[0].light, canvas: '#ABCDEF' }, dark: { ...builtInThemes[0].dark, canvas: '#123456' },
@@ -972,7 +1033,7 @@ describe('App 桌面主题模板下载', () => {
     desktopBoundary.save.mockResolvedValue(selectedExportPath);
     await start(['# 下载模板\n']); button('设置').click(); await tick();
     await chooseThemeSetting('主题', themeId);
-    button('下载主题模板').click(); await tick();
+    await openThemeManager(); button('下载主题模板').click(); await tick();
     await vi.waitFor(() => expect(desktopBoundary.save).toHaveBeenCalledWith({
       title: '保存主题模板', defaultPath: `${templateId}.json`, filters: [{ name: 'JSON 主题', extensions: ['json'] }],
     }));
@@ -989,7 +1050,7 @@ describe('App 桌面主题模板下载', () => {
   it('取消保存不创建文件、不报成功，并允许重新下载', async () => {
     await start(['# 取消下载\n']); button('设置').click(); await tick();
     const create = vi.spyOn(BrowserFilePort.prototype, 'create');
-    button('下载主题模板').click(); await tick();
+    await openThemeManager(); button('下载主题模板').click(); await tick();
     await vi.waitFor(() => expect(desktopBoundary.save).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(button('下载主题模板').disabled).toBe(false));
     expect(create).not.toHaveBeenCalled();
@@ -1001,7 +1062,7 @@ describe('App 桌面主题模板下载', () => {
     await files.create(exportPath, '原有内容');
     desktopBoundary.save.mockResolvedValue(exportPath);
     await start(['# 保存失败\n']); button('设置').click(); await tick();
-    button('下载主题模板').click(); await tick();
+    await openThemeManager(); button('下载主题模板').click(); await tick();
     await vi.waitFor(() => expect(document.querySelector('.dialog-error')?.textContent).toContain('FILE_EXISTS'));
     expect((await files.read(exportPath)).text).toBe('原有内容');
     expect(button('下载主题模板').disabled).toBe(false);
@@ -1011,7 +1072,7 @@ describe('App 桌面主题模板下载', () => {
   it('系统保存对话框失败显示错误，并恢复下载按钮', async () => {
     desktopBoundary.save.mockRejectedValue(new Error('保存对话框不可用'));
     await start(['# 对话框失败\n']); button('设置').click(); await tick();
-    button('下载主题模板').click(); await tick();
+    await openThemeManager(); button('下载主题模板').click(); await tick();
     await vi.waitFor(() => expect(document.querySelector('.dialog-error')?.textContent).toContain('保存对话框不可用'));
     expect(button('下载主题模板').disabled).toBe(false);
   });

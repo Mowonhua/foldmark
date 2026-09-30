@@ -1,13 +1,13 @@
 <script lang="ts">
   /** 文件职责：组织项目导航、唯一编辑视图、查询和保存反馈。 */
   import { onMount, tick } from 'svelte';
-  import { t, setLocalePreference, type LocalePreference } from './lib/i18n';
+  import { t, setLocalePreference } from './lib/i18n';
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import appIcon from '../src-tauri/icons/icon.png';
   import WindowControls from './lib/WindowControls.svelte';
   import UpdatePanel from './lib/UpdatePanel.svelte';
-  import ThemeSelect from './lib/ThemeSelect.svelte';
+  import SettingsPanel from './lib/SettingsPanel.svelte';
   import { UpdateCoordinator } from './lib/updater/update-coordinator';
   import type { UpdateStatus } from './lib/updater/contracts';
   import packageInfo from '../package.json';
@@ -29,8 +29,8 @@
 
   const desktop = isTauri();
   const TOAST_DURATION_MS = 3000;
-  const windowMaterial = new WindowMaterialController(document.documentElement, (material, theme) =>
-    desktop ? invoke<boolean>('set_window_material', { material, theme: theme === 'system' ? null : theme }) : Promise.resolve(false));
+  const windowMaterial = new WindowMaterialController(document.documentElement, (material, theme, keepTransparentOnBlur) =>
+    desktop ? invoke<boolean>('set_window_material', { material, theme: theme === 'system' ? null : theme, keepTransparentOnBlur }) : Promise.resolve(false));
   let files: FilePort;
   let editor: EditorController | undefined;
   let resourceDocumentPath = '';
@@ -142,7 +142,6 @@
   let systemDark = $state(false);
   let themeImportBusy = $state(false);
   let themeExportBusy = $state(false);
-  let themeInput = $state<HTMLInputElement>();
   const themes = $derived([...builtInThemes, ...(config.customThemes ?? [])]);
   const selectedTheme = $derived(themes.find(theme => theme.id === config.preferences.themeId) ?? builtInThemes[0]);
   const resolvedThemeMode = $derived(config.preferences.theme === 'system' ? (systemDark ? 'dark' : 'light') : config.preferences.theme);
@@ -199,7 +198,9 @@
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
   // 显式明暗同步原生窗口；system 解除原生覆盖，避免 WebView 的媒体查询被上一次显式模式锁住。
   $effect(() => {
-    void windowMaterial.update(selectedWindowMaterial, config.preferences.theme).catch(error => { toast = $t("窗口材质应用失败：{error}", { error: errorMessage(error) }); });
+    void windowMaterial.update(selectedWindowMaterial, config.preferences.theme, config.preferences.keepTransparentOnBlur ?? false).catch(error => { toast = $t("窗口材质应用失败：{error}", { error: errorMessage(error) }); });
+    // 材质偏好走同一配置队列；普通主题禁用控件时仍保留用户上次选择。
+    if (ready && configReady) scheduleConfig();
   });
 
   /**
@@ -502,8 +503,13 @@
   /** 对话框将键盘焦点限制在当前操作内，关闭时恢复触发控件。 */
   function modalFocus(node: HTMLElement) {
     const previous = document.activeElement as HTMLElement | null;
-    const focusable = () => [...node.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')]
-      .filter(element => !element.closest('[hidden]') && getComputedStyle(element).display !== 'none');
+    const focusable = () => [...node.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), input:not([type="hidden"]):not([type="file"]):not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')]
+      .filter(element => {
+        if (element.closest('[hidden]') || getComputedStyle(element).display === 'none') return false;
+        // 收起的 details 只有直属 summary 能接收焦点；主题操作和帮助正文不能进入 Tab 循环。
+        const closed = element.closest('details:not([open])');
+        return !closed || element === closed.querySelector(':scope > summary');
+      });
     // 设置页从首个选择器开始；隐藏的文件导入控件不能占据初始焦点或 Tab 循环。
     (focusable().find(element => element.matches('[role="combobox"], input, select, textarea')) ?? focusable()[0] ?? node).focus();
     const trap = (event: KeyboardEvent) => {
@@ -925,7 +931,7 @@
 
 {#if dialog}
   <div class="modal-backdrop" role="presentation">
-    <div class="modal" class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
+    <div class="modal" class:settings-modal={dialog === 'settings'} class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
       <button class="modal-close icon-button" aria-label={$t("关闭对话框")} disabled={updateInstalling || projectActionBusy} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       {#if dialog === 'project'}
         <p class="eyebrow">{$t("项目")}</p><h2 id="dialog-title">{$t("给一份清单一个位置")}</h2><p class="muted">{$t("关联已有 Markdown，或选择位置新建文件。")}</p>
@@ -946,18 +952,9 @@
           {:else}<p class="muted">{$t("暂无归档项目")}</p>{/each}
         </div>
       {:else if dialog === 'settings'}
-        <p class="eyebrow">{$t("阅读与外观")}</p><h2 id="dialog-title">{$t("让文字读起来更舒适")}</h2>
-        <ThemeSelect id="settings-locale" label={$t("语言")} bind:value={() => config.preferences.locale ?? 'zh-CN', value => config.preferences.locale = value as LocalePreference}
-          options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'system', label: $t("跟随系统") }]} />
-        <ThemeSelect id="settings-theme" label={$t("主题")} bind:value={() => config.preferences.themeId ?? 'paper', value => config.preferences.themeId = value}
-          options={themes.map(theme => ({ value: theme.id, label: builtInThemes.some(builtIn => builtIn.id === theme.id) ? $t(theme.name) : theme.name }))} />
-        <ThemeSelect id="settings-mode" label={$t("明暗模式")} bind:value={() => config.preferences.theme, value => config.preferences.theme = value as 'system' | 'light' | 'dark'}
-          options={[{ value: 'system', label: $t("跟随系统") }, { value: 'light', label: $t("浅色") }, { value: 'dark', label: $t("深色") }]} />
-        <input class="offscreen" type="file" accept=".json,application/json" aria-label={$t("导入主题文件")} bind:this={themeInput} onchange={importTheme}/>
-        <div class="file-buttons"><button disabled={themeImportBusy || !configReady} onclick={() => themeInput?.click()}>{themeImportBusy ? $t("正在导入…") : $t("导入主题")}</button><button disabled={themeExportBusy || !configReady} onclick={exportThemeTemplate}>{$t("下载主题模板")}</button>{#if config.customThemes?.some(theme => theme.id === selectedTheme.id)}<button onclick={removeTheme}>{$t("移除主题")}</button>{/if}</div>
-        <label>{$t("正文字体")}<input bind:value={config.preferences.fontFamily}/></label>
-        <label>{$t("字号")} <span>{config.preferences.fontSize} px</span><input type="range" min="13" max="24" step="1" bind:value={config.preferences.fontSize}/></label>
-        <label>{$t("正文宽度")} <span>{config.preferences.contentWidth} px</span><input type="range" min="640" max="960" step="20" bind:value={config.preferences.contentWidth}/></label>
+        <SettingsPanel bind:preferences={config.preferences} {themes} material={selectedWindowMaterial} {desktop} {configReady}
+          importBusy={themeImportBusy} exportBusy={themeExportBusy} canRemoveTheme={config.customThemes?.some(theme => theme.id === selectedTheme.id) ?? false}
+          onImport={importTheme} onExport={exportThemeTemplate} onRemove={removeTheme}/>
       {:else if dialog === 'updates'}
         <h2 id="dialog-title">{$t("应用更新")}</h2>
         <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}

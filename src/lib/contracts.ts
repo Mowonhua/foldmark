@@ -22,6 +22,8 @@ export interface Preferences {
   autoCheckUpdates?: boolean;
   /** 缺省为 true；下载完成后仍需用户启动安装，以便先保存全部文档。 */
   autoDownloadUpdates?: boolean;
+  /** 缺省为 false，沿用系统材质行为；true 时请求 Acrylic 在窗口失焦后继续透明。仅原生材质支持时生效。 */
+  keepTransparentOnBlur?: boolean;
 }
 /** 结构职责：保存独立于 Markdown 的配置；正文及编辑历史不属于配置。 */
 export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[] }

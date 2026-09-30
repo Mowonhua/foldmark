@@ -10,8 +10,25 @@ describe('窗口材质协调', () => {
     await controller.update('acrylic', 'dark');
     await controller.update('acrylic', 'light');
     await controller.update('acrylic', 'system');
-    expect(native.mock.calls).toEqual([['acrylic', 'dark'], ['acrylic', 'light'], ['acrylic', 'system']]);
+    expect(native.mock.calls).toEqual([['acrylic', 'dark', false], ['acrylic', 'light', false], ['acrylic', 'system', false]]);
     expect(root.dataset.windowTransparent).toBe('true');
+  });
+  it('失焦透明偏好随请求串行应用，切回普通主题不会残留透明', async () => {
+    const root = document.createElement('div');
+    let finish!: (value: boolean) => void;
+    const native = vi.fn().mockImplementationOnce(() => new Promise<boolean>(resolve => { finish = resolve; })).mockResolvedValue(true);
+    const controller = new WindowMaterialController(root, native);
+    const first = controller.update('acrylic', 'dark', true);
+    await Promise.resolve();
+    const next = controller.update('acrylic', 'dark', false);
+    const last = controller.update('opaque', 'light', true);
+    expect(native).toHaveBeenCalledTimes(1);
+    finish(true);
+    await first;
+    expect(root.dataset.windowTransparent).toBe('false');
+    await Promise.all([next, last]);
+    expect(native.mock.calls).toEqual([['acrylic', 'dark', true], ['acrylic', 'dark', false], ['opaque', 'light', true]]);
+    expect(root.dataset.windowTransparent).toBe('false');
   });
   it('快速切回普通主题时，旧透明请求不得重新打开透明背景', async () => {
     const root = document.createElement('div');

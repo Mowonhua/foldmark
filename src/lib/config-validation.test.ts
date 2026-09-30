@@ -2,6 +2,17 @@
 import { describe, expect, it } from 'vitest';
 import { validateAppConfig } from './config-validation';
 describe('配置边界', () => {
+  it('失焦透明偏好兼容旧配置，拒绝非布尔值并保留原数据', () => {
+    for (const keepTransparentOnBlur of [undefined, false, true]) {
+      const config = { projects: [], preferences: { keepTransparentOnBlur } };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+    for (const keepTransparentOnBlur of ['false', 0, null, [], {}]) {
+      const config = { projects: [], preferences: { keepTransparentOnBlur } };
+      expect(() => validateAppConfig(config)).toThrow('STATE_CONFIG_INVALID');
+      expect(config.preferences.keepTransparentOnBlur).toBe(keepTransparentOnBlur);
+    }
+  });
   it('语言偏好兼容旧配置和未来语言，拒绝错误字段形状', () => {
     for (const locale of [undefined, 'zh-CN', 'en', 'system', 'fr']) {
       const config = { projects: [], preferences: { locale } };

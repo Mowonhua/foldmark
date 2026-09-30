@@ -13,9 +13,11 @@
     value: string;
     options: Option[];
     disabled?: boolean;
+    /** 为紧凑设置列表使用左右排列；只改变布局，不改变选项、焦点及确认契约。 */
+    inline?: boolean;
   }
 
-  let { id, label, value = $bindable(), options, disabled = false }: Props = $props();
+  let { id, label, value = $bindable(), options, disabled = false, inline = false }: Props = $props();
   let trigger: HTMLButtonElement;
   let popup: HTMLDivElement;
   let open = $state(false);
@@ -178,7 +180,7 @@
   });
 </script>
 
-<div class="theme-select-field">
+<div class="theme-select-field" class:theme-select-inline={inline}>
   <label for={id} id={`${id}-label`}>{label}</label>
   <button
     bind:this={trigger}

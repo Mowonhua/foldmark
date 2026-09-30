@@ -166,6 +166,65 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .modal label:not(.check-label){font-size:12px;display:flex;flex-direction:column;gap:9px;margin:21px 0}
 .modal label span{color:var(--muted)}
 .modal input,.modal select{width:100%;font-size:13px}
+.modal .check-label input{width:auto}
+/* 设置列表只组织密度与层级；表面、边框和交互状态继续消费通用主题参数。 */
+.settings-modal{width:min(620px,100%);padding:30px 32px 20px}
+.settings-heading{margin-bottom:22px}
+.settings-heading h2{margin:0 32px 0 0;font-size:21px;letter-spacing:-.3px}
+.settings-section+.settings-section{margin-top:18px;padding-top:18px;border-top:1px solid var(--divider-color,var(--line))}
+.settings-section h3{margin:0 0 9px;font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--muted)}
+.settings-row,.settings-modal .theme-select-inline{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);align-items:center;gap:20px;min-height:52px;padding:7px 0;margin:0}
+.settings-modal .settings-row>label,.settings-modal .theme-select-inline>label,.settings-modal .settings-label-with-help>label{display:block;margin:0;font-size:13px;line-height:1.6}
+.settings-modal .theme-select-inline .theme-select-trigger{min-height:36px;padding:8px 11px}
+.settings-label-with-help{display:flex;align-items:center;gap:5px;min-width:0}
+.settings-help{position:relative;flex-shrink:0}
+.settings-help summary{display:flex;align-items:center;justify-content:center;width:26px;height:28px;cursor:pointer;list-style:none;color:var(--muted);border-radius:var(--control-radius,5px)}
+.settings-help summary::-webkit-details-marker,.settings-theme-manager summary::-webkit-details-marker{display:none}
+.settings-help summary:hover,.settings-help[open] summary{color:var(--accent);background:var(--control-hover-background,var(--hover))}
+.settings-help summary:focus-visible,.settings-theme-manager summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.settings-help-popup{position:absolute;top:calc(100% + 6px);left:-110px;z-index:2;width:260px;padding:13px 15px;border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius,7px);background:var(--surface);box-shadow:var(--floating-shadow,none);color:var(--ink);font-size:12px;line-height:1.7}
+.settings-help-popup p{margin:0}
+.settings-help-popup p+p{margin-top:8px;color:var(--muted)}
+.settings-switch-control{display:flex;justify-content:flex-end;align-items:center;gap:12px}
+.settings-switch-status{font-size:11px;color:var(--muted);white-space:nowrap}
+.settings-modal label.settings-switch{display:block;position:relative;margin:0;width:44px;height:26px;cursor:pointer;flex-shrink:0}
+.settings-switch input[type=checkbox]{position:absolute;inset:0;margin:0;padding:0;width:100%;height:100%;opacity:0;cursor:inherit}
+.settings-switch-track{display:block;width:44px;height:26px;padding:3px;border:1px solid var(--field-border,var(--line));border-radius:var(--control-radius,20px);background:var(--field-background,var(--surface));box-shadow:var(--field-shadow,none);transition:background .15s,border-color .15s}
+.settings-switch-thumb{display:block;width:18px;height:18px;background:var(--muted);border-radius:var(--control-radius,20px);transition:transform .15s,background .15s}
+.settings-switch input:checked+.settings-switch-track{background:var(--accent);border-color:var(--accent)}
+.settings-switch input:checked+.settings-switch-track .settings-switch-thumb{transform:translateX(18px);background:var(--surface)}
+.settings-switch input:focus-visible+.settings-switch-track{outline:2px solid var(--accent);outline-offset:3px}
+.settings-switch:not(.settings-switch-disabled):hover .settings-switch-track{border-color:var(--accent)}
+.settings-modal label.settings-switch-disabled{cursor:default}
+.settings-switch-disabled .settings-switch-track{border-style:dashed}
+.settings-range-control{display:flex;align-items:center;gap:14px;min-width:0}
+.settings-modal .settings-range-control input{flex:1;min-width:0;width:100%;padding:0;accent-color:var(--accent)}
+.settings-range-control output{min-width:54px;flex-shrink:0;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.settings-modal .settings-font-input{padding:8px 11px;font-size:12px;text-overflow:ellipsis}
+.settings-theme-manager{margin-top:21px;border-top:1px solid var(--divider-color,var(--line))}
+.settings-theme-manager>summary{display:flex;align-items:center;gap:10px;min-height:52px;padding:14px 0 2px;cursor:pointer;list-style:none;font-size:12px}
+.settings-manager-caption{margin-left:auto;font-size:11px;color:var(--muted)}
+.settings-theme-manager>summary>svg{color:var(--muted);transition:transform .15s}
+.settings-theme-manager[open]>summary>svg{transform:rotate(90deg)}
+.settings-theme-actions.file-buttons{margin:14px 0 5px;gap:8px;flex-wrap:wrap}
+@media(max-width:560px){
+  .settings-modal{padding:26px 22px 16px}
+  .settings-row,.settings-modal .theme-select-inline{grid-template-columns:minmax(0,1fr) minmax(0,180px);gap:12px}
+  .settings-transparency-row{grid-template-columns:minmax(0,1fr) auto}
+  .settings-switch-status{max-width:72px;white-space:normal;text-align:right}
+  /* 窄窗口将说明锚定整行，避免长标签把浮层推到滚动容器之外。 */
+  .settings-transparency-row{position:relative}
+  .settings-transparency-row .settings-help{position:static}
+  .settings-help-popup{left:0;right:auto;top:calc(100% + 6px);width:min(260px,100%)}
+}
+@media(max-width:400px){
+  .settings-row,.settings-modal .theme-select-inline{grid-template-columns:minmax(0,1fr) minmax(0,146px);gap:10px}
+  .settings-transparency-row{grid-template-columns:minmax(0,1fr) auto}
+  .settings-transparency-row .settings-label-with-help>label{font-size:12px}
+  .settings-switch-control{gap:7px}
+  .settings-switch-status{max-width:46px;font-size:10px}
+  .settings-font-input{max-width:100%}
+}
 /* 选择器沿用输入框与浮层契约；弹出层进入 top layer，避免被设置面板的滚动容器裁切。 */
 .theme-select-field{margin:21px 0;min-width:0}
 .modal .theme-select-field label{margin:0 0 9px}
@@ -238,6 +297,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .card-mode .statusbar{border-top-color:var(--floating-border-top,var(--floating-border,var(--divider-color,var(--line))))}
 /* 不支持背景模糊时保留原有实色表面，避免透明浮层降低文字可读性。 */
 @supports (backdrop-filter:blur(1px)){
+  .settings-help-popup{background:var(--menu-background,var(--floating-background,var(--surface)));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
   .sidebar{background:var(--sidebar-background,var(--sidebar));backdrop-filter:blur(var(--sidebar-blur,0px)) var(--surface-filter)}
   :is(.modal,.dropdown,.search-panel,.toast){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
   .dropdown{background-color:var(--menu-background,var(--floating-background,var(--surface)))}
