@@ -5,25 +5,25 @@
 import { translate } from '../i18n';
 import { EditorSelection, EditorState, Prec, Transaction, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
-import { getHiddenRanges, type DocumentModel } from '../markdown';
-import { documentField, foldsField, modeFacet, sourceViewFacet } from './state';
+import { completedChildGroups, getHiddenRanges, type DocumentModel } from '../markdown';
+import { documentField, expandedCompletedGroupsField, foldsField, modeFacet, sourceViewFacet } from './state';
 import { fencedBlockEditing } from './fenced-block-editing';
 import { sourceScopeField } from './source-scope';
 
 /**
  * 结构职责：表示预览和键盘行为共同采用的隐藏内容区间。
- * 字段说明：kind 区分整行过滤与首行后折叠；itemFrom 指向折叠项或完成摘要的父项。
+ * 字段说明：kind 区分归档过滤、完成组收起与正文折叠；itemFrom 指向折叠项或完成组父项。
  * 约束条件：范围左闭右开、已排序且互不重叠；源码采用进入视图时冻结的范围。
  */
 export interface HiddenContentRange {
   from: number; to: number;
-  kind: 'completed' | 'filtered' | 'fold';
+  kind: 'completed' | 'completed-group' | 'filtered' | 'fold';
   itemFrom: number | null;
   count: number;
 }
 /** 同一模型只保留最新界面依赖组合；文本快照释放后缓存可自动回收。 */
 interface VisibilityCache {
-  mode: string; folds: ReadonlySet<number>;
+  mode: string; folds: ReadonlySet<number>; expandedGroups: ReadonlySet<number>;
   ranges: readonly HiddenContentRange[]; atoms?: DecorationSet;
 }
 const visibilityCache = new WeakMap<DocumentModel, VisibilityCache>();
@@ -39,12 +39,16 @@ export function hiddenContentRanges(state: EditorState): readonly HiddenContentR
   if (mode === 'source') return (state.field(sourceScopeField, false) ?? []).map(range => ({ ...range, kind: 'filtered', itemFrom: null, count: 0 }));
   const model = state.field(documentField);
   const folds = state.field(foldsField);
+  const expandedGroups = state.field(expandedCompletedGroupsField, false) ?? new Set<number>();
   const cached = visibilityCache.get(model);
-  if (cached?.mode === mode && cached.folds === folds) return cached.ranges;
+  if (cached?.mode === mode && cached.folds === folds && cached.expandedGroups === expandedGroups) return cached.ranges;
   const ranges: HiddenContentRange[] = getHiddenRanges(model,mode)
     .map(range => ({ from: range.from, to: range.to, kind: mode === 'todo' ? 'completed' : 'filtered', itemFrom: range.parentFrom, count: range.count }));
   for (const item of model.items) {
     if (folds.has(item.from) && item.to > item.firstLineTo) ranges.push({ from: item.firstLineTo, to: item.to, kind: 'fold', itemFrom: item.from, count: 0 });
+  }
+  for (const group of completedChildGroups(model)) {
+    if (!expandedGroups.has(group.parentFrom!)) ranges.push({ ...group, kind: 'completed-group', itemFrom: group.parentFrom });
   }
   ranges.sort((a,b)=>a.from-b.from || b.to-a.to);
   const merged: HiddenContentRange[] = [];
@@ -58,7 +62,7 @@ export function hiddenContentRanges(state: EditorState): readonly HiddenContentR
     }
     merged.push({ ...range });
   }
-  visibilityCache.set(model,{ mode, folds, ranges: merged });
+  visibilityCache.set(model,{ mode, folds, expandedGroups, ranges: merged });
   return merged;
 }
 /**

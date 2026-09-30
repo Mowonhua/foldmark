@@ -69,13 +69,13 @@ describe('structure edits', () => {
   });
 });
 describe('projection and discovery', () => {
-  it('hides only completed subtrees, retaining independent text', () => {
-    const m=parseDocument('# work\n\n- [ ] parent\n  - [x] done\n  - [ ] open\n\nindependent\n');const ranges=getHiddenRanges(m,'todo');expect(ranges).toHaveLength(1);expect(ranges[0].parentFrom).toBe(m.tasks[0].from);expect(m.text.slice(ranges[0].from,ranges[0].to)).toBe('  - [x] done\n');
+  it('keeps completed children visible under unfinished tasks, retaining independent text', () => {
+    const m=parseDocument('# work\n\n- [ ] parent\n  - [x] done\n  - [ ] open\n\nindependent\n');expect(getHiddenRanges(m,'todo')).toEqual([]);
     expect(getHiddenRanges(m,'source')).toEqual([]);
   });
-  it('archive retains the ancestor path and completed subtree without duplicate descendants', () => {
+  it('excludes completed children of unfinished groups from the archive projection', () => {
     const m=parseDocument('# work\n\n- [ ] parent\n  unrelated\n  - [x] done\n    archived body\n  - [ ] open\n\nindependent\n');const visible=apply(m.text,getHiddenRanges(m,'archive').map(r=>({...r,insert:''})));
-    expect(visible).toContain('# work');expect(visible).toContain('- [ ] parent');expect(visible).toContain('archived body');expect(visible).not.toContain('unrelated');expect(visible).not.toContain('open');expect(visible).not.toContain('independent');
+    expect(visible).toBe('');
   });
   it('search shares ancestor completion and section semantics and ignores folded state', () => {
     const m=parseDocument('# work\n\n- [x] parent\n  - [x] hidden child\n- [ ] active child');expect(searchTasks(m,'child',false)).toHaveLength(1);expect(searchTasks(m,'hidden',true).at(-1)?.heading).toBe('work');expect(searchTasks(m,'active child',false)[0].title).toBe('active child');
@@ -92,9 +92,11 @@ describe('structural edge cases', () => {
     const m=parseDocument('- [ ] parent\n\n  $$\n  - [ ] formula\n- [ ] sibling\n');
     expect(m.tasks.map(item=>m.text.slice(item.contentFrom,item.firstLineTo))).toEqual(['parent','sibling']);
   });
-  it('does not match an archived descendant through its active parent', () => {
+  it('matches a completed child as an active result without matching its parent body', () => {
     const m=parseDocument('- [ ] parent\n  - [x] hidden token\n  - [ ] active token\n');
-    expect(searchTasks(m,'hidden',false)).toHaveLength(0);expect(searchTasks(m,'active',false).map(result=>result.title)).toEqual(['active token']);
+    const completed = searchTasks(m,'hidden',false);
+    expect(completed.map(result => result.title)).toEqual(['hidden token']);expect(completed[0].archived).toBe(false);
+    expect(searchTasks(m,'active',false).map(result=>result.title)).toEqual(['active token']);
   });
   it('rejects moving a nested item sharing its physical line with its parent', () => {
     const m=parseDocument('- - one\n  - two\n');expect(()=>moveItemChanges(m,m.items[1].from,null)).toThrow('INVALID_MOVE');
@@ -121,7 +123,7 @@ describe('inconsistent completion imported from source', () => {
   it('keeps unchecked descendants reachable when an imported parent is already checked', () => {
     const m=parseDocument('- [x] parent\n  - [ ] unfinished\n  - [x] finished\n');
     const visible=apply(m.text,getHiddenRanges(m,'todo').map(range=>({...range,insert:''})));
-    expect(visible).toContain('parent');expect(visible).toContain('unfinished');expect(visible).not.toContain('- [x] finished');
+    expect(visible).toContain('parent');expect(visible).toContain('unfinished');expect(visible).toContain('- [x] finished');
     expect(searchTasks(m,'unfinished',false)).toHaveLength(1);
   });
   it('explicit group completion completes remaining descendants even if parent was already checked', () => {

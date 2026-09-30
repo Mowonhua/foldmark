@@ -59,6 +59,29 @@ vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({
 }) }));
 
 const files = new BrowserFilePort();
+it('完成子任务经过自动保存、文件监听重载及重启仍保留父子拓扑，归档只包含完整任务树', async () => {
+  const source = '- [ ] 父\n  - [ ] 子\n    子正文\n  - [ ] 待办\n\n# 归档\n\n- [x] 历史归档\n';
+  const expected = '- [ ] 父\n  - [ ] 待办\n  - [x] 子\n    子正文\n\n# 归档\n\n- [x] 历史归档\n';
+  await start([source]);
+  documentInput().querySelectorAll<HTMLButtonElement>('[role="checkbox"][aria-checked="false"]')[1].click();
+  await tick();
+  await savedText(firstProject, expected);
+  // 等待超过保存与预览刷新窗口，避免只验证点击当下的临时 DOM。
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  expect((await files.read(firstProject.path)).text).toBe(expected);
+  expect(button(/^归档/).textContent?.replace(/\s/g, '')).toBe('归档1');
+  const baseline = await files.read(firstProject.path);
+  const external = expected.replace('- [ ] 父', '- [ ] 外部父');
+  await files.write(firstProject.path, external, baseline.revision);
+  window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+  await vi.waitFor(() => expect(documentInput().textContent).toContain('外部父'));
+  await new Promise(resolve => setTimeout(resolve, 750));
+  expect((await files.read(firstProject.path)).text).toBe(external);
+  expect(button(/^归档/).textContent?.replace(/\s/g, '')).toBe('归档1');
+  await remount();
+  expect((await files.read(firstProject.path)).text).toBe(external);
+  expect(button(/^归档/).textContent?.replace(/\s/g, '')).toBe('归档1');
+});
 describe('应用更新', () => {
   it('后台下载完成后保存最新正文再安装，保存失败可以重试', async () => {
     desktopBoundary.enabled = true;
@@ -1236,6 +1259,53 @@ describe('App 真实编辑与文件闭环', () => {
     expect(documentInput().textContent).toContain('完成并重开');
     expect(document.querySelector('[role="checkbox"][aria-checked="true"]')).not.toBeNull();
     expect((await files.read(firstProject.path)).text).toBe(finalText);
+  });
+
+  it('子任务保存后仍保留拓扑，整体摘要和展开状态重启恢复，整树完成才前插归档', async () => {
+    const original = '- [ ] 父\n  - [ ] 甲\n    甲正文\n  - [ ] 乙\n    乙正文\n\n# 归档\n\n- [x] 旧归档\n';
+    await start([original]);
+    const completeChild = () => (documentInput().querySelectorAll<HTMLButtonElement>('[role="checkbox"][aria-checked="false"]')[1]).click();
+    completeChild(); await tick();
+    const first = '- [ ] 父\n  - [ ] 乙\n    乙正文\n  - [x] 甲\n    甲正文\n\n# 归档\n\n- [x] 旧归档\n';
+    await savedText(firstProject, first);
+    expect(documentInput().textContent).toMatch(/已完成\s*1\s*项/);
+    expect(documentInput().textContent).not.toContain('甲');
+    completeChild(); await tick();
+    const completedChildren = '- [ ] 父\n  - [x] 乙\n    乙正文\n  - [x] 甲\n    甲正文\n\n# 归档\n\n- [x] 旧归档\n';
+    await savedText(firstProject, completedChildren);
+    // 正文已落盘后仍须等待配置写入，再核对文件，覆盖完成动作后的异步归档路径。
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id].folded).toHaveLength(0));
+    expect((await files.read(firstProject.path)).text).toBe(completedChildren);
+    await remount();
+    expect((await files.read(firstProject.path)).text).toBe(completedChildren);
+    expect(documentInput().textContent).toMatch(/已完成\s*2\s*项/);
+    expect(documentInput().textContent).not.toContain('甲');
+    expect(documentInput().textContent).not.toContain('乙');
+    expect(documentInput().textContent).not.toContain('甲正文');
+    expect(documentInput().textContent).not.toContain('乙正文');
+    expect(button(/已完成\s*2\s*项/).getAttribute('aria-expanded')).toBe('false');
+    // 等待初次载入的配置定时器结束，再点击摘要，验证纯展开动作也会自行持久化。
+    await new Promise(resolve => setTimeout(resolve, 350));
+    button(/已完成\s*2\s*项/).click(); await tick();
+    expect(button(/已完成\s*2\s*项/).getAttribute('aria-expanded')).toBe('true');
+    expect(documentInput().textContent).toContain('甲正文');
+    expect(documentInput().textContent).toContain('乙正文');
+    expect(documentInput().textContent!.indexOf('乙')).toBeLessThan(documentInput().textContent!.indexOf('甲'));
+    expect(documentInput().querySelectorAll('[role="checkbox"][aria-checked="true"]')).toHaveLength(2);
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id].expandedCompletedGroups).toHaveLength(1));
+    await remount();
+    expect(documentInput().textContent).toContain('甲正文');
+    expect(documentInput().textContent).toContain('乙正文');
+    button('完成任务').click(); await tick();
+    await vi.waitFor(async () => {
+      const text = (await files.read(firstProject.path)).text;
+      expect(text.indexOf('# 归档')).toBeLessThan(text.indexOf('- [x] 父'));
+      expect(text.indexOf('- [x] 父')).toBeLessThan(text.indexOf('旧归档'));
+      expect(text).toContain('- [x] 父\n  - [x] 乙\n    乙正文\n  - [x] 甲\n    甲正文\n');
+    });
+    button(/^归档/).click(); await tick();
+    expect(documentInput().textContent).toContain('父');
+    expect(documentInput().textContent).toContain('甲正文');
   });
 
   it('打开旧布局和载入外部修改后，经保存器写回文末归档分区', async () => {

@@ -15,6 +15,22 @@ export const sourceViewFacet = Facet.define<'todo' | 'archive', 'todo' | 'archiv
 export const actionsFacet = Facet.define<EditorActions, EditorActions>({ combine: values => values[0] });
 export const resourcesFacet = Facet.define<Pick<EditorOptions, 'resolveResource' | 'openLink'>, Pick<EditorOptions, 'resolveResource' | 'openLink'>>({ combine: values => values[0] ?? {} });
 export const setFolds = StateEffect.define<readonly number[]>();
+/** 替换已展开完成组的父项坐标；effect 坐标属于事务完成后的文档。 */
+export const setExpandedCompletedGroups = StateEffect.define<readonly number[]>();
+/** 完成子任务默认整体收起，展开状态与独立条目正文折叠分开维护。 */
+export const expandedCompletedGroupsField = StateField.define<ReadonlySet<number>>({
+  create: () => new Set(),
+  update(value, transaction) {
+    // 父项起点的右侧字符被删除时身份失效，不能把展开状态移交给相邻任务。
+    // 整项移动或归档布局使用可靠内容身份生成 effect，覆盖这层通用文本映射。
+    let next = transaction.docChanged ? new Set([...value].flatMap(from => {
+      const mapped = transaction.changes.mapPos(from, 1, MapMode.TrackAfter);
+      return mapped === null ? [] : [mapped];
+    })) : value;
+    for (const effect of transaction.effects) if (effect.is(setExpandedCompletedGroups)) next = new Set(effect.value);
+    return next;
+  },
+});
 
 /** 映射实际 LF 字符的两端，删除或替换该字符时不把身份转移到邻接换行。 */
 export function mapSoftBreaks(positions: readonly number[], changes: ChangeDesc): readonly number[] {
@@ -98,6 +114,6 @@ export const foldsField = StateField.define<ReadonlySet<number>>({
   },
 });
 
-/** 文本撤销恢复操作前的折叠位置；单独折叠事务不进入文本历史。 */
+/** 文本撤销恢复条目折叠及完成组展开状态；纯界面切换不进入文本历史。 */
 export const foldHistory = invertedEffects.of(transaction => transaction.docChanged
-  ? [setFolds.of([...transaction.startState.field(foldsField)])] : []);
+  ? [setFolds.of([...transaction.startState.field(foldsField)]), setExpandedCompletedGroups.of([...transaction.startState.field(expandedCompletedGroupsField)])] : []);

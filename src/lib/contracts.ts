@@ -28,6 +28,8 @@ export interface AppConfig { projects: Project[]; activeProjectId: string | null
 /** 结构职责：保存可可靠恢复的界面定位；折叠键失配时默认展开。 */
 export interface ProjectView {
   mode: ViewMode; cursor: number; scrollTop: number; folded: string[];
+  /** 已展开的完成子任务组，以父项可靠内容键保存；缺省及身份失配均收起。 */
+  expandedCompletedGroups?: string[];
   /** 源码的来源分区；旧配置缺省时视为待办，不能由当前可见任务反推。 */
   sourceView?: 'todo' | 'archive';
   /** 进入源码前的定位快照；文档坐标随源码编辑映射，返回预览后恢复该阅读位置。 */

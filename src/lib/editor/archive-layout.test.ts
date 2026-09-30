@@ -2,12 +2,21 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { EditorController } from './index';
 import { getHiddenRanges } from '../markdown';
+import { foldsField } from './state';
 const instances: EditorController[] = [];
 function editor(text: string) {
   const instance = new EditorController(document.body, { text, mode: 'todo', onChange() {} });
   instances.push(instance); return instance;
 }
 afterEach(() => { instances.splice(0).forEach(instance => instance.destroy()); document.body.replaceChildren(); });
+it('带根缩进的完成任务归档后保留展开状态，光标正确跟随未移动正文', () => {
+  const instance = editor('  - [ ] root\n    body\n  - [ ] open\n');
+  instance.focusAt(instance.text.indexOf('open'));
+  instance.toggleTask(instance.model.tasks[0].from);
+  const root = instance.model.tasks.find(item => instance.text.slice(item.contentFrom, item.firstLineTo) === 'root')!;
+  expect(instance.state.field(foldsField).has(root.from)).toBe(false);
+  expect(instance.text.slice(instance.state.selection.main.head, instance.state.selection.main.head + 4)).toBe('open');
+});
 it('完成实际移动完整正文，单次撤销恢复原布局，重做重新归档', () => {
   const source = '# 今天\n\n- [ ] 甲\n  正文\n- [ ] 乙\n';
   const instance = editor(source);
@@ -22,7 +31,7 @@ it('新增待办插到归档前，正文编辑位置和折叠不被其他任务�
   instance.toggleFold(instance.model.tasks[1].from);
   instance.toggleTask(0);
   expect(instance.text[instance.state.selection.main.head]).toBe('乙');
-  expect(instance.getUIState().folded).toHaveLength(1);
+  expect(instance.state.field(foldsField).has(instance.model.tasks.find(item => instance.text.slice(item.contentFrom, item.firstLineTo) === '乙')!.from)).toBe(true);
   instance.insertTask();
   expect(instance.state.selection.main.head).toBeLessThan(instance.text.indexOf('# 归档'));
 });

@@ -19,6 +19,7 @@ export const editorMessages: Record<string, string> = {
   "完成任务": "Complete task",
   "列表项标记，按 Alt 和方向键排序": "List marker; press Alt and arrow keys to reorder",
   "展开折叠内容": "Expand collapsed content",
+  "展开内容": "Expand content",
   "空公式块": "Empty math block",
   "空代码块": "Empty code block",
   "公式尚未闭合": "Unclosed math expression",

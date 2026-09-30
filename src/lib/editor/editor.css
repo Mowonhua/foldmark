@@ -31,9 +31,11 @@
 /* 任务标题的标记列与所属正文共用 1.5 个编辑字号的缩进，源码标记后的空白由投影隐藏。 */
 .fm-task-controls { width: calc(var(--editor-font-size, 16px) * 1.5); }
 .fm-item-controls button { padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; font-family: inherit; color: inherit; cursor: pointer; }
-.fm-fold-button { position: absolute; width: 20px; height: 25px; right: calc(100% + 5px); border: 0; background: transparent; font-size: 17px; opacity: 0; transition: opacity 100ms; }
+.fm-item-controls .fm-fold-button { position: absolute; width: calc(var(--editor-font-size, 16px) * 1.5); min-width: 24px; height: max(28px, calc(var(--editor-font-size, 16px) * 1.75)); right: calc(100% + 2px); border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); opacity: .65; transition: background-color 120ms, color 120ms, opacity 120ms; }
 .fm-fold-button:hover, .fm-item-controls:hover .fm-fold-button, .fm-item-controls:focus-within .fm-fold-button, .fm-item-controls.is-folded .fm-fold-button { opacity: 1; }
 .fm-fold-button.is-empty { visibility: hidden; }
+.fm-item-controls .fm-fold-button:hover, .fm-item-controls .fm-fold-button:focus-visible { background: var(--control-hover-background, var(--hover)); color: var(--text); opacity: 1; }
+.fm-item-controls .fm-fold-button:active { background: var(--selection); color: var(--selection-ink); }
 .fm-task-checkbox { border: 1.5px solid var(--task-checkbox-border,var(--checkbox-border)); border-radius: 4px; width: 17px; height: 17px; background: transparent; font-size: 12px; box-shadow: var(--task-checkbox-shadow,none); }
 .fm-task-checkbox[aria-checked=true] { background: var(--task-checkbox-checked-background,var(--accent)); color: var(--task-checkbox-checked-color,var(--canvas)); border-color: var(--task-checkbox-border,var(--accent)); box-shadow: var(--task-checkbox-checked-shadow,var(--task-checkbox-shadow,none)); }
 .fm-task-checkbox[aria-checked=true]::after { content: var(--task-checkbox-checked-mark,'✓'); font-size: var(--task-checkbox-checked-mark-size,12px); width: var(--task-checkbox-checked-mark-width,auto); height: var(--task-checkbox-checked-mark-height,auto); border-radius: var(--task-checkbox-checked-mark-radius,0px); background: var(--task-checkbox-checked-mark-background,transparent); box-shadow: var(--task-checkbox-checked-mark-shadow,none); flex-shrink: 0; line-height: 1; pointer-events: none; }
@@ -42,8 +44,15 @@
 .fm-list-marker { border: none; background: transparent; min-width: 15px; height: 20px; font-size: 1em; }
 .fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
-.fm-fold-summary { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 18px; margin-left: 5px; padding: 0; border: 0; border-radius: var(--control-radius, 4px); background: transparent; opacity: .7; line-height: 1; vertical-align: middle; }
-.fm-fold-summary:hover, .fm-fold-summary:focus-visible { background: var(--hover); opacity: 1; }
+/* 两种摘要共用层级、标记列和整行热区；只改变控件布局，不改写任务或正文坐标。 */
+.fm-disclosure-row { display: flex; align-items: center; inline-size: calc(100% - var(--fm-disclosure-indent)); margin-inline-start: var(--fm-disclosure-indent); min-block-size: max(28px, calc(var(--editor-font-size, 16px) * 2)); padding: 2px 2px 2px 6px; box-sizing: border-box; border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); font: inherit; font-size: .875em; line-height: 1.45; text-align: start; cursor: pointer; transition: background-color 120ms, color 120ms; }
+.fm-disclosure-marker { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 calc(var(--editor-font-size, 16px) * 1.5); align-self: flex-start; block-size: calc(var(--editor-font-size, 16px) * 1.75); }
+.fm-disclosure-chevron { flex: none; transform-origin: center; transition: transform 140ms; }
+:is(.fm-disclosure-row, .fm-fold-button)[aria-expanded=true] .fm-disclosure-chevron { transform: rotate(90deg); }
+.fm-disclosure-label { min-inline-size: 0; overflow-wrap: anywhere; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fm-disclosure-row:hover, .fm-disclosure-row:focus-visible { background: var(--control-hover-background, var(--hover)); color: var(--text); }
+.fm-disclosure-row:focus-visible, .fm-item-controls .fm-fold-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fm-disclosure-row:active { background: var(--selection); color: var(--selection-ink); }
 .fm-math-block { overflow-x: auto; text-align: center; padding: 10px 0; cursor: text; }
 .fm-math-frame { position: relative; }
 .fm-math-size-line { visibility: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -78,7 +87,7 @@
   }
 }
 .fm-group-prompt { max-width: 90%; white-space: normal; flex-wrap: wrap; }
-@media (prefers-reduced-motion: reduce) { .fm-fold-button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fm-item-controls .fm-fold-button, .fm-disclosure-row, .fm-disclosure-chevron { transition: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }

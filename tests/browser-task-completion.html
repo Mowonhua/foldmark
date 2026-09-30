@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>任务完成与归档验收</title>
+<style>
+  :root { --text:var(--ink); --checkbox-border:var(--muted); }
+  .completion-validation { margin:32px; font-family:system-ui,sans-serif; color:var(--ink); background:var(--canvas); }
+  p { max-width:900px; }
+  #editor { height:320px; max-width:900px; margin-top:20px; border:1px solid var(--line); border-radius:12px; padding:20px; background:var(--surface); }
+  button { padding:6px 12px; }
+  pre { white-space:pre-wrap; font-size:13px; }
+</style>
+<body class="completion-validation">
+<h1>任务完成与归档验收</h1>
+<p>依次完成甲、乙，核对未完成项下方显示“已完成 3 项”，完成子项标题和正文整体收起；点击摘要展开，核对乙排在甲前且复选框可操作。完成待处理及父任务后切换归档，核对整树在旧归档前；恢复任务后核对子项可见。</p>
+<button id="reset">重置示例</button>
+<button id="todo">待办</button>
+<button id="archive">归档</button>
+<button id="source">切换源码</button>
+<button id="undo">撤销</button>
+<button id="redo">重做</button>
+<label>主题 <select id="theme" aria-label="验收主题"></select></label>
+<label>外观 <select id="appearance" aria-label="验收外观"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+<div id="editor"></div>
+<pre id="result" aria-live="polite"></pre>
+<script type="module" src="./browser-task-completion.ts"></script>
+</body>
+</html>

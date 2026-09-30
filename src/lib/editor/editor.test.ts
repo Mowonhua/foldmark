@@ -19,6 +19,72 @@ function editor(text: string, options: Partial<EditorOptions> = {}): EditorContr
 afterEach(() => { for (const instance of editors.splice(0)) instance.destroy(); document.body.replaceChildren(); });
 
 describe('唯一文档编辑事务', () => {
+  it('相同正文的同级子任务完成后整体收起，展开时保留手动折叠状态', () => {
+    const instance = editor('- [ ] root\n  - [x] same\n    body\n  - [ ] open\n  - [ ] same\n    body\n');
+    instance.toggleFold(instance.model.tasks[1].from);
+    instance.toggleTask(instance.model.tasks[3].from);
+    const same = instance.model.tasks.filter(item => instance.text.slice(item.contentFrom, item.firstLineTo) === 'same');
+    expect(instance.state.field(foldsField).has(same[0].from)).toBe(false);
+    expect(instance.state.field(foldsField).has(same[1].from)).toBe(true);
+    const summary = [...instance.view.dom.querySelectorAll<HTMLButtonElement>('button')].find(button => /已完成\s*2\s*项/.test(button.textContent ?? ''))!;
+    expect(summary).toBeDefined();
+    expect(instance.view.dom.textContent).not.toContain('same');
+    summary.click();
+    expect(instance.view.dom.textContent).toContain('same');
+    expect(instance.undo()).toBe(true);
+    expect(instance.state.field(foldsField).has(instance.model.tasks[1].from)).toBe(true);
+  });
+  it('恢复已归档子任务自动展开手动折叠祖先，使子项可见且撤销恢复原折叠', () => {
+    const instance = editor('- [ ] root\n  - [ ] child\n    body\n');
+    instance.toggleTask(0, true);
+    instance.setMode('archive');
+    instance.toggleFold(instance.model.tasks[0].from);
+    instance.toggleTask(instance.model.tasks[1].from);
+    instance.setMode('todo');
+    expect(instance.view.dom.textContent).toContain('child');
+    expect(instance.view.dom.textContent).toContain('body');
+    expect(instance.state.field(foldsField).size).toBe(0);
+    expect(instance.undo()).toBe(true);
+    expect(instance.state.field(foldsField).has(instance.model.tasks[0].from)).toBe(true);
+  });
+  it('子任务完成保留父链并移到未完成同级后，整体摘要隐藏标题正文且整笔撤销', () => {
+    const text = '- [ ] 父\n  - [ ] 甲\n    甲正文\n  - [ ] 乙\n  - [x] 旧完成\n    旧正文\n    - [x] 旧后代\n';
+    const instance = editor(text);
+    const child = instance.model.tasks.find(item => instance.text.slice(item.contentFrom, item.firstLineTo) === '甲')!;
+    instance.toggleTask(child.from);
+    expect(instance.text).toBe('- [ ] 父\n  - [ ] 乙\n  - [x] 甲\n    甲正文\n  - [x] 旧完成\n    旧正文\n    - [x] 旧后代\n');
+    const completed = instance.model.tasks.find(item => instance.text.slice(item.contentFrom, item.firstLineTo) === '甲')!;
+    expect(completed.parentFrom).toBe(0);
+    expect(instance.state.field(foldsField).has(completed.from)).toBe(false);
+    expect(instance.view.dom.textContent).toMatch(/已完成\s*3\s*项/);
+    expect(instance.view.dom.textContent).not.toContain('甲');
+    expect(instance.view.dom.textContent).not.toContain('旧完成');
+    expect(instance.view.dom.textContent).not.toContain('甲正文');
+    const summary = () => [...instance.view.dom.querySelectorAll<HTMLButtonElement>('button')].find(button => /已完成\s*3\s*项/.test(button.textContent ?? ''))!;
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+    summary().click();
+    expect(summary().getAttribute('aria-expanded')).toBe('true');
+    expect(instance.view.dom.textContent).toContain('甲正文');
+    expect(instance.view.dom.textContent).toContain('旧正文');
+    summary().click();
+    expect(instance.view.dom.textContent).not.toContain('甲正文');
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(text);
+    expect(instance.redo()).toBe(true);
+    expect(instance.view.dom.textContent).toMatch(/已完成\s*3\s*项/);
+  });
+  it('多次完成按动作排在完成组顶部，最后完成根任务整树前插归档', () => {
+    const instance = editor('- [ ] 父\n  - [ ] 甲\n    甲正文\n  - [ ] 乙\n    乙正文\n\n# 归档\n\n- [x] 旧归档\n');
+    const toggle = (title: string) => instance.toggleTask(instance.model.tasks.find(item => instance.text.slice(item.contentFrom, item.firstLineTo) === title)!.from);
+    toggle('甲'); toggle('乙');
+    expect(instance.text.indexOf('乙')).toBeLessThan(instance.text.indexOf('甲'));
+    expect(instance.text.indexOf('父')).toBeLessThan(instance.text.indexOf('# 归档'));
+    toggle('父');
+    expect(instance.text.indexOf('# 归档')).toBeLessThan(instance.text.indexOf('父'));
+    expect(instance.text.indexOf('父')).toBeLessThan(instance.text.indexOf('旧归档'));
+    expect(instance.model.tasks.filter(item => item.parentFrom === instance.model.tasks[0].from)).toHaveLength(2);
+    expect(instance.state.field(foldsField).size).toBe(0);
+  });
   it.each(['todo', 'source'] as const)('%s 模式在列表中间续建空任务后一次回车退出', mode => {
     const first = '- [ ] 设计完整的UI/UX';
     const rest = '\n- [ ] 迁移UI\n- [ ] 确认法阵模型';
@@ -205,13 +271,13 @@ describe('唯一文档编辑事务', () => {
     expect(instance.state.field(foldsField).size).toBe(0);
     expect(instance.undo()).toBe(false);
   });
-  it('折叠省略号提供独立展开按钮且不改写正文', () => {
+  it('折叠正文提供摘要展开按钮且不改写正文', () => {
     const source = '- [ ] 标题含普通省略号…\n  正文';
     const instance = editor(source);
     instance.toggleFold(0);
     const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
-    expect(summary.textContent).toBe('');
-    expect(summary.querySelectorAll('svg circle')).toHaveLength(3);
+    expect(summary.textContent).toBe('展开内容');
+    expect(summary.querySelector('svg path')).not.toBeNull();
     expect(summary.getAttribute('aria-label')).toBe('展开折叠内容');
     summary.click();
     expect(instance.state.field(foldsField).size).toBe(0);
@@ -238,7 +304,7 @@ describe('唯一文档编辑事务', () => {
     marker.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
     const restore = [...document.querySelectorAll<HTMLButtonElement>('.fm-item-menu button')].find(button => button.textContent === '恢复任务');
     restore?.click();
-    expect(instance.text).toBe('- [ ] 完成\n\n# 归档\n\n- [x] 子项');
+    expect(instance.text).toBe('- [ ] 完成\n  - [x] 子项');
   });
   it('未闭合公式提供局部提示，代码围栏就地预览后源码仍完整', () => {
     const source = '公式 $x + y\n\n```ts\nconst x = 1;\n```\n\n末尾';

@@ -9,8 +9,8 @@ import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory } fro
 import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
-import { archiveSections, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskToggleChanges, type DocumentModel } from '../markdown';
-import { actionsFacet, documentField, foldHistory, foldsField, modeFacet, resourcesFacet, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
+import { archiveSections, completedChildGroups, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskIsComplete, taskToggleChanges, type DocumentModel } from '../markdown';
+import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, modeFacet, resourcesFacet, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
 import { previewField } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
@@ -84,18 +84,28 @@ export class EditorController {
       // 源码输入不搬移光标；撤销重做必须准确恢复历史，不能再次触发布局整理。
       EditorState.transactionFilter.of(transaction => {
         if (!transaction.docChanged || transaction.isUserEvent('undo') || transaction.isUserEvent('redo') || transaction.state.facet(modeFacet) === 'source') return transaction;
-        const layout = archiveLayoutSpec(transaction.state);
+        const before = transaction.startState.field(documentField);
+        const after = transaction.state.field(documentField);
+        const checked = new Set(after.tasks.filter(item => taskIsComplete(after, item)).map(item => item.from));
+        // 完成顺序由这笔动作提供，普通正文编辑和重新加载不重新排列已完成同级。
+        const completedFrom = before.tasks.filter(item => !taskIsComplete(before, item))
+          .map(item => transaction.changes.mapPos(item.from, 1)).filter(from => checked.has(from));
+        const layout = archiveLayoutSpec(transaction.state, completedFrom);
         return layout ? [transaction, layout] : transaction;
       }),
       history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       resourcesFacet.of(this.options),
-      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures, foldMotion,
+      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
+      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures, foldMotion,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
-      EditorView.updateListener.of(update => { if (update.docChanged) this.options.onChange(update.state.doc.toString()); }),
+      EditorView.updateListener.of(update => {
+        if (update.docChanged) this.options.onChange(update.state.doc.toString());
+        else if (update.state.field(expandedCompletedGroupsField) !== update.startState.field(expandedCompletedGroupsField)
+          || update.state.field(foldsField) !== update.startState.field(foldsField)) this.options.onUIChange?.();
+      }),
     ] });
   }
 
@@ -185,7 +195,11 @@ export class EditorController {
     const folded = [...this.state.field(foldsField)].flatMap(from => { const item = model.items.find(item => item.from === from); const key = item ? foldKey(model, item) : ''; return key ? [key] : []; });
     const mode = this.state.facet(modeFacet);
     const sourceReturn = this.state.field(sourceReturnField);
+    const expandedCompletedGroups = [...this.state.field(expandedCompletedGroupsField)].flatMap(from => {
+      const item = model.items.find(item => item.from === from); const key = item ? foldKey(model, item) : ''; return key ? [key] : [];
+    });
     return { mode, cursor: this.state.selection.main.head, scrollTop: this.view.scrollDOM.scrollTop, folded,
+      ...(expandedCompletedGroups.length ? { expandedCompletedGroups } : {}),
       ...(mode === 'source' ? { sourceView: this.state.facet(sourceViewFacet), ...(sourceReturn ? { sourceReturn } : {}) } : {}),
     };
   }
@@ -194,8 +208,10 @@ export class EditorController {
     const model = this.state.field(documentField);
     const keys = new Set(ui.folded.filter(Boolean));
     const folded = keys.size ? model.items.filter(item => keys.has(foldKey(model, item))).map(item => item.from) : [];
+    const groupKeys = new Set(ui.expandedCompletedGroups ?? []);
+    const expandedGroups = model.items.filter(item => groupKeys.has(foldKey(model, item))).map(item => item.from);
     const sourceReturn = ui.sourceReturn ? { ...ui.sourceReturn, cursor: Math.min(ui.sourceReturn.cursor, this.state.doc.length), anchor: Math.min(ui.sourceReturn.anchor, this.state.doc.length) } : null;
-    this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
+    this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setExpandedCompletedGroups.of(expandedGroups), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
     this.view.scrollDOM.scrollTop = ui.scrollTop;
   }
   focusAt(pos: number): void {
@@ -203,9 +219,11 @@ export class EditorController {
     const anchor = Math.max(0, Math.min(pos, this.state.doc.length));
     const model = this.state.field(documentField);
     const folds = [...this.state.field(foldsField)].filter(from => { const item = model.items.find(item => item.from === from); return !item || anchor <= item.firstLineTo || anchor > item.to; });
+    const expandedGroups = new Set(this.state.field(expandedCompletedGroupsField));
+    for (const group of completedChildGroups(model)) if (anchor >= group.from && anchor < group.to) expandedGroups.add(group.parentFrom!);
     const window = this.state.field(previewWindowField);
     const viewportEffect = anchor < window.from || anchor > window.to ? [setPreviewWindow.of({ from: Math.max(0, anchor - 3000), to: Math.min(this.state.doc.length, anchor + 3000) })] : [];
-    this.view.dispatch({ selection: { anchor }, effects: [setFolds.of(folds), ...viewportEffect, EditorView.scrollIntoView(anchor, { y: 'center' })], annotations: Transaction.addToHistory.of(false) });
+    this.view.dispatch({ selection: { anchor }, effects: [setFolds.of(folds), setExpandedCompletedGroups.of([...expandedGroups]), ...viewportEffect, EditorView.scrollIntoView(anchor, { y: 'center' })], annotations: Transaction.addToHistory.of(false) });
     this.view.focus();
   }
   insertTask(): void {
@@ -273,7 +291,15 @@ export class EditorController {
       // 只在被隐藏范围包含现有选区时迁移光标；鼠标完成其他项不得抢走编辑位置。
       const selection = !item.task.checked && anchorInside ? { anchor: next?.contentFrom ?? model.text.length } : undefined;
       const completing = group || !item.task.checked;
-      this.view.dispatch({ changes, selection, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
+      const expanded = new Set<number>();
+      if (!completing) {
+        // 恢复项及全部祖先必须展开，防止已归档树的自动折叠继续遮住重新开放的子任务。
+        const byFrom = new Map(model.items.map(entry => [entry.from, entry]));
+        for (let ancestor: number | null = item.from; ancestor !== null; ancestor = byFrom.get(ancestor)!.parentFrom) expanded.add(ancestor);
+      }
+      const mapping = this.state.changes(changes);
+      const effects = expanded.size ? setFolds.of([...this.state.field(foldsField)].filter(from => !expanded.has(from)).map(from => mapping.mapPos(from, 1))) : undefined;
+      this.view.dispatch({ changes, selection, effects, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
       this.closeGroupPrompt();
       this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? translate('整组已完成，可撤销') : translate('任务已完成，可撤销') : translate('任务已恢复，可撤销')));
     } catch (error) {
@@ -332,9 +358,10 @@ export class EditorController {
       const map = (position: number): number => position >= item.moveFrom && position < item.moveTo ? moveItemPosition(model, from, boundary, position) : changes.mapPos(position, 1);
       const selection = EditorSelection.create(this.state.selection.ranges.map(range => EditorSelection.range(map(range.anchor), map(range.head))), this.state.selection.mainIndex);
       const folds = [...this.state.field(foldsField)].map(map);
+      const expandedGroups = [...this.state.field(expandedCompletedGroupsField)].map(map);
       const coords = this.view.coordsAtPos(item.from);
       const scroll = this.view.scrollDOM.scrollTop;
-      this.view.dispatch({ changes, selection, effects: setFolds.of(folds), annotations: isolateHistory.of('full'), userEvent: 'move' });
+      this.view.dispatch({ changes, selection, effects: [setFolds.of(folds), setExpandedCompletedGroups.of(expandedGroups)], annotations: isolateHistory.of('full'), userEvent: 'move' });
       const moved = this.view.coordsAtPos(map(item.from));
       if (coords && moved) this.view.scrollDOM.scrollTop = scroll + moved.top - coords.top;
       this.options.onStatus?.(translate('条目已移动，可撤销'));
@@ -352,6 +379,24 @@ export class EditorController {
     const change = () => this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
     const motion = this.view.plugin(foldMotion);
     if (motion) motion.run(change); else change();
+  }
+  /**
+   * 函数职责：切换父项下已完成子任务组的展开状态。
+   * 输入说明：parentFrom 属于当前模型，源码模式使用完整可见源文，不响应组折叠。
+   * 输出说明：只影响界面，收起时将位于组内的选区移到可见边界，不写文本历史。
+   * 实现思路：使用独立完成组字段，复用共享范围投影和条目内容身份。
+   */
+  toggleCompletedGroup(parentFrom: number): void {
+    if (this.state.facet(modeFacet) === 'source') return;
+    const groups = completedChildGroups(this.model).filter(group => group.parentFrom === parentFrom);
+    if (!groups.length) return;
+    const expanded = new Set(this.state.field(expandedCompletedGroupsField));
+    const collapsing = expanded.has(parentFrom);
+    if (collapsing) expanded.delete(parentFrom); else expanded.add(parentFrom);
+    const selected = this.state.selection.main;
+    const hidden = collapsing ? groups.find(group => selected.to > group.from && selected.from < group.to) : undefined;
+    const parent = this.model.items.find(item => item.from === parentFrom)!;
+    this.view.dispatch({ effects: setExpandedCompletedGroups.of([...expanded]), selection: hidden ? { anchor: parent.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
   }
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };

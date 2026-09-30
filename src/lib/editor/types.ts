@@ -13,6 +13,8 @@ export interface EditorOptions {
   text: string;
   mode: ViewMode;
   onChange: (text: string) => void;
+  /** 纯折叠/展开状态变化时通知应用保存界面配置，不触发正文保存或修改文本历史。 */
+  onUIChange?: () => void;
   onStatus?: (message: string) => void;
   /** 相对图像或本地路径由文件层按当前清单目录解析；网络 URL 保持原样。 */
   resolveResource?: (url: string) => string;
@@ -28,6 +30,8 @@ export interface EditorOptions {
 export interface EditorActions {
   toggleTask: (from: number, group?: boolean) => void;
   toggleFold: (from: number) => void;
+  /** 切换父项下完成子任务组的展开状态；不改变 Markdown 或任务归档归属。 */
+  toggleCompletedGroup: (parentFrom: number) => void;
   moveItem: (from: number, direction: 'up' | 'down') => void;
   moveTo: (from: number, boundary: number | null) => void;
   focusAt: (from: number) => void;

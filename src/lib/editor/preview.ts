@@ -8,9 +8,9 @@ import { StateField, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import katex from 'katex';
-import { getHiddenRanges, type DocumentModel, type ListItem } from '../markdown';
+import { completedChildGroups, getHiddenRanges, type DocumentModel, type ListItem } from '../markdown';
 import { hiddenContentRanges } from './visibility';
-import { actionsFacet, documentField, foldsField, modeFacet, resourcesFacet } from './state';
+import { actionsFacet, documentField, expandedCompletedGroupsField, foldsField, modeFacet, resourcesFacet } from './state';
 import { previewWindowField } from './viewport';
 import type { EditorOptions } from './types';
 import { CodeLanguageWidget } from './code-language';
@@ -29,18 +29,55 @@ function inlineContext(view: EditorView): InlineContext {
   return { model: view.state.field(documentField), resources: view.state.facet(resourcesFacet), focusAt: from => view.state.facet(actionsFacet).focusAt(from) };
 }
 
+/** 所有展开控件使用同一描边箭头；展开方向由 aria-expanded 对应的通用样式控制。 */
+function disclosureChevron(): SVGSVGElement {
+  const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  arrow.setAttribute('class', 'fm-disclosure-chevron');
+  arrow.setAttribute('width', '16'); arrow.setAttribute('height', '16'); arrow.setAttribute('viewBox', '0 0 20 20');
+  arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', 'currentColor'); arrow.setAttribute('stroke-width', '1.5');
+  arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round'); arrow.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'm7 4 6 6-6 6'); arrow.append(path);
+  return arrow;
+}
+
+/** 创建共享摘要行；事件读取 DOM 中的当前坐标，重用按钮不会保留旧任务位置。 */
+function disclosureRow(view: EditorView, className: string, action: 'toggleFold' | 'toggleCompletedGroup'): HTMLButtonElement {
+  const element = document.createElement('button');
+  element.type = 'button'; element.className = `fm-disclosure-row ${className}`;
+  const marker = document.createElement('span'); marker.className = 'fm-disclosure-marker'; marker.append(disclosureChevron());
+  const label = document.createElement('span'); label.className = 'fm-disclosure-label';
+  element.append(marker, label);
+  element.addEventListener('click', () => {
+    const from = Number(element.dataset.disclosureFrom);
+    view.state.facet(actionsFacet)[action](from);
+    // 正文展开后摘要行会消失，焦点回到仍可操作的首行箭头，支持接着用键盘收起。
+    if (action === 'toggleFold' && !element.isConnected) view.dom.querySelector<HTMLButtonElement>(`.fm-fold-button[data-fold="${from}"]`)?.focus();
+  });
+  return element;
+}
+
+/** 更新摘要的文字、层级与可访问状态，不替换按钮，保留连续键盘操作的焦点。 */
+function updateDisclosureRow(element: HTMLElement, from: number, depth: number, label: string, expanded: boolean, ariaLabel = label): void {
+  element.dataset.disclosureFrom = String(from);
+  element.style.setProperty('--fm-disclosure-indent', `calc(var(--editor-font-size, 16px) * ${depth * 1.5})`);
+  element.querySelector('.fm-disclosure-label')!.textContent = label;
+  element.setAttribute('aria-label', ariaLabel); element.setAttribute('aria-expanded', String(expanded));
+}
+
 class ItemWidget extends WidgetType {
   private readonly uiLocale = get(locale);
   constructor(readonly item: ListItem, readonly folded: boolean, readonly label: string) { super(); }
-  eq(other: ItemWidget): boolean { return this.uiLocale === other.uiLocale && this.item.from === other.item.from && this.item.to === other.item.to && this.item.task?.checked === other.item.task?.checked && this.folded === other.folded && this.label === other.label; }
+  eq(other: ItemWidget): boolean { return this.uiLocale === other.uiLocale && this.item.from === other.item.from && this.item.to === other.item.to && this.item.firstLineTo === other.item.firstLineTo && this.item.task?.checked === other.item.task?.checked && this.folded === other.folded && this.label === other.label; }
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('span');
+    wrapper.dataset.itemFrom = String(this.item.from); wrapper.dataset.itemTo = String(this.item.to);
     wrapper.className = `fm-item-controls${this.item.task ? ' fm-task-controls' : ''}${this.folded ? ' is-folded' : ''}`;
     const actions = view.state.facet(actionsFacet);
     const fold = document.createElement('button');
     fold.type = 'button';
     fold.className = 'fm-fold-button';
-    fold.innerHTML = `<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="${this.folded ? 'm7 4 6 6-6 6Z' : 'm4 7 6 6 6-6Z'}"/></svg>`;
+    fold.append(disclosureChevron());
     fold.setAttribute('aria-label', this.folded ? translate('展开条目') : translate('折叠条目'));
     fold.setAttribute('aria-expanded', String(!this.folded));
     fold.dataset.fold = String(this.item.from);
@@ -69,28 +106,70 @@ class ItemWidget extends WidgetType {
     wrapper.append(fold, marker);
     return wrapper;
   }
+  /** 仅身份和范围一致时复用标记 DOM；正文收起不会让左侧箭头失去键盘焦点。 */
+  updateDOM(wrapper: HTMLElement): boolean {
+    if (wrapper.dataset.itemFrom !== String(this.item.from) || wrapper.dataset.itemTo !== String(this.item.to)) return false;
+    const marker = wrapper.querySelector<HTMLButtonElement>('[data-list-marker]')!;
+    if ((marker.getAttribute('role') === 'checkbox') !== !!this.item.task) return false;
+    wrapper.classList.toggle('is-folded', this.folded);
+    const fold = wrapper.querySelector<HTMLButtonElement>('.fm-fold-button')!;
+    fold.setAttribute('aria-label', this.folded ? translate('展开条目') : translate('折叠条目'));
+    fold.setAttribute('aria-expanded', String(!this.folded));
+    const empty = this.item.to <= this.item.firstLineTo;
+    fold.disabled = empty; fold.classList.toggle('is-empty', empty);
+    if (empty) fold.tabIndex = -1; else fold.removeAttribute('tabindex');
+    if (this.item.task) {
+      marker.setAttribute('aria-checked', String(this.item.task.checked));
+      marker.setAttribute('aria-label', this.item.task.checked ? translate('恢复任务') : translate('完成任务'));
+    } else {
+      marker.textContent = this.label;
+      marker.setAttribute('aria-label', translate('列表项标记，按 Alt 和方向键排序'));
+    }
+    return true;
+  }
   ignoreEvent(): boolean { return true; }
 }
 
 class NoteWidget extends WidgetType {
   private readonly uiLocale = get(locale);
-  constructor(readonly label: string, readonly from: number | null = null) { super(); }
-  eq(other: NoteWidget): boolean { return this.uiLocale === other.uiLocale && this.label === other.label && this.from === other.from; }
-  toDOM(view: EditorView): HTMLElement {
-    const element = document.createElement(this.from === null ? 'span' : 'button');
+  constructor(readonly label: string) { super(); }
+  eq(other: NoteWidget): boolean { return this.uiLocale === other.uiLocale && this.label === other.label; }
+  toDOM(): HTMLElement {
+    const element = document.createElement('span');
     element.className = 'fm-hidden-note';
     element.textContent = this.label;
-    if (this.from !== null) {
-      element.classList.add('fm-fold-summary');
-      // 使用居中图标而非正文的基线省略号，保持紧凑并明确这是可展开控件。
-      element.innerHTML = '<svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true"><circle cx="3" cy="6" r="1"/><circle cx="7" cy="6" r="1"/><circle cx="11" cy="6" r="1"/></svg>';
-      element.setAttribute('type', 'button');
-      element.setAttribute('aria-label', translate('展开折叠内容'));
-      element.setAttribute('aria-expanded', 'false');
-      element.title = translate('展开折叠内容');
-      element.addEventListener('click', () => view.state.facet(actionsFacet).toggleFold(this.from!));
-    }
     return element;
+  }
+  ignoreEvent(): boolean { return true; }
+}
+
+/** 任务正文收起后使用共享摘要行展示展开入口，标题仍留在原位置并保持可编辑。 */
+class FoldedContentWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
+  constructor(readonly item: ListItem) { super(); }
+  eq(other: FoldedContentWidget): boolean { return this.uiLocale === other.uiLocale && this.item.from === other.item.from && this.item.depth === other.item.depth; }
+  toDOM(view: EditorView): HTMLElement {
+    const element = disclosureRow(view, 'fm-fold-summary', 'toggleFold'); this.updateDOM(element); return element;
+  }
+  updateDOM(element: HTMLElement): boolean {
+    updateDisclosureRow(element, this.item.from, this.item.depth + 1, translate('展开内容'), false, translate('展开折叠内容'));
+    return true;
+  }
+  ignoreEvent(): boolean { return true; }
+}
+
+/** 完成摘要负责整组展开；展开后仍保留同一收起入口，与任务正文收起共享视觉和焦点规则。 */
+class CompletedGroupWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
+  constructor(readonly parent: ListItem, readonly count: number, readonly expanded: boolean) { super(); }
+  eq(other: CompletedGroupWidget): boolean { return this.uiLocale === other.uiLocale && this.parent.from === other.parent.from && this.parent.depth === other.parent.depth && this.count === other.count && this.expanded === other.expanded; }
+  toDOM(view: EditorView): HTMLElement {
+    const element = disclosureRow(view, 'fm-completed-summary', 'toggleCompletedGroup'); this.updateDOM(element); return element;
+  }
+  /** 复用原按钮保留键盘焦点；展开后的 Space / Enter 仍可在同一控件上继续收起。 */
+  updateDOM(element: HTMLElement): boolean {
+    updateDisclosureRow(element, this.parent.from, this.parent.depth + 1, translate('已完成 {count} 项', { count: this.count }), this.expanded);
+    return true;
   }
   ignoreEvent(): boolean { return true; }
 }
@@ -418,8 +497,9 @@ interface PreviewStructure {
   mode: string;
   language: string;
   folds: ReadonlySet<number>;
+  expandedGroups: ReadonlySet<number>;
   window: { from: number; to: number };
-  hidden: { from: number; to: number; widget: NoteWidget | undefined; block: boolean }[];
+  hidden: { from: number; to: number; widget: WidgetType | undefined; block: boolean }[];
   decorations: DecorationSet;
 }
 /** 选区变化复用结构；语言属于控件身份，切换后必须重建装饰及对应 DOM 文案。 */
@@ -436,16 +516,19 @@ function buildPreview(state: EditorState): DecorationSet {
   if (mode === 'source') return Decoration.set(hiddenContentRanges(state).map(range => Decoration.replace({ block: true, inclusiveEnd: false }).range(range.from, range.to)), true);
   const model = state.field(documentField);
   const folds = state.field(foldsField);
+  const expandedGroups = state.field(expandedCompletedGroupsField);
   const ranges: Range<Decoration>[] = [];
   const window = state.field(previewWindowField);
   let cached = structureCache.get(model);
-  if (cached?.language !== get(locale) || cached.mode !== mode || cached.folds !== folds || cached.window !== window) cached = undefined;
+  if (cached?.language !== get(locale) || cached.mode !== mode || cached.folds !== folds || cached.expandedGroups !== expandedGroups || cached.window !== window) cached = undefined;
   const merged: PreviewStructure['hidden'] = cached?.hidden ?? [];
   if (!cached) {
     for (const range of hiddenContentRanges(state)) {
-      const widget = range.kind === 'fold' ? new NoteWidget('…',range.itemFrom)
+      const parent = range.itemFrom === null ? undefined : model.items.find(item => item.from === range.itemFrom);
+      const widget = range.kind === 'completed-group' && parent ? new CompletedGroupWidget(parent, range.count, false)
+        : range.kind === 'fold' && parent ? new FoldedContentWidget(parent)
         : range.itemFrom !== null && range.count ? new NoteWidget(translate('已完成 {count} 项', { count: range.count })) : undefined;
-      merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
+      merged.push({ from: range.from, to: range.to, widget, block: true });
     }
     // 过滤范围右端是下一条可见行的起点；块替换不能吞掉该行的缩进、标题等行装饰。
     for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block, inclusiveEnd: false }).range(range.from, range.to));
@@ -468,6 +551,11 @@ function buildPreview(state: EditorState): DecorationSet {
     lines.add(`${start}:${className}`); ranges.push(Decoration.line({ class: className }).range(start));
   };
   if (!cached) {
+    for (const group of completedChildGroups(model)) {
+      if (!expandedGroups.has(group.parentFrom!) || overlapsHidden(group.from, group.from + 1)) continue;
+      const parent = model.items.find(item => item.from === group.parentFrom)!;
+      ranges.push(Decoration.widget({ widget: new CompletedGroupWidget(parent, group.count, true), block: true, side: -1 }).range(group.from));
+    }
     const orderedCounters = new Map<number, number>();
     for (const item of model.items) {
       if (item.from > window.to) break;
@@ -478,7 +566,7 @@ function buildPreview(state: EditorState): DecorationSet {
       ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.contentFrom : item.markerTo));
       lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}`);
     }
-    cached = { mode, language: get(locale), folds, window, hidden: merged, decorations: Decoration.set(ranges, true) };
+    cached = { mode, language: get(locale), folds, expandedGroups, window, hidden: merged, decorations: Decoration.set(ranges, true) };
     structureCache.set(model, cached);
     ranges.length = 0;
   }

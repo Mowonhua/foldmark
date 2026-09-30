@@ -54,6 +54,7 @@ export function validateAppConfig(value: unknown): AppConfig | null {
       if (typeof view.cursor !== 'number' || !Number.isSafeInteger(view.cursor) || view.cursor < 0) return fail();
       if (typeof view.scrollTop !== 'number' || !Number.isFinite(view.scrollTop) || view.scrollTop < 0) return fail();
       if (!Array.isArray(view.folded) || view.folded.some(key => typeof key !== 'string')) return fail();
+      if (view.expandedCompletedGroups !== undefined && (!Array.isArray(view.expandedCompletedGroups) || view.expandedCompletedGroups.some(key => typeof key !== 'string'))) return fail();
       if (view.sourceView !== undefined && view.sourceView !== 'todo' && view.sourceView !== 'archive') return fail();
       if (view.sourceReturn !== undefined) {
         if (!record(view.sourceReturn)) return fail();

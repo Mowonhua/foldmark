@@ -16,9 +16,10 @@ it.each(['e=mc', 'e=mc\n  +1'])('公式渲染保留正文行布局且不产生�
   expect([...instance.view.contentDOM.querySelectorAll('.cm-line')].filter(line => !line.textContent)).toHaveLength(0);
   expect(instance.text).toBe(text);
 });
-it('归档保留父任务上下文时，已完成子任务仍有独立的行缩进', () => {
+it('待办保留完整父链时，已完成子任务仍有独立的行缩进', () => {
   const text = '# 今天\n\n- [ ] 父任务\n\n  父任务正文\n\n  - [ ] 未完成子任务\n  - [x] 已完成子任务\n';
-  instance = new EditorController(document.body, { text, mode: 'archive', onChange: () => {} });
+  instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });
+  instance.view.dom.querySelector<HTMLButtonElement>('.fm-completed-summary')!.click();
   const lines = [...instance.view.dom.querySelectorAll<HTMLElement>('.cm-line')];
   const parent = lines.find(line => line.textContent?.includes('父任务'))!;
   const child = lines.find(line => line.textContent?.includes('已完成子任务'))!;

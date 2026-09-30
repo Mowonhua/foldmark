@@ -341,7 +341,14 @@
     if (switching || !active || !editor) return;
     active.state = editor.state; active.ui = editor.getUIState();
     active.saver.changed(); version += 1;
+    // 完成事务同时改变排列与自动折叠，界面状态须随正文保存，重新打开才能保留收起结果。
+    scheduleConfig();
     if (searchOpen || screen === 'all') scheduleIndex();
+  }
+  /** 摘要展开只保存阅读配置；独立安排写入，不能依赖上一次正文保存尚未结束的定时器。 */
+  function editorUIChanged(): void {
+    if (switching || !active || !editor) return;
+    captureUI(); scheduleConfig();
   }
   function freshUI(project: Project): ProjectView {
     return config.projectViews[project.id] ?? { mode: 'todo', cursor: 0, scrollTop: 0, folded: [] };
@@ -368,7 +375,7 @@
         resourceDocumentPath = project.path;
         switching = true;
         if (!editor) editor = new EditorController(editorHost, {
-          text: disk.text, mode: ui.mode, onChange: documentChanged,
+          text: disk.text, mode: ui.mode, onChange: documentChanged, onUIChange: editorUIChanged,
           onStatus: message => notify(message, message.includes($t("可撤销"))),
           resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
           openLink: openDocumentLink,
