@@ -1,11 +1,11 @@
 {
-  "version": "0.2.0",
-  "notes": "# Foldmark v0.2.0\r\n\r\n相较于 v0.1.0：\r\n\r\n- 新增项目归档与恢复，可从侧栏隐藏暂时不用的项目，保留原 Markdown 文件。\r\n- 支持简体中文、英文和跟随系统语言，自动保存语言偏好；切换时保留正文、选区、折叠和撤销历史。\r\n- 支持通过 Ctrl+N 或 Command+N 在当前光标所在任务或段落后新增任务，保留嵌套层级。\r\n- 底栏新增当前页字数和文件类型，按待办、归档或源码视图统计。\r\n- 修复段落右侧空白的光标定位，以及底部留白、新建空行的跨段拖选。\r\n- 统一弹窗点击外部关闭行为、SVG 按钮图标及对齐，完善下拉菜单的主题适配和键盘操作。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.2.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-09-26T03:37:15.595Z",
+  "version": "0.3.0",
+  "notes": "# Foldmark v0.3.0\r\n\r\n相较于 v0.2.0：\r\n\r\n- 新增正文右键菜单，支持文本格式、段落与列表转换、插入链接及代码块等 Markdown 编辑操作，并支持键盘导航。\r\n- 完成子任务后保留在原父项下，统一收起为“已完成 xx 项”；整组完成后归档，保留二级及以下标题层级，恢复时回到对应章节。\r\n- 统一任务折叠摘要与已完成子任务组的交互，保存完成组展开状态，搜索定位时自动展开目标。\r\n- 新增玻璃主题窗口失焦时保持透明的设置，精简外观设置页，并统一正文与任务右键菜单的主题样式。\r\n- 修复重复启动行为，同一程序路径复用已有实例，不同程序路径可独立运行。\r\n- 修复“全部待办”中项目名与标题重复显示。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.3.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n\r\n首次打开已有文件时会整理完成子项与归档布局并自动保存；历史归档中已丢失的原标题无法补回。\r\n",
+  "pub_date": "2026-09-30T10:20:28.098Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTBtM3FNNWNPNjhWcTlSN0ZGbE54Rm54QUJ3YTczRHpBdW1tYzRwYXNjR1RLb0JHK1R4Z0src2lSMDZnNEt4NlpzK3p3aUZqUXFPMzRyZ1c0OWlhUFF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMzkzODM1CWZpbGU6Rm9sZG1hcmtfMC4yLjBfeDY0LXNldHVwLmV4ZQpHN0VhV2J0TVZidHVvaUh3YWdCYk02R3JoMXZRRUVVWUZkcE5pTWFNelMwYmgwYUdHa0VNVmNnMHBMcDhHblVJT1Jib01NOWhrODRwWnZrd0UrUG9CZz09Cg==",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.2.0/Foldmark_0.2.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTdhZjVBS1ZubXljdGx1Z3UxZi94Qi9idGplOTJFbEQ2dzNPdjNPVHl5eVYxMS9GVzA3TjlzRlVJWDFpRGJVV0d1ZmRJZCtYM2VPZXNCWnRjcTd4VEEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwNzYzNjI3CWZpbGU6Rm9sZG1hcmtfMC4zLjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4wCmZTTzJoSDhYamlweHIwOEFRelV5VFI3ZFNJRXdZTVhPTU5GN2c0b1lTLzdQUFNNOFRLbUtXODRBWXVPeTBtYldpdytpZVk2K3VDVFV4aldZYlpmR0J3PT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.3.0/Foldmark_0.3.0_x64-setup.exe"
     }
   }
 }
