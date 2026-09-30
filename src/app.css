@@ -118,6 +118,28 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .dropdown button:focus-visible{outline-offset:-2px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
+/* 正文菜单沿用主题浮层参数，仅补充鼠标锚定的定位与菜单交互规则。 */
+.fm-context-menu.dropdown{position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;color:var(--ink)}
+.fm-context-menu::backdrop{background:transparent;pointer-events:none}
+.fm-context-menu button[aria-disabled=true]{opacity:.4;cursor:default}
+.fm-context-menu button[aria-disabled=true]:hover{background:transparent}
+.fm-context-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.fm-context-menu.dropdown{width:248px}
+.fm-context-menu .fm-menu-grid{display:grid;gap:4px;padding:2px}
+.fm-context-menu .fm-format-row{grid-template-columns:repeat(4,minmax(0,1fr))}
+.fm-context-menu .fm-clipboard-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fm-context-menu .fm-history-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fm-context-menu .fm-menu-grid button{justify-content:center;padding:8px 4px;min-height:34px}
+.fm-context-menu .fm-format-row button{font-size:16px}
+.fm-context-menu .fm-format-bold{font-weight:700}
+.fm-context-menu .fm-format-italic{font-style:italic}
+.fm-context-menu .fm-format-strike{text-decoration:line-through}
+.fm-context-menu .fm-format-inlineCode{font-family:monospace;font-size:13px!important}
+.fm-context-menu button[aria-checked=true]{background:var(--nav-active-background,var(--accent-soft));color:var(--accent)}
+.fm-markdown-submenu.dropdown{width:214px}
+.fm-markdown-submenu .fm-heading-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fm-markdown-submenu .fm-heading-grid button{font-weight:600}
+.fm-menu-check{width:16px;text-align:center;color:var(--accent)}
 .search-panel{position:absolute;z-index:15;top:56px;right:25px;width:min(540px,calc(100% - 50px));background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,8px)) var(--floating-radius-top-right,var(--floating-radius,8px)) var(--floating-radius-bottom-right,var(--floating-radius,8px)) var(--floating-radius-bottom-left,var(--floating-radius,8px));padding:14px;box-shadow:var(--floating-shadow,0 8px 28px var(--shadow-color))}
 .search-row{display:flex;align-items:center;gap:8px}
 .search-row input{flex:1;font-size:13px}

@@ -6,6 +6,17 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 let instance: EditorController;
 afterEach(() => { instance?.destroy(); document.body.replaceChildren(); });
+it('分隔线预览为语义分隔符，编辑和源码模式保留原始标记，代码中的横线不渲染', () => {
+  const text = '- root\n\n  ---\n\nnext\n\n```\n---\n```';
+  instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });
+  instance.focusAt(text.indexOf('next'));
+  expect(instance.view.dom.querySelectorAll('.fm-horizontal-rule[role="separator"]')).toHaveLength(1);
+  instance.focusAt(text.indexOf('---'));
+  expect(instance.view.dom.querySelector('.fm-horizontal-rule')).toBeNull();
+  expect(instance.view.dom.textContent).toContain('---');
+  instance.setMode('source'); expect(instance.text).toBe(text);
+  expect(instance.view.dom.querySelector('.fm-horizontal-rule')).toBeNull();
+});
 it.each(['e=mc', 'e=mc\n  +1'])('公式渲染保留正文行布局且不产生额外空文本行：%s', body => {
   const text = '- [ ] A\n  $$\n  ' + body + '\n  $$\n\n  below';
   instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });

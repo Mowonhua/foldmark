@@ -9,6 +9,7 @@ import { getHiddenRanges } from '../markdown';
 import { actionsFacet, documentField, modeFacet } from './state';
 import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
 import { hiddenContentRanges } from './visibility';
+import { fencedBlocks } from './fenced-blocks';
 
 interface DragSession {
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
@@ -47,8 +48,29 @@ class MarkerGestures {
     this.paragraphAnchor = null;
     return pending && pending.x === event.clientX && pending.y === event.clientY ? pending.position : null;
   }
+  /**
+   * 右键先读取空段落的语义坐标，再处理底部留白，不能把几何近邻的围栏或隐藏正文当作编辑目标。
+   * 选区内右键保持完整选区；只在可编辑待办预览复用左键的可见出口创建规则。
+   * 返回值来自当前状态，若出口创建改写正文，调用方必须使用返回的新坐标。
+   */
+  contextPosition(event: MouseEvent, geometricPosition: number | null): number | null {
+    const { state } = this.view;
+    if (state.readOnly || this.view.composing || state.facet(modeFacet) !== 'todo' || !(event.target instanceof Element)) return geometricPosition;
+    const line = event.target.closest('.cm-line');
+    const from = line?.getAttribute('data-empty-paragraph-from');
+    let position = geometricPosition;
+    if (from !== null && from !== undefined && line && this.view.contentDOM.contains(line)) {
+      const layout = paragraphLayout(state), paragraph = layout.paragraphs[paragraphAt(layout, Number(from))];
+      if (paragraph?.kind === 'empty') position = paragraph.contentFrom;
+    }
+    const selectionPosition = position;
+    if (selectionPosition !== null && state.selection.ranges.some(range => !range.empty && selectionPosition >= range.from && selectionPosition <= range.to)) return selectionPosition;
+    if (from !== null && from !== undefined && position !== geometricPosition) return position;
+    if (this.focusBelowContent(event, line, false)) return this.view.state.selection.main.head;
+    return position;
+  }
   /** 创建事务及焦点事务完成后才记录锚点，避免被同步 update 清除或重复映射。 */
-  private prepareParagraphSelection(event: PointerEvent, position: number): void {
+  private prepareParagraphSelection(event: MouseEvent, position: number): void {
     this.view.state.facet(actionsFacet).focusAt(position);
     this.paragraphAnchor = { position: this.view.state.selection.main.head, x: event.clientX, y: event.clientY };
   }
@@ -136,7 +158,7 @@ class MarkerGestures {
    * 视图底部可能是归档前的分隔行，而不是文件末尾；按可见段落确定编辑出口。
    * 只接管正文宽度内、最后可见段落下方的容器或空白行，重复点击复用已有空段落。
    */
-  private focusBelowContent(event: PointerEvent, line: Element | null): boolean {
+  private focusBelowContent(event: MouseEvent, line: Element | null, prepareDrag = true): boolean {
     const { state } = this.view, target = event.target as Element;
     if (line ? line.textContent?.trim() || line.querySelector('[data-list-marker]')
       : target !== this.view.contentDOM && target !== this.view.scrollDOM) return false;
@@ -145,10 +167,11 @@ class MarkerGestures {
     while (index >= 0 && hidden.some(range => layout.paragraphs[index].from >= range.from
       && (layout.paragraphs[index].from < range.to || range.to === state.doc.length && layout.paragraphs[index].from === range.to))) index--;
     const paragraph = layout.paragraphs[index];
-    // 字面块、软续行及仍有隐藏后代的条目继续使用各自的编辑契约。
-    if (!paragraph || paragraph.kind === 'literal' || paragraph.item && paragraph.item.to > paragraph.to
+    // 闭合围栏可在块外新建正文；未闭合字面块、软续行及隐藏后代仍由各自编辑契约保护。
+    const closedBlock = paragraph?.kind === 'literal' ? fencedBlocks(state).find(block => block.from === paragraph.from && block.to === paragraph.to && block.closed) : undefined;
+    if (!paragraph || paragraph.kind === 'literal' && !closedBlock || paragraph.item && paragraph.item.to > paragraph.to
       || layout.lineBreaks.some(br => br.to === paragraph.to)) return false;
-    const bounds = this.view.coordsAtPos(paragraph.to);
+    const bounds = this.view.coordsAtPos(paragraph.to) ?? (closedBlock ? this.view.coordsAtPos(closedBlock.bodyTo) : null);
     const content = this.view.contentDOM.getBoundingClientRect();
     if (!bounds || event.clientY < bounds.bottom || event.clientX < content.left || event.clientX > content.right) return false;
     const raw = state.doc.sliceString(paragraph.from, paragraph.to);
@@ -165,7 +188,9 @@ class MarkerGestures {
     if (touchesHidden || hiddenContentRanges(planned.state).some(range => planned.newSelection.main.head >= range.from && planned.newSelection.main.head < range.to)) return false;
     this.cancel();
     if (planned.docChanged) this.view.dispatch(spec);
-    this.prepareParagraphSelection(event, planned.docChanged ? this.view.state.selection.main.head : planned.newSelection.main.head);
+    const position = planned.docChanged ? this.view.state.selection.main.head : planned.newSelection.main.head;
+    if (prepareDrag) this.prepareParagraphSelection(event, position);
+    else this.view.state.facet(actionsFacet).focusAt(position);
     return true;
   }
   private move = (event: PointerEvent): void => {

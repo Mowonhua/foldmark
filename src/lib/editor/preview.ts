@@ -189,7 +189,8 @@ class EmptyCodeWidget extends WidgetType {
       event.preventDefault();
       activateFencedBlock(view, this.from);
     };
-    element.addEventListener('mousedown', activate);
+    // 右键只打开正文菜单，不能执行创建块正文的左键激活动作。
+    element.addEventListener('mousedown', event => { if (event.button === 0) activate(event); });
     element.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') activate(event);
       if (event.key === 'Backspace' && removeEmptyFencedBlock(view, this.from)) event.preventDefault();
@@ -651,6 +652,16 @@ function buildPreview(state: EditorState): DecorationSet {
     const name = node.name;
     const source = model.text.slice(node.from, node.to);
     const editing = active(node.from, node.to);
+    if (name === 'HorizontalRule') {
+      // 分隔线仍占原文的一行；离开编辑范围后隐藏标记，点击或源码模式可继续修改原始 Markdown。
+      // 使用行装饰保留列表缩进、光标命中及选择几何，不引入第二份块内容。
+      if (!editing && !overlapsHidden(node.from, node.to)) {
+        lineStyle(node.from, 'fm-horizontal-rule');
+        ranges.push(Decoration.line({ attributes: { role: 'separator' } }).range(state.doc.lineAt(node.from).from));
+        hide(node.from, node.to);
+      }
+      return;
+    }
     if (/^ATXHeading[1-6]$/.test(name)) {
       lineStyle(node.from, `fm-heading fm-h${name.at(-1)}`);
       if (!editing && node.firstChild?.name === 'HeaderMark') hide(node.firstChild.from, Math.min(node.firstChild.to + 1, node.to));

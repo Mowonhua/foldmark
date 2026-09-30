@@ -89,6 +89,9 @@
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }
+/* 分隔线占据原文行的命中区域，视觉边框消费通用主题变量。 */
+.cm-line.fm-horizontal-rule { position: relative; }
+.cm-line.fm-horizontal-rule::after { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
 
 /* 选区背景在正文后层绘制，前景标记单独反色，确保不透明选区仍可阅读。 */
 .cm-editor .fm-selected, .cm-editor .fm-selected * { color: var(--selection-ink) !important; }

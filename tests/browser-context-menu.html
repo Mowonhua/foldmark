@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>正文右键空行回归</title>
+<style>
+  body { padding: 20px; }
+  nav { display: flex; gap: 12px; margin-bottom: 16px; }
+  nav button { padding: 8px 12px; border: 1px solid var(--line); }
+  #editor { height: 420px; border: 1px solid var(--line); }
+  #editor .cm-content { padding-top: 20px; }
+  pre { white-space: pre-wrap; font-size: 12px; }
+</style>
+<nav aria-label="回归样例">
+  <button id="blank">段落空行</button>
+  <button id="task">任务正文</button>
+  <button id="block">代码块文末</button>
+  <button id="undo">撤销</button>
+</nav>
+<div id="editor"></div>
+<pre id="result" aria-label="当前 Markdown"></pre>
+<script type="module" src="./browser-context-menu.ts"></script>
+</html>

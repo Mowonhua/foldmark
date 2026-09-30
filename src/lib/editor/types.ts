@@ -3,6 +3,7 @@
  * 定义范围：初始化选项、交互命令与界面状态类型。
  */
 import type { ProjectView, ViewMode } from '../contracts';
+import type { ClipboardPort } from '../clipboard';
 
 /**
  * 结构职责：注入文档和应用反馈端口。
@@ -16,6 +17,8 @@ export interface EditorOptions {
   /** 纯折叠/展开状态变化时通知应用保存界面配置，不触发正文保存或修改文本历史。 */
   onUIChange?: () => void;
   onStatus?: (message: string) => void;
+  /** 纯文本剪贴板可替换端口；缺省使用当前平台实现，不扩大正文读写权限。 */
+  clipboard?: ClipboardPort;
   /** 相对图像或本地路径由文件层按当前清单目录解析；网络 URL 保持原样。 */
   resolveResource?: (url: string) => string;
   /** 应用负责系统浏览器或本地文件打开；预览不直接访问磁盘。 */

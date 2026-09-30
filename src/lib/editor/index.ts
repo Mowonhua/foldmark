@@ -22,6 +22,8 @@ import { paragraphAt, paragraphLayout } from './paragraphs';
 import { contentVisibility } from './visibility';
 import { foldMotion } from './fold-motion';
 import { codeSelection } from './selection';
+import { clipboard } from '../clipboard';
+import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
@@ -57,10 +59,13 @@ export class EditorController {
   private readonly options: EditorOptions;
   private groupPrompt: HTMLElement | null = null;
   private positionGeneration = 0;
+  private readonly contextMenu?: EditorContextMenu;
 
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
+    this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
+      undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus });
     this.unsubscribeLocale = locale.subscribe(() => this.refreshLanguage());
     this.view.dom.addEventListener('keydown', this.historyKey, true);
     this.view.scrollDOM.addEventListener('wheel', this.cancelPositionRestore, { passive: true });
@@ -102,6 +107,9 @@ export class EditorController {
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
       EditorView.updateListener.of(update => {
+        // 焦点变化不会撤销剪贴板意图；真正改变目标或视图契约的事务必须关闭菜单。
+        if (update.docChanged || !update.state.selection.eq(update.startState.selection)
+          || update.transactions.some(transaction => transaction.reconfigured)) this.contextMenu?.invalidate();
         if (update.docChanged) this.options.onChange(update.state.doc.toString());
         else if (update.state.field(expandedCompletedGroupsField) !== update.startState.field(expandedCompletedGroupsField)
           || update.state.field(foldsField) !== update.startState.field(foldsField)) this.options.onUIChange?.();
@@ -132,6 +140,7 @@ export class EditorController {
   }
   /** organize=false 用于尚有受保护恢复草稿时仅切换显示，避免视图操作改写恢复数据。 */
   setMode(mode: ViewMode, organize = true): void {
+    this.contextMenu?.invalidate();
     const previous = this.state.facet(modeFacet);
     if (previous === mode) return;
     const enteringSource = mode === 'source';
@@ -177,6 +186,7 @@ export class EditorController {
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
   setText(text: string, resetHistory = false): void {
+    this.contextMenu?.invalidate();
     this.positionGeneration++;
     const ui = this.getUIState();
     if (resetHistory) { this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui); return; }
@@ -184,6 +194,8 @@ export class EditorController {
     this.setUIState(ui);
   }
   restoreState(state: EditorState, ui?: ProjectView): void {
+    // 单一视图跨项目复用，即使恢复同一状态对象，也必须取消此前项目的异步剪贴板动作。
+    this.contextMenu?.invalidate();
     this.positionGeneration++;
     this.closeGroupPrompt(); this.view.setState(state);
     // 后台项目保存的状态可能来自旧语言；复用其历史后再同步当前界面语言。
@@ -204,6 +216,7 @@ export class EditorController {
     };
   }
   setUIState(ui: ProjectView): void {
+    this.contextMenu?.invalidate();
     this.positionGeneration++;
     const model = this.state.field(documentField);
     const keys = new Set(ui.folded.filter(Boolean));
@@ -401,6 +414,7 @@ export class EditorController {
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
   destroy(): void {
+    this.contextMenu?.destroy();
     this.unsubscribeLocale();
     this.positionGeneration++; this.closeGroupPrompt();
     this.view.dom.removeEventListener('keydown', this.historyKey, true);
