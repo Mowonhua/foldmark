@@ -2,6 +2,8 @@
 //! 定义范围：Tauri 启动入口和平台命令适配。
 mod external_link;
 mod recovery;
+#[cfg(target_os = "windows")]
+mod single_instance;
 mod storage;
 mod window_material;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -252,6 +254,11 @@ fn unwatch_file(watch_id: u64, state: State<'_, FileState>) -> Result<(), FileEr
 }
 
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    let _instance = match single_instance::acquire().expect("无法仲裁 Foldmark 启动实例") {
+        Some(instance) => instance,
+        None => return,
+    };
     let mut context = tauri::generate_context!();
     // 插件注册时读取配置；必须在运行前选择通道，正式版不能收到预发布更新。
     let channel = if context.package_info().version.pre.is_empty() {
@@ -267,7 +274,17 @@ pub fn run() {
         .expect("更新配置缺失")["endpoints"] = serde_json::json!([format!(
         "https://raw.githubusercontent.com/Mowonhua/foldmark/updates/{channel}.json"
     )]);
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "windows")]
+    let builder = {
+        let window_key = _instance.window_key();
+        // setup 只发布主窗口；互斥锁已先于 Tauri 初始化获取，并保持到事件循环退出。
+        builder.setup(move |app| {
+            single_instance::mark_window(app, &window_key)?;
+            Ok(())
+        })
+    };
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
