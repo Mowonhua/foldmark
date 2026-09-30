@@ -1387,6 +1387,40 @@ describe('App 真实编辑与文件闭环', () => {
     expect((await files.read(firstProject.path)).text).toBe(finalText);
   });
 
+  it('归档省略一级标题并持久化子标题路径，重启后恢复到原一级标题下唯一章节', async () => {
+    await start(['# 工作\n\n## 开发\n\n### 本周\n\n- [ ] 保留路径\n  正文\n\n# 笔记\n\n- [ ] 留在待办\n']);
+    button('完成任务').click(); await tick();
+    await vi.waitFor(async () => {
+      const text = (await files.read(firstProject.path)).text;
+      expect(text).toContain('# 归档\n<!-- foldmark:archive -->\n\n## 开发\n\n### 本周\n\n- [x] 保留路径\n  正文');
+      expect(text.slice(text.indexOf('# 归档'))).not.toContain('# 工作');
+    });
+    await remount();
+    button(/^归档/).click(); await tick();
+    expect(documentInput().textContent).not.toContain('工作');
+    expect(documentInput().textContent).toContain('开发');
+    expect(documentInput().textContent).toContain('本周');
+    expect(documentInput().textContent).toContain('保留路径');
+    expect(documentInput().textContent).not.toContain('笔记');
+    button('恢复任务').click(); await tick();
+    await vi.waitFor(async () => {
+      const text = (await files.read(firstProject.path)).text;
+      expect(text).toContain('### 本周\n\n- [ ] 保留路径\n  正文');
+      expect(text.indexOf('保留路径')).toBeLessThan(text.indexOf('# 笔记'));
+      const active = text.slice(0, text.indexOf('# 归档'));
+      expect(active).toContain('# 工作\n\n## 开发\n\n### 本周\n\n- [ ] 保留路径\n  正文');
+      expect(active.match(/^## 开发$/gm)).toHaveLength(1);
+    });
+    button(/^待办/).click(); await tick();
+    expect(documentInput().textContent).toContain('保留路径');
+    // 视图配置异步写入；重启验收必须等待待办模式落盘，避免仍以旧归档模式打开已恢复的任务。
+    await vi.waitFor(async () => expect((await files.loadConfig())?.projectViews[firstProject.id].mode).toBe('todo'));
+    await remount();
+    expect(documentInput().textContent).toContain('工作');
+    expect(documentInput().textContent).toContain('开发');
+    expect(documentInput().textContent).toContain('保留路径');
+  });
+
   it('子任务保存后仍保留拓扑，整体摘要和展开状态重启恢复，整树完成才前插归档', async () => {
     const original = '- [ ] 父\n  - [ ] 甲\n    甲正文\n  - [ ] 乙\n    乙正文\n\n# 归档\n\n- [x] 旧归档\n';
     await start([original]);

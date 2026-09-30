@@ -3,11 +3,143 @@ import { parseDocument } from './parse';
 import { archiveSections, normalizeArchiveChanges } from './archive';
 import { taskToggleChanges } from './transactions';
 import type { TextChange } from './types';
+import { searchTasks } from './projection';
 
 const apply = (text: string, changes: TextChange[]): string => [...changes].sort((left, right) => right.from - left.from).reduce((result, change) => result.slice(0, change.from) + change.insert + result.slice(change.to), text);
 const normalize = (text: string, completedFrom: readonly number[] = []): string => apply(text, normalizeArchiveChanges(parseDocument(text), completedFrom));
 
 describe('managed archive layout', () => {
+  it('已有归档中的一级标题移除，但直属正文、任务和二级子路径保留', () => {
+    const source = '# 项目\n\n## 本周\n\n- [ ] open\n\n# 归档\n<!-- foldmark:archive -->\n\n# 项目\n\n归档备注\n\n- [x] direct\n\n## 本周\n\n### 开发\n\n- [x] nested\n\n# 其他\n\n- [x] other\n';
+    const result = normalize(source);
+    const archived = result.slice(archiveSections(parseDocument(result))[0].headingTo);
+    expect(archived).not.toMatch(/^# /m);
+    expect(archived).toContain('归档备注');
+    expect(archived).toContain('- [x] direct');
+    expect(archived).toContain('- [x] other');
+    expect(archived).toContain('## 本周\n\n### 开发\n\n- [x] nested');
+    expect(parseDocument(result).tasks).toHaveLength(4);
+    expect(normalize(result)).toBe(result);
+  });
+  it('一级标题结束前一二级标题的作用域，直属任务不归入前一章节', () => {
+    const result = normalize('# 甲\n\n## 本周\n\n- [x] headed\n\n# 乙\n\n- [x] direct\n');
+    const model = parseDocument(result);
+    expect(searchTasks(model, 'direct', true)[0].heading).toBe('归档');
+    expect(searchTasks(model, 'headed', true)[0].heading).toBe('本周');
+    expect(normalize(result)).toBe(result);
+  });
+  it('省略不同一级章节后，跳级的顶层路径不被前一标题吸收，恢复也不串组', () => {
+    const result = normalize('# A\n\n## X\n\n- [x] a\n\n# B\n\n### Y\n\n- [x] b\n');
+    const model = parseDocument(result);
+    const archived = result.slice(archiveSections(model)[0].headingTo);
+    expect(archived.indexOf('### Y')).toBeLessThan(archived.indexOf('## X'));
+    const task = model.tasks.find(item => result.slice(item.contentFrom, item.firstLineTo) === 'b')!;
+    const restored = normalize(apply(result, taskToggleChanges(model, task.from)));
+    expect(restored).toContain('# B\n\n### Y\n\n- [ ] b');
+    expect(restored.slice(0, restored.indexOf('# B'))).not.toContain('- [ ] b');
+    expect(normalize(result)).toBe(result);
+    expect(normalize(restored)).toBe(restored);
+    const legacy = normalize('# 归档\n<!-- foldmark:archive -->\n\n# A\n\n## X\n\n- [x] a\n\n# B\n\n### Y\n\n- [x] b\n');
+    expect(legacy.indexOf('### Y')).toBeLessThan(legacy.indexOf('## X'));
+    expect(normalize(legacy)).toBe(legacy);
+  });
+  it('归档镜像完整标题路径，同路径的新任务前插且重新打开不丢层级', () => {
+    const source = '# 工作\n\n## 本周\n\n### 开发\n\n- [x] first\n- [ ] second\n\n## 其他\n\n- [ ] untouched\n';
+    const first = normalize(source);
+    const section = archiveSections(parseDocument(first))[0];
+    expect(first.slice(section.headingTo)).toContain('## 本周\n\n### 开发\n\n- [x] first');
+    const second = normalize(first.replace('- [ ] second', '- [x] second'));
+    const archived = second.slice(archiveSections(parseDocument(second))[0].headingTo);
+    expect(archived).not.toMatch(/^# 工作$/m);
+    expect(archived.match(/^## 本周$/gm)).toHaveLength(1);
+    expect(archived.match(/^### 开发$/gm)).toHaveLength(1);
+    expect(archived.indexOf('second')).toBeLessThan(archived.indexOf('first'));
+    expect(normalize(second)).toBe(second);
+    expect(second.indexOf('untouched')).toBeLessThan(second.indexOf('# 归档'));
+  });
+  it('二级至六级与跳级标题保留原级别，不生成七级标题', () => {
+    const headings = Array.from({ length: 6 }, (_, index) => '#'.repeat(index + 1) + ' level ' + (index + 1)).join('\n\n');
+    const result = normalize(headings + '\n\n- [x] deep\n');
+    expect(result.slice(archiveSections(parseDocument(result))[0].headingTo)).toContain(headings.split('\n\n').slice(1).join('\n\n'));
+    expect(result).not.toContain('#######');
+    expect(normalize(result)).toBe(result);
+    const skipped = normalize('# 根\n\n#### 深层\n\n- [x] skipped\n');
+    expect(skipped.slice(archiveSections(parseDocument(skipped))[0].headingTo)).toContain('#### 深层');
+    expect(skipped.slice(archiveSections(parseDocument(skipped))[0].headingTo)).not.toContain('# 根');
+  });
+  it('不同祖先和重复同名兄弟章节不串组', () => {
+    const source = '# 甲\n\n## 重名\n\n- [x] a\n\n# 乙\n\n## 重名\n\n- [x] b\n\n# 丙\n\n## 重名\n\n- [x] c\n\n## 重名\n\n- [x] d\n';
+    const result = normalize(source);
+    const archived = result.slice(archiveSections(parseDocument(result))[0].headingTo);
+    expect(archived).not.toMatch(/^# /m);
+    expect(archived.match(/^## 重名$/gm)).toHaveLength(4);
+    expect(archived).toMatch(/## 重名\n\n- \[x\] a/);
+    expect(archived).toMatch(/## 重名\n\n- \[x\] b/);
+    expect(archived).toMatch(/## 重名\n\n- \[x\] c\n\n## 重名\n\n- \[x\] d/);
+    expect(normalize(result)).toBe(result);
+  });
+  it('无标题任务保持归档直属，引用和任务正文标题不污染兄弟任务路径', () => {
+    const source = '- [x] unheaded\n\n# 工作\n\n> ## 引用标题\n\n- [ ] open\n\n  ## 任务正文标题\n\n- [x] sibling\n';
+    const result = normalize(source);
+    const archived = result.slice(archiveSections(parseDocument(result))[0].headingTo);
+    expect(archived.indexOf('unheaded')).toBeLessThan(archived.indexOf('sibling'));
+    expect(archived).toContain('- [x] sibling');
+    expect(archived).not.toContain('# 工作');
+    expect(archived).not.toContain('引用标题');
+    expect(archived).not.toContain('任务正文标题');
+    expect(normalize(result)).toBe(result);
+  });
+  it('Setext、内联标题格式、CRLF 与无末尾换行随标题路径保留', () => {
+    const source = '**工作**\r\n===\r\n\r\n**本周**\r\n---\r\n\r\n- [x] done';
+    const result = normalize(source);
+    expect(result.slice(archiveSections(parseDocument(result))[0].headingTo)).toContain('**本周**\r\n---\r\n\r\n- [x] done');
+    expect(result.slice(archiveSections(parseDocument(result))[0].headingTo)).not.toContain('**工作**');
+    expect(result.replaceAll('\r\n', '')).not.toContain('\n');
+    expect(normalize(result)).toBe(result);
+  });
+  it('多个归档章节之间补分隔时沿用 CRLF，不能产生裸 LF', () => {
+    const result = normalize('# 项目\r\n\r\n## A\r\n\r\n- [x] a\r\n\r\n## B\r\n\r\n- [x] b\r\n');
+    expect(result.replaceAll('\r\n', '')).not.toContain('\n');
+    expect(normalize(result)).toBe(result);
+  });
+  it('恢复完整任务组到原标题下，其他章节正文不变', () => {
+    const initial = '# 工作\n\n## 开发\n\n- [x] parent\n  body\n  - [x] child\n\n# 笔记\n\nkeep exactly\n';
+    const archived = normalize(initial);
+    const model = parseDocument(archived);
+    const parent = model.tasks.find(item => archived.slice(item.contentFrom, item.firstLineTo) === 'parent')!;
+    const result = normalize(apply(archived, taskToggleChanges(model, parent.from)));
+    expect(result).toContain('## 开发\n\n- [ ] parent\n  body\n  - [x] child');
+    expect(result.indexOf('parent')).toBeLessThan(result.indexOf('# 笔记'));
+    expect(result).toContain('# 笔记\n\nkeep exactly\n');
+    expect(normalize(result)).toBe(result);
+  });
+  it('原标题已删除时恢复重建路径，含多个原有归档分区时仍保留工作章节', () => {
+    const archived = normalize('# 工作\n\n## 开发\n\n- [x] done\n');
+    const withoutActive = archived.slice(archived.indexOf('# 归档'));
+    const result = normalize(withoutActive.replace('- [x] done', '- [ ] done'));
+    expect(result).toMatch(/^## 开发\n\n- \[ \] done/);
+    expect(result.indexOf('done')).toBeLessThan(result.indexOf('# 归档'));
+    const mixed = normalize('# 归档\n\n- [x] old\n\n# 工作\n\n- [ ] open\n- [x] new\n');
+    expect(mixed.indexOf('open')).toBeLessThan(mixed.indexOf('# 归档'));
+    expect(mixed.slice(archiveSections(parseDocument(mixed))[0].headingTo)).toContain('- [x] new');
+    expect(mixed.slice(archiveSections(parseDocument(mixed))[0].headingTo)).not.toContain('# 工作');
+    expect(mixed).toContain('- [x] old');
+    expect(normalize(mixed)).toBe(mixed);
+  });
+  it('合并旧归档分区时，无标题任务不挂到前一分区的标题下', () => {
+    const result = normalize('# 归档\n\n## 已有章节\n\n- [x] headed\n\n# 工作\n\n- [ ] open\n\n# 归档\n\n- [x] unheaded\n');
+    expect(searchTasks(parseDocument(result), 'unheaded', true)[0].heading).toBe('归档');
+    expect(searchTasks(parseDocument(result), 'headed', true).find(task => task.title === 'headed')!.heading).toBe('已有章节');
+    expect(normalize(result)).toBe(result);
+  });
+  it('恢复无末尾换行的深层任务时，不吞掉后续章节标题和正文', () => {
+    const source = '# A\n\n## B\n\n# Other\n\nuntouched prose\n\n# 归档\n<!-- foldmark:archive -->\n\n# A\n\n## B\n\n- [ ] restored';
+    const result = normalize(source);
+    expect(result).toContain('## B\n\n- [ ] restored\n\n# Other\n\nuntouched prose');
+    expect(parseDocument(result).headings.some(heading => heading.text === 'Other')).toBe(true);
+    expect(searchTasks(parseDocument(result), 'restored')[0].title).toBe('restored');
+    expect(normalize(result)).toBe(result);
+  });
   it('前插归档时已有普通列表容器不成为新任务的后代，恢复项也不重复', () => {
     const result = normalize('- [x] newest\n\n# 归档\n\n  - bucket\n    - [x] previous\n    - [ ] restored\n');
     const model = parseDocument(result);
