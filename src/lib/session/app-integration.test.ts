@@ -1168,6 +1168,71 @@ describe('App 真实编辑与文件闭环', () => {
     expect(documentInput().textContent).toContain('console.log(1)');
   });
 
+  it('新建清单的同名文档标题在全部待办只显示一次，定位和重启保留正文', async () => {
+    await start(['- [ ] 原项目任务\n']);
+    button('新增项目').click(); await tick();
+    const name = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+    name.value = '新项目'; name.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    button('新建清单文件').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.file-path')).not.toBeNull());
+    const path = document.querySelector('.file-path')!.textContent!;
+    button('添加项目').click(); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('新项目'));
+    expect((await files.read(path)).text).toBe('# 新项目\n\n- [ ] \n');
+    button('查看源码').click(); await tick();
+    documentInput().focus();
+    documentInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'End', code: 'End', ctrlKey: true, bubbles: true, cancelable: true }));
+    documentInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true, cancelable: true }));
+    await tick(); await paste('新清单任务');
+    await vi.waitFor(async () => expect((await files.read(path)).text).toContain('新清单任务'));
+    const source = (await files.read(path)).text;
+    expect(source).toBe('# 新项目\n\n- [ ] 新清单任务');
+    button('返回预览').click(); await tick();
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(2));
+    const group = [...document.querySelectorAll('.aggregate-group')].find(node => node.querySelector('h2')?.textContent?.includes('新项目'))!;
+    expect(group.querySelectorAll('h2')).toHaveLength(1);
+    expect(group.querySelector('.aggregate-section-heading')).toBeNull();
+    expect(group.querySelector('.aggregate-section-task')).toBeNull();
+    group.querySelector<HTMLButtonElement>('.aggregate-task')!.click(); await tick();
+    await vi.waitFor(() => expect(documentInput().textContent).toContain('新清单任务'));
+    expect(documentInput().textContent).toContain('新项目');
+    await vi.waitFor(async () => {
+      const config = (await files.loadConfig())!;
+      const project = config.projects.find(project => project.path === path)!;
+      expect(config.projectViews[project.id].cursor).toBe(source.indexOf('- [ ]'));
+    });
+    await remount();
+    expect((await files.read(path)).text).toBe(source);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(2));
+    expect(document.querySelector('.aggregate-section-heading')).toBeNull();
+  });
+
+  it.each([`# ${secondProject.name}`, `\n\n${secondProject.name}\n===`])('全部待办隐藏未打开文件的同名文档标题，保留同名子章节和后续章节：%s', async title => {
+    const source = `${title}\n\n- [ ] 文档任务\n\n## ${secondProject.name}\n\n- [ ] 子章节任务\n\n# ${secondProject.name}\n\n- [ ] 后续章节任务\n`;
+    await start(['- [ ] 当前任务\n', source]);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(4));
+    const group = [...document.querySelectorAll('.aggregate-group')].find(node => node.querySelector('h2')?.textContent?.includes(secondProject.name))!;
+    expect([...group.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent)).toEqual(['文档任务', secondProject.name, '子章节任务', secondProject.name, '后续章节任务']);
+    expect(group.querySelector('.aggregate-task')?.classList.contains('aggregate-section-task')).toBe(false);
+    expect((await files.read(secondProject.path)).text).toBe(source);
+  });
+
+  it.each([
+    `# 不同文档标题\n\n- [ ] 保留章节任务\n`,
+    `## ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
+    `开场说明\n\n# ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
+    `> # ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
+  ])('全部待办保留非文档标题的章节：%s', async source => {
+    await start([source]);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(1));
+    expect(document.querySelectorAll('.aggregate-section-heading')).toHaveLength(1);
+    expect(document.querySelector('.aggregate-task')?.classList.contains('aggregate-section-task')).toBe(true);
+  });
+
   it('全部待办按章节位置显示段首标题，同名章节不合并且任务保持原序', async () => {
     await start(['- [ ] 无章节任务\n\n# 清单\n\n- [ ] 第一项\n- [ ] 第二项\n\n# 清单\n\n- [ ] 第三项\n\n## 已完成章节\n\n- [x] 已完成\n']);
     button(/全部待办/).click(); await tick();

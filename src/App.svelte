@@ -464,12 +464,19 @@
         if (screen === 'all') {
           let headingIndex = -1;
           const archiveHeadingStarts = new Set(archiveSections(model).map(section => section.from));
+          const opening = model.tree.topNode.firstChild;
+          const title = model.headings[0];
+          // 首个语法块为同名一级标题时，项目标题已表达其身份，聚合视图不再重复分组。
+          // 限定文档根节点与首块位置，保留引用内标题、同名子章节及后续同名章节；原文不变。
+          const documentTitleFrom = opening && (opening.name === 'ATXHeading1' || opening.name === 'SetextHeading1')
+            && title?.from === opening.from && title.text === project.name.trim() ? title.from : null;
           // 任务与章节均按原文位置排序，单次推进游标保留同名章节身份，避免逐任务扫描整篇文档。
           for (const result of searchTasks(model, '', false)) {
             while (headingIndex + 1 < model.headings.length && model.headings[headingIndex + 1].from < result.from) headingIndex++;
             const heading = model.headings[headingIndex];
-            // 一级归档标题只表示文件存储分区，不作为待办分组；归档内用户创建的子标题仍保留。
-            const sectionFrom = heading && !archiveHeadingStarts.has(heading.from) ? heading.from : null;
+            // 文档标题和一级归档标题不作为待办分组，置空章节位置也让任务使用项目直属层级。
+            // 归档内用户创建的子标题仍保留。
+            const sectionFrom = heading && heading.from !== documentTitleFrom && !archiveHeadingStarts.has(heading.from) ? heading.from : null;
             allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: sectionFrom === null ? '' : result.heading, sectionFrom, checked: false, model, item: result.item, path: project.path });
           }
         }
