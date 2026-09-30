@@ -70,14 +70,12 @@
 .fm-drag-preview { position: fixed; z-index: 200; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 6px 25px var(--shadow-color); border-radius: 6px; pointer-events: none; opacity: .9; }
 .fm-drop-line { position: fixed; height: 3px; background: var(--accent); z-index: 199; pointer-events: none; border-radius: 2px; }
 .fm-dragging, .fm-dragging * { cursor: grabbing !important; user-select: none !important; }
-.fm-item-menu { position: fixed; z-index: 210; display: grid; padding: 6px; min-width: 130px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow-color); }
-.fm-item-menu button { border: 0; text-align: left; padding: 8px 12px; background: transparent; color: var(--text); cursor: pointer; border-radius: 4px; }
-.fm-item-menu button:hover, .fm-item-menu button:focus-visible { background: var(--surface-alt); }
+.dropdown.fm-item-menu { position: fixed; right: auto; z-index: 210; display: grid; width: auto; min-width: 130px; }
 .fm-group-prompt { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; white-space: nowrap; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 5px 20px var(--shadow-color); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 .fm-group-prompt button { color: var(--accent); background: transparent; border: 0; cursor: pointer; font: inherit; }
-/* 编辑器浮层与应用浮层共用表面契约；不支持模糊时保留实色以保障可读性。 */
+/* 分组提示消费浮层表面参数；不支持模糊时保留实色以保障可读性。 */
 @supports (backdrop-filter: blur(1px)) {
-  .fm-item-menu, .fm-group-prompt {
+  .fm-group-prompt {
     background: var(--floating-background,var(--surface));
     background-image: var(--surface-image,none);
     backdrop-filter: blur(var(--floating-blur,0px)) var(--surface-filter,brightness(1));

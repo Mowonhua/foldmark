@@ -261,7 +261,8 @@ class MarkerGestures {
     this.closeMenu?.();
     const from = Number(marker.dataset.listMarker);
     const actions = this.view.state.facet(actionsFacet);
-    const menu = document.createElement('div'); menu.className = 'fm-item-menu'; menu.setAttribute('role', 'menu');
+    // 菜单表面与选项复用应用的弹出菜单样式，编辑器类仅负责鼠标位置与层级。
+    const menu = document.createElement('div'); menu.className = 'dropdown fm-item-menu'; menu.setAttribute('role', 'menu');
     menu.style.left = `${event.clientX}px`; menu.style.top = `${event.clientY}px`;
     const entries: [string, () => void][] = [['折叠 / 展开', () => actions.toggleFold(from)]];
     if (this.view.state.facet(modeFacet) === 'todo') entries.push(['上移', () => actions.moveItem(from, 'up')], ['下移', () => actions.moveItem(from, 'down')]);
