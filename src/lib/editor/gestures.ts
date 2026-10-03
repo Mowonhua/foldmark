@@ -306,13 +306,15 @@ class MarkerGestures {
   };
 }
 
-/** 只校正普通正文末排的右侧空白；折行前排和字内位置继续使用原生坐标命中。 */
+/**
+ * 只按几何校正同一视觉行末右侧的空白，因此标题、引用和列表与正文共用同一定位。
+ * 整行正文被隐藏（围栏、分隔线、空任务与空段落）时没有可见行末，继续交给各自点击契约；
+ * 控件、折行前排和字内位置也继续使用原生坐标命中。
+ */
 function textLineEnd(view: EditorView, target: EventTarget | null, event: MouseEvent): number | null {
   if (!(target instanceof Element) || !target.matches('.cm-line') || !view.contentDOM.contains(target)) return null;
+  if (!target.textContent?.trim()) return null;
   const sourceLine = view.state.doc.lineAt(view.posAtDOM(target, 0));
-  const layout = paragraphLayout(view.state);
-  const paragraph = layout.paragraphs[paragraphAt(layout, sourceLine.from)];
-  if (paragraph?.kind !== 'text' || paragraph.item) return null;
   const end = view.coordsAtPos(sourceLine.to, -1);
   return end && event.clientX > end.right && event.clientY >= end.top && event.clientY < end.bottom ? sourceLine.to : null;
 }
