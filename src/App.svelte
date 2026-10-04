@@ -115,6 +115,8 @@
     model: DocumentModel; item: ListItem; path: string;
     /** 最近章节在同一文档中的起点；无章节或系统归档标题为 null，同名用户章节通过位置区分。 */
     sectionFrom: number | null;
+    /** 任务祖先层数及各级祖先子树终点（外层在前），驱动全部待办的层级缩进与父子连线。 */
+    depth: number; ancestorTos: number[];
   };
   let aggregateResults = $state.raw<AggregateResult[]>([]);
   let aggregateLimits = $state<Record<string, number>>({});
@@ -441,6 +443,20 @@
     update(result);
     return { update };
   }
+  interface AggregateGuide { level: number; continues: boolean; drop: boolean }
+  /**
+   * 计算一行任务需要绘制的竖向连线：章节干线、各层任务祖先干线，以及有可见子任务时从复选框下延的连线。
+   * continues 为 false 的干线在本行分支处收尾，避免行末悬垂；只统计当前分页内的行，翻页边界不会画出断头线。
+   */
+  function aggregateGuides(rows: AggregateResult[], index: number): AggregateGuide[] {
+    const result = rows[index];
+    const continuesBelow = (within: number): boolean => rows.some((row, at) => at > index && row.from < within);
+    const guides: AggregateGuide[] = [];
+    if (result.sectionFrom !== null) guides.push({ level: 0, continues: rows.some((row, at) => at > index && row.sectionFrom === result.sectionFrom), drop: false });
+    for (let level = 1; level <= result.depth; level++) guides.push({ level, continues: continuesBelow(result.ancestorTos[level - 1]), drop: false });
+    if (continuesBelow(result.item.to)) guides.push({ level: result.depth + 1, continues: true, drop: true });
+    return guides;
+  }
   function scheduleIndex(): void { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void updateIndex(); }, 350); }
   /** 查询缓存只持有不可编辑语法投影；正文变化才重建，保存反馈不触发重复解析。 */
   function modelForProject(projectId: string, text: string): DocumentModel {
@@ -478,7 +494,7 @@
             // 文档标题和一级归档标题不作为待办分组，置空章节位置也让任务使用项目直属层级。
             // 归档内用户创建的子标题仍保留。
             const sectionFrom = heading && heading.from !== documentTitleFrom && !archiveHeadingStarts.has(heading.from) ? heading.from : null;
-            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: sectionFrom === null ? '' : result.heading, sectionFrom, checked: false, model, item: result.item, path: project.path });
+            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: sectionFrom === null ? '' : result.heading, sectionFrom, checked: false, model, item: result.item, path: project.path, depth: result.depth, ancestorTos: result.ancestorTos });
           }
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
@@ -883,16 +899,18 @@
       <section class="aggregate"><p class="eyebrow">{$t("工作空间")}</p><h1>{$t("全部待办")}<span>{aggregateResults.length}</span></h1><p class="muted">{$t("每件事都有自己的位置。选择一项，回到原文继续。")}</p>
         {#each availableProjects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
+          {@const limit = aggregateLimits[project.id] ?? 100}
+          {@const visibleResults = projectResults.slice(0, limit)}
           {#if projectResults.length}
             <section class="aggregate-group">
               <h2>{project.name}<span>{projectResults.length}</span></h2>
-              {#each projectResults.slice(0, aggregateLimits[project.id] ?? 100) as result, index}
-                {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== projectResults[index - 1].sectionFrom)}
+              {#each visibleResults as result, index}
+                {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== visibleResults[index - 1].sectionFrom)}
                   <h3 class="aggregate-section-heading"><span>{result.section}</span></h3>
                 {/if}
-                <button class="aggregate-task" aria-label={result.title} class:aggregate-section-task={result.sectionFrom !== null} onclick={() => locate(result)}><span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
+                <button class="aggregate-task" class:aggregate-section-task={result.sectionFrom !== null} class:aggregate-nested={result.depth > 0} style:--depth={result.depth} aria-label={result.title} onclick={() => locate(result)}>{#each aggregateGuides(visibleResults, index) as guide}<i class="task-guide" class:task-guide-end={!guide.continues} class:task-guide-drop={guide.drop} style:--level={guide.level} aria-hidden="true"></i>{/each}<span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
               {/each}
-              {#if projectResults.length > (aggregateLimits[project.id] ?? 100)}<button class="load-more" onclick={() => aggregateLimits[project.id] = (aggregateLimits[project.id] ?? 100) + 100}>{$t('显示更多（还有 {count} 条）', { count: projectResults.length - (aggregateLimits[project.id] ?? 100) })}</button>{/if}
+              {#if projectResults.length > limit}<button class="load-more" onclick={() => aggregateLimits[project.id] = limit + 100}>{$t('显示更多（还有 {count} 条）', { count: projectResults.length - limit })}</button>{/if}
             </section>
           {/if}
         {/each}

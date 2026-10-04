@@ -1303,6 +1303,33 @@ describe('App 真实编辑与文件闭环', () => {
     expect(document.querySelector('.aggregate-task small')).toBeNull();
   });
 
+  it('全部待办按任务层级缩进并绘制父子连线，末行干线在分支处收尾', async () => {
+    await start(['# 清单\n\n- [ ] 父任务\n  - [ ] 子任务一\n  - [ ] 子任务二\n    - [ ] 孙任务\n- [ ] 顶层任务\n\n## 章节\n\n- [ ] 章节任务\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(6));
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.aggregate-task')];
+    const guides = (row: HTMLButtonElement): string[] => [...row.querySelectorAll<HTMLElement>('.task-guide')]
+      .map(guide => `${guide.style.getPropertyValue('--level')}${guide.classList.contains('task-guide-drop') ? '下延' : guide.classList.contains('task-guide-end') ? '收尾' : '延续'}`);
+    expect(rows.map(row => row.style.getPropertyValue('--depth'))).toEqual(['0', '1', '1', '2', '0', '0']);
+    expect(rows.slice(1, 4).map(row => row.classList.contains('aggregate-nested'))).toEqual([true, true, true]);
+    // 父任务行从复选框下延连线；孙任务行右侧两级干线没有后续子树，章节干线随之收尾。
+    expect(guides(rows[0])).toEqual(['0延续', '1下延']);
+    expect(guides(rows[3])).toEqual(['0延续', '1收尾', '2收尾']);
+    expect(guides(rows[4])).toEqual(['0收尾']);
+    // 点击子任务仍按原文定位到该子任务本身。
+    rows[1].click(); await tick();
+    await vi.waitFor(() => expect(documentInput().textContent).toContain('子任务一'));
+  });
+
+  it('全部待办中普通列表桥接的任务仍按任务父级缩进连线', async () => {
+    await start(['- [ ] 父任务\n  - 普通说明\n    - [ ] 桥接子任务\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(2));
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.aggregate-task')];
+    expect(rows.map(row => row.style.getPropertyValue('--depth'))).toEqual(['0', '1']);
+    expect([...rows[1].querySelectorAll<HTMLElement>('.task-guide')].map(guide => guide.style.getPropertyValue('--level'))).toEqual(['1']);
+  });
+
   it('归档源码仅显示归档分区，切换项目和重启后返回来源预览', async () => {
     const source = '- [ ] 待办独有文字\n\n# 归档\n\n- [x] 归档独有文字\n';
     await start([source, '- [ ] 第二项目\n']);

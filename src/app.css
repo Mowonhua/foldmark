@@ -162,12 +162,13 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .aggregate-section-heading span{min-width:0;overflow-wrap:anywhere}
 .aggregate-group h2 + .aggregate-section-heading{margin-top:18px}
 .aggregate-content{min-width:0;overflow-wrap:anywhere}
-.aggregate-task{display:flex;align-items:flex-start;text-align:left;width:100%;padding:13px 8px;gap:13px;font-size:14px;border-radius:4px}
-/* 连接线锚定首行复选框中心；逐行延续竖线，使多行任务及分页末项均在正确位置收尾。 */
-.aggregate-section-task{position:relative;padding-left:28px;--branch-y:22px}
-.aggregate-section-task::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:0;border-left:1px solid var(--line);pointer-events:none}
-.aggregate-section-task::after{content:'';position:absolute;left:7px;top:var(--branch-y);width:21px;height:0;border-top:1px solid var(--line);pointer-events:none}
-.aggregate-section-task:not(:has(+ .aggregate-section-task))::before{bottom:auto;height:calc(var(--branch-y) + 1px)}
+.aggregate-task{position:relative;--box-x:8px;--branch-y:22px;display:flex;align-items:flex-start;text-align:left;width:100%;padding:13px 8px;padding-left:calc(var(--box-x) + 28px*var(--depth,0));gap:13px;font-size:14px;border-radius:4px}
+.aggregate-section-task{--box-x:28px}
+/* 连线锚定首行复选框中心并逐级右移 28px；分支干线逐行延续使多行任务及分页末项在正确位置收尾，末行不悬垂。 */
+.aggregate-section-task::after,.aggregate-nested::after{content:'';position:absolute;left:calc(var(--box-x) + 28px*var(--depth,0) - 21px);top:var(--branch-y);width:21px;height:0;border-top:1px solid var(--line);pointer-events:none}
+.task-guide{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--line);pointer-events:none;left:calc(var(--box-x) - 21px + 28px*var(--level))}
+.task-guide-end{bottom:auto;height:calc(var(--branch-y) + 1px)}
+.task-guide-drop{top:calc(var(--branch-y) + 8px)}
 .readonly-box{width:15px;height:15px;border:1px solid var(--task-checkbox-border,var(--muted));border-radius:3px;margin-top:2px;flex-shrink:0;box-shadow:var(--task-checkbox-shadow,none)}
 .result-arrow{margin-left:auto;color:var(--muted);opacity:0}
 .aggregate-task:hover .result-arrow{opacity:1}

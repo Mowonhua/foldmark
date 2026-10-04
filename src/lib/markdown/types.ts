@@ -41,7 +41,8 @@ export interface DocumentModel {
 export interface HiddenRange { from: number; to: number; parentFrom: number | null; count: number }
 /**
  * 结构职责：提供可以定位原文的任务搜索结果。
- * 字段说明：heading 为最近章节，archived 包含被已完成祖先隐藏的情况。
+ * 字段说明：heading 为最近章节，archived 包含被已完成祖先隐藏的情况；
+ * depth 为任务祖先层数（普通列表桥接不计层），ancestorTos 为各级任务祖先的子树终点（外层在前）。
  * 约束条件：标题与摘要从原文截取，不改写 Markdown。
  */
-export interface TaskSearchResult { item: ListItem; from: number; to: number; title: string; excerpt: string; heading: string; archived: boolean }
+export interface TaskSearchResult { item: ListItem; from: number; to: number; title: string; excerpt: string; heading: string; archived: boolean; depth: number; ancestorTos: number[] }

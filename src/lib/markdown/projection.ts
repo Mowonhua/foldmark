@@ -143,10 +143,13 @@ export function searchTasks(model: DocumentModel, query: string, includeArchived
   // 子任务有独立搜索结果，不能通过父项正文把隐藏任务带回待办搜索。
   const nested = new Map<number, ListItem[]>();
   const ancestors: ListItem[] = [];
+  // 记录每项任务各层任务祖先的子树终点（外层在前）；普通列表桥接不计层，供聚合视图缩进与连线使用。
+  const ancestorTos = new Map<number, number[]>();
   for (const task of model.tasks) {
     while (ancestors.length && task.from >= ancestors.at(-1)!.to) ancestors.pop();
     const parent = ancestors.at(-1);
     if (parent) { const children = nested.get(parent.from) ?? []; children.push(task); nested.set(parent.from, children); }
+    ancestorTos.set(task.from, ancestors.map(ancestor => ancestor.to));
     ancestors.push(task);
   }
   let headingIndex = -1;
@@ -163,7 +166,8 @@ export function searchTasks(model: DocumentModel, query: string, includeArchived
     body += model.text.slice(Math.min(position, item.to), item.to);
     const normalized = body.toLocaleLowerCase();
     if (!terms.every(term => normalized.includes(term))) continue;
-    results.push({ item, from: item.from, to: item.to, title: model.text.slice(item.contentFrom,item.firstLineTo), excerpt: body.replace(/\s+/g,' ').slice(0,200), heading: model.headings[headingIndex]?.text ?? '', archived: isArchived });
+    const chain = ancestorTos.get(item.from)!;
+    results.push({ item, from: item.from, to: item.to, title: model.text.slice(item.contentFrom,item.firstLineTo), excerpt: body.replace(/\s+/g,' ').slice(0,200), heading: model.headings[headingIndex]?.text ?? '', archived: isArchived, depth: chain.length, ancestorTos: chain });
   }
   return results;
 }
