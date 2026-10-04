@@ -1270,23 +1270,33 @@ describe('App 真实编辑与文件闭环', () => {
     expect(document.querySelector('.aggregate-section-heading')).toBeNull();
   });
 
-  it.each([`# ${secondProject.name}`, `\n\n${secondProject.name}\n===`])('全部待办隐藏未打开文件的同名文档标题，保留同名子章节和后续章节：%s', async title => {
+  it.each([`# ${secondProject.name}`, `\n\n${secondProject.name}\n===`])('全部待办隐藏一级标题，保留二级章节与未分组任务：%s', async title => {
     const source = `${title}\n\n- [ ] 文档任务\n\n## ${secondProject.name}\n\n- [ ] 子章节任务\n\n# ${secondProject.name}\n\n- [ ] 后续章节任务\n`;
     await start(['- [ ] 当前任务\n', source]);
     button(/全部待办/).click(); await tick();
     await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(4));
     const group = [...document.querySelectorAll('.aggregate-group')].find(node => node.querySelector('h2')?.textContent?.includes(secondProject.name))!;
-    expect([...group.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent)).toEqual(['文档任务', secondProject.name, '子章节任务', secondProject.name, '后续章节任务']);
+    expect([...group.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent)).toEqual(['文档任务', secondProject.name, '子章节任务', '后续章节任务']);
     expect(group.querySelector('.aggregate-task')?.classList.contains('aggregate-section-task')).toBe(false);
     expect((await files.read(secondProject.path)).text).toBe(source);
   });
 
   it.each([
     `# 不同文档标题\n\n- [ ] 保留章节任务\n`,
-    `## ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
     `开场说明\n\n# ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
     `> # ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
-  ])('全部待办保留非文档标题的章节：%s', async source => {
+  ])('全部待办不显示一级标题，任务直属项目分组：%s', async source => {
+    await start([source]);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(1));
+    expect(document.querySelectorAll('.aggregate-section-heading')).toHaveLength(0);
+    expect(document.querySelector('.aggregate-task')?.classList.contains('aggregate-section-task')).toBe(false);
+  });
+
+  it.each([
+    `## ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
+    `> ## ${firstProject.name}\n\n- [ ] 保留章节任务\n`,
+  ])('全部待办保留二级及以下标题章节：%s', async source => {
     await start([source]);
     button(/全部待办/).click(); await tick();
     await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(1));
@@ -1295,7 +1305,7 @@ describe('App 真实编辑与文件闭环', () => {
   });
 
   it('全部待办按章节位置显示段首标题，同名章节不合并且任务保持原序', async () => {
-    await start(['- [ ] 无章节任务\n\n# 清单\n\n- [ ] 第一项\n- [ ] 第二项\n\n# 清单\n\n- [ ] 第三项\n\n## 已完成章节\n\n- [x] 已完成\n']);
+    await start(['- [ ] 无章节任务\n\n## 清单\n\n- [ ] 第一项\n- [ ] 第二项\n\n## 清单\n\n- [ ] 第三项\n\n## 已完成章节\n\n- [x] 已完成\n']);
     button(/全部待办/).click(); await tick();
     await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(4));
     const content = [...document.querySelectorAll('.aggregate-section-heading, .aggregate-title')].map(node => node.textContent);
@@ -1312,13 +1322,31 @@ describe('App 真实编辑与文件闭环', () => {
       .map(guide => `${guide.style.getPropertyValue('--level')}${guide.classList.contains('task-guide-drop') ? '下延' : guide.classList.contains('task-guide-end') ? '收尾' : '延续'}`);
     expect(rows.map(row => row.style.getPropertyValue('--depth'))).toEqual(['0', '1', '1', '2', '0', '0']);
     expect(rows.slice(1, 4).map(row => row.classList.contains('aggregate-nested'))).toEqual([true, true, true]);
-    // 父任务行从复选框下延连线；孙任务行右侧两级干线没有后续子树，章节干线随之收尾。
-    expect(guides(rows[0])).toEqual(['0延续', '1下延']);
-    expect(guides(rows[3])).toEqual(['0延续', '1收尾', '2收尾']);
-    expect(guides(rows[4])).toEqual(['0收尾']);
+    // 一级标题不入链：父任务行从复选框下延连线；孙任务行右侧两级任务干线没有后续子树；章节任务的章节干线在末行收尾。
+    expect(guides(rows[0])).toEqual(['1下延']);
+    expect(guides(rows[3])).toEqual(['1收尾', '2收尾']);
+    expect(guides(rows[4])).toEqual([]);
+    expect(guides(rows[5])).toEqual(['0收尾']);
     // 点击子任务仍按原文定位到该子任务本身。
     rows[1].click(); await tick();
     await vi.waitFor(() => expect(documentInput().textContent).toContain('子任务一'));
+  });
+
+  it('全部待办按标题层级分级显示章节链并缩进直属任务', async () => {
+    await start(['## 章节甲\n\n- [ ] 任务一\n\n### 子章节乙\n\n- [ ] 任务二\n\n#### 深层丙\n\n- [ ] 任务三\n\n# 独立一级\n\n## 章节丁\n\n- [ ] 任务四\n']);
+    button(/全部待办/).click(); await tick();
+    await vi.waitFor(() => expect(document.querySelectorAll('.aggregate-task')).toHaveLength(4));
+    const headings = [...document.querySelectorAll<HTMLElement>('.aggregate-section-heading')];
+    expect(headings.map(heading => `${heading.style.getPropertyValue('--depth')}:${heading.textContent}`)).toEqual(['0:章节甲', '1:子章节乙', '2:深层丙', '0:章节丁']);
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.aggregate-task')];
+    expect(rows.map(row => row.style.getPropertyValue('--depth'))).toEqual(['0', '1', '2', '0']);
+    const guides = (row: HTMLButtonElement): string[] => [...row.querySelectorAll<HTMLElement>('.task-guide')]
+      .map(guide => `${guide.style.getPropertyValue('--level')}${guide.classList.contains('task-guide-drop') ? '下延' : guide.classList.contains('task-guide-end') ? '收尾' : '延续'}`);
+    // 每级章节干线随包含它的后续行延续；进入章节丁后甲乙丙三级干线在最后一行分支处收尾。
+    expect(guides(rows[0])).toEqual(['0延续']);
+    expect(guides(rows[1])).toEqual(['0延续', '1延续']);
+    expect(guides(rows[2])).toEqual(['0收尾', '1收尾', '2收尾']);
+    expect(guides(rows[3])).toEqual(['0收尾']);
   });
 
   it('全部待办中普通列表桥接的任务仍按任务父级缩进连线', async () => {

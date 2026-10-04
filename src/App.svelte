@@ -19,7 +19,7 @@
   import type { AppConfig, FilePort, FileSnapshot, Project, ProjectView, RecoveryDraft, ViewMode } from './lib/contracts';
   import { SaveCoordinator, errorMessage } from './lib/session/save-coordinator';
   import type { ProjectSession, TaskResult } from './lib/session/types';
-  import { archiveSections, getHiddenRanges, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
+  import { getHiddenRanges, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel, ListItem } from './lib/markdown';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
@@ -113,8 +113,8 @@
   // 每条聚合结果保留生成它的语法快照，异步刷新时标题与引用定义不会跨版本混用。
   type AggregateResult = TaskResult & {
     model: DocumentModel; item: ListItem; path: string;
-    /** 最近章节在同一文档中的起点；无章节或系统归档标题为 null，同名用户章节通过位置区分。 */
-    sectionFrom: number | null;
+    /** 任务上方二级至六级标题链（外层在前）；一级标题不入链，链为空时任务直属项目分组。 */
+    sectionChain: { from: number; text: string }[];
     /** 任务祖先层数及各级祖先子树终点（外层在前），驱动全部待办的层级缩进与父子连线。 */
     depth: number; ancestorTos: number[];
   };
@@ -445,17 +445,32 @@
   }
   interface AggregateGuide { level: number; continues: boolean; drop: boolean }
   /**
-   * 计算一行任务需要绘制的竖向连线：章节干线、各层任务祖先干线，以及有可见子任务时从复选框下延的连线。
-   * continues 为 false 的干线在本行分支处收尾，避免行末悬垂；只统计当前分页内的行，翻页边界不会画出断头线。
+   * 计算一行任务需要绘制的竖向连线：各级章节干线、各层任务祖先干线，以及有可见子任务时从复选框下延的连线。
+   * 章节干线按标题链逐级右移；continues 为 false 的干线在本行分支处收尾，避免行末悬垂；只统计当前分页内的行，翻页边界不会画出断头线。
    */
   function aggregateGuides(rows: AggregateResult[], index: number): AggregateGuide[] {
     const result = rows[index];
+    const chain = result.sectionChain;
     const continuesBelow = (within: number): boolean => rows.some((row, at) => at > index && row.from < within);
-    const guides: AggregateGuide[] = [];
-    if (result.sectionFrom !== null) guides.push({ level: 0, continues: rows.some((row, at) => at > index && row.sectionFrom === result.sectionFrom), drop: false });
-    for (let level = 1; level <= result.depth; level++) guides.push({ level, continues: continuesBelow(result.ancestorTos[level - 1]), drop: false });
-    if (continuesBelow(result.item.to)) guides.push({ level: result.depth + 1, continues: true, drop: true });
+    const continuesHeading = (from: number): boolean => rows.some((row, at) => at > index && row.sectionChain.some(heading => heading.from === from));
+    const guides: AggregateGuide[] = chain.map((heading, level) => ({ level, continues: continuesHeading(heading.from), drop: false }));
+    // 无章节的任务没有章节干线，但仍从层级 1 起算，保持普通任务与章节任务各自的复选框列对齐。
+    const base = Math.max(chain.length, 1);
+    for (let level = 1; level <= result.depth; level++) guides.push({ level: base + level - 1, continues: continuesBelow(result.ancestorTos[level - 1]), drop: false });
+    if (continuesBelow(result.item.to)) guides.push({ level: base + result.depth, continues: true, drop: true });
     return guides;
+  }
+  /** 返回本行需要新显示的章节标题及其在链中的绝对深度：与上一行共享的祖先前缀不重复渲染，分页首行重新显示整条链。 */
+  function aggregateHeadings(rows: AggregateResult[], index: number): (AggregateResult['sectionChain'][number] & { depth: number })[] {
+    const chain = rows[index].sectionChain;
+    const previous = index > 0 ? rows[index - 1].sectionChain : [];
+    let shared = 0;
+    while (shared < chain.length && shared < previous.length && chain[shared].from === previous[shared].from) shared++;
+    return chain.slice(shared).map((heading, offset) => ({ ...heading, depth: shared + offset }));
+  }
+  /** 任务行缩进层数：章节链在一级标题之下从零起算，加上任务祖先层数。 */
+  function aggregateDepth(result: AggregateResult): number {
+    return Math.max(result.sectionChain.length - 1, 0) + result.depth;
   }
   function scheduleIndex(): void { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void updateIndex(); }, 350); }
   /** 查询缓存只持有不可编辑语法投影；正文变化才重建，保存反馈不触发重复解析。 */
@@ -479,22 +494,17 @@
           found.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: result.heading, checked: result.archived });
         }
         if (screen === 'all') {
+          // 一级标题（含文档标题与系统归档）不进入全部待办分组，只重置二级标题的作用域；
+          // 二级至六级标题按原文位置维护祖先链，任务携带整条链供聚合视图分级显示，同名章节靠位置区分。
+          const chain: DocumentModel['headings'] = [];
           let headingIndex = -1;
-          const archiveHeadingStarts = new Set(archiveSections(model).map(section => section.from));
-          const opening = model.tree.topNode.firstChild;
-          const title = model.headings[0];
-          // 首个语法块为同名一级标题时，项目标题已表达其身份，聚合视图不再重复分组。
-          // 限定文档根节点与首块位置，保留引用内标题、同名子章节及后续同名章节；原文不变。
-          const documentTitleFrom = opening && (opening.name === 'ATXHeading1' || opening.name === 'SetextHeading1')
-            && title?.from === opening.from && title.text === project.name.trim() ? title.from : null;
-          // 任务与章节均按原文位置排序，单次推进游标保留同名章节身份，避免逐任务扫描整篇文档。
           for (const result of searchTasks(model, '', false)) {
-            while (headingIndex + 1 < model.headings.length && model.headings[headingIndex + 1].from < result.from) headingIndex++;
-            const heading = model.headings[headingIndex];
-            // 文档标题和一级归档标题不作为待办分组，置空章节位置也让任务使用项目直属层级。
-            // 归档内用户创建的子标题仍保留。
-            const sectionFrom = heading && heading.from !== documentTitleFrom && !archiveHeadingStarts.has(heading.from) ? heading.from : null;
-            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: sectionFrom === null ? '' : result.heading, sectionFrom, checked: false, model, item: result.item, path: project.path, depth: result.depth, ancestorTos: result.ancestorTos });
+            while (headingIndex + 1 < model.headings.length && model.headings[headingIndex + 1].from < result.from) {
+              const heading = model.headings[++headingIndex];
+              while (chain.length && chain.at(-1)!.level >= heading.level) chain.pop();
+              if (heading.level > 1) chain.push(heading);
+            }
+            allFound.push({ projectId: project.id, projectName: project.name, from: result.from, title: result.title, section: chain.at(-1)?.text ?? '', checked: false, model, item: result.item, path: project.path, depth: result.depth, ancestorTos: result.ancestorTos, sectionChain: chain.map(({ from, text }) => ({ from, text })) });
           }
         }
       } catch { /* 失效路径由项目打开流程提供重新定位，不阻止其他项目查询。 */ }
@@ -905,10 +915,11 @@
             <section class="aggregate-group">
               <h2>{project.name}<span>{projectResults.length}</span></h2>
               {#each visibleResults as result, index}
-                {#if result.sectionFrom !== null && (index === 0 || result.sectionFrom !== visibleResults[index - 1].sectionFrom)}
-                  <h3 class="aggregate-section-heading"><span>{result.section}</span></h3>
-                {/if}
-                <button class="aggregate-task" class:aggregate-section-task={result.sectionFrom !== null} class:aggregate-nested={result.depth > 0} style:--depth={result.depth} aria-label={result.title} onclick={() => locate(result)}>{#each aggregateGuides(visibleResults, index) as guide}<i class="task-guide" class:task-guide-end={!guide.continues} class:task-guide-drop={guide.drop} style:--level={guide.level} aria-hidden="true"></i>{/each}<span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
+                {@const headings = aggregateHeadings(visibleResults, index)}
+                {#each headings as heading}
+                  <h3 class="aggregate-section-heading" style:--depth={heading.depth}><span>{heading.text}</span></h3>
+                {/each}
+                <button class="aggregate-task" class:aggregate-section-task={result.sectionChain.length > 0} class:aggregate-nested={result.depth > 0} style:--depth={aggregateDepth(result)} aria-label={result.title} onclick={() => locate(result)}>{#each aggregateGuides(visibleResults, index) as guide}<i class="task-guide" class:task-guide-end={!guide.continues} class:task-guide-drop={guide.drop} style:--level={guide.level} aria-hidden="true"></i>{/each}<span class="readonly-box" aria-hidden="true"></span><span class="aggregate-content"><span class="aggregate-title" use:taskTitle={result}></span></span><svg class="result-arrow" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5M5 5h10v10"/></svg></button>
               {/each}
               {#if projectResults.length > limit}<button class="load-more" onclick={() => aggregateLimits[project.id] = limit + 100}>{$t('显示更多（还有 {count} 条）', { count: projectResults.length - limit })}</button>{/if}
             </section>
