@@ -29,6 +29,10 @@
 
   const desktop = isTauri();
   const TOAST_DURATION_MS = 3000;
+  // 灵感簿使用伪项目身份复用会话与搜索机制；不写入 projects 列表，避免污染项目语义与聚合视图。
+  const INSPIRATION_ID = 'inspiration';
+  // 托管灵感文件的固定初始内容；与新建项目模板一致以一级标题起头，语言切换不改变文件名与内容。
+  const INSPIRATION_TEXT = '# 灵感\n\n';
   const windowMaterial = new WindowMaterialController(document.documentElement, (material, theme, keepTransparentOnBlur) =>
     desktop ? invoke<boolean>('set_window_material', { material, theme: theme === 'system' ? null : theme, keepTransparentOnBlur }) : Promise.resolve(false));
   let files: FilePort;
@@ -56,6 +60,23 @@
   let cardTransitioning = $state(false);
   let appShell: HTMLDivElement;
   const cardWindow = desktop ? createCardWindowController() : undefined;
+
+  /** Windows 大小写与分隔符差异视为同一路径，用于防止同一文件形成双会话。 */
+  function samePath(left: string, right: string): boolean {
+    return left.replace(/\\/g, '/').toLocaleLowerCase() === right.replace(/\\/g, '/').toLocaleLowerCase();
+  }
+
+  /** 灵感簿会话的伪项目身份；名称为文件本名，界面文案在展示处翻译。 */
+  function inspirationProject(path: string): Project {
+    return { id: INSPIRATION_ID, name: '灵感', path };
+  }
+
+  /** 托管灵感文件的默认位置；桌面在应用数据目录，浏览器预览保存在本地沙盒目录。 */
+  async function defaultInspirationPath(): Promise<string> {
+    if (!desktop) return '浏览器/灵感.md';
+    const { appDataDir, join } = await import('@tauri-apps/api/path');
+    return join(await appDataDir(), '灵感.md');
+  }
 
   /**
    * 函数职责：切换卡片布局，并在桌面环境同步窗口几何与置顶状态。
@@ -338,7 +359,9 @@
   function captureUI(): void {
     if (!active || !editor || switching) return;
     active.state = editor.state; active.ui = editor.getUIState();
-    config.projectViews[active.project.id] = active.ui;
+    // 灵感簿的阅读状态与文件关联独立存放；active 标记最近编辑界面，供启动恢复。
+    if (active.project.id === INSPIRATION_ID) config.inspiration = { ...(config.inspiration ?? { path: active.project.path }), view: active.ui, active: true };
+    else config.projectViews[active.project.id] = active.ui;
   }
   function documentChanged(): void {
     if (switching || !active || !editor) return;
@@ -366,48 +389,16 @@
     const generation = ++openGeneration;
     captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = '';
     try {
-      let session = sessions.get(project.id);
+      let session: ProjectSession | null | undefined = sessions.get(project.id);
       if (!session) {
         const disk = await files.read(project.path);
-        let draft: RecoveryDraft | null = null;
-        let recoveryWarning = '';
-        try { draft = await files.loadRecovery(project.path); }
-        catch (error) { recoveryWarning = $t("恢复草稿无法读取：{error}", { error: errorMessage(error) }); }
-        if (generation !== openGeneration) return;
-        const ui = freshUI(project);
-        resourceDocumentPath = project.path;
-        switching = true;
-        if (!editor) editor = new EditorController(editorHost, {
-          text: disk.text, mode: ui.mode, onChange: documentChanged, onUIChange: editorUIChanged,
-          onStatus: message => notify(message, message.includes($t("可撤销"))),
-          resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
-          openLink: openDocumentLink,
-        });
-        else editor.restoreState(editor.createState(disk.text, ui.mode));
-        editor.setUIState(ui);
-        const current: ProjectSession = {
-          project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: $t("所有更改已保存") },
-          saver: undefined as unknown as SaveCoordinator,
-        };
-        current.saver = new SaveCoordinator({
-          files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
-          reload: (text, reason) => {
-            if (active?.project.id === project.id && editor) {
-              switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
-              if (reason === 'external' && !current.saver.hasProtectedRecovery) editor.normalizeArchive();
-            } else if (editor) current.state = editor.createState(text, current.ui.mode);
-            version += 1; scheduleIndex();
-          },
-          onStatus: status => { current.status = status; version += 1; },
-        });
-        sessions.set(project.id, current); session = current;
-        void files.watch(project.path, () => { void current.saver.checkExternal(); indexCache.delete(project.id); })
-          .then(stop => { if (sessions.has(project.id)) current.stopWatch = stop; else stop(); })
-          .catch(error => notify($t("文件监听暂不可用：{error}", { error: errorMessage(error) })));
-        if (draft && draft.text !== disk.text) { recovery = { project, disk, text: draft.text }; dialog = 'recovery'; }
+        session = await buildSession(project, disk, generation);
+        if (!session) return;
       }
       if (generation !== openGeneration) { switching = false; return; }
       switching = true; active = session; config.activeProjectId = project.id;
+      // 打开任何项目都结束“上次停留在灵感簿”的恢复标记。
+      if (config.inspiration) config.inspiration = { ...config.inspiration, active: false };
       resourceDocumentPath = project.path;
       editor!.restoreState(session.state, targetMode ? { ...session.ui, mode: targetMode } : session.ui); switching = false;
       version += 1; scheduleConfig();
@@ -420,6 +411,127 @@
       if (generation !== openGeneration) return;
       switching = false; fatal = errorMessage(error); missing = project;
     }
+  }
+
+  /**
+   * 函数职责：打开灵感簿会话，首次进入时在托管位置创建文件；已关联但文件缺失时交给缺失横幅。
+   * 输入说明：position 与 targetMode 供搜索定位；伪项目身份不写入 activeProjectId。
+   * 输出说明：界面停留在灵感簿；配置中的路径与阅读状态随之建立，active 标记恢复入口。
+   * 实现思路：与 openProject 共用会话构建；仅对文件创建和配置字段分流做差异处理。
+   */
+  async function openInspiration(position?: number, targetMode?: ViewMode): Promise<void> {
+    if (projectActionBusy) return;
+    const generation = ++openGeneration;
+    captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = ''; dialog = null;
+    try {
+      let session: ProjectSession | null | undefined = sessions.get(INSPIRATION_ID);
+      let firstCreate = false;
+      if (!session) {
+        const knownPath = config.inspiration?.path;
+        const path = knownPath ?? await defaultInspirationPath();
+        let disk: FileSnapshot;
+        try {
+          disk = await files.read(path);
+        } catch (error) {
+          // 首次进入时托管文件尚不存在，直接创建；已有路径但读不到则提供重建与重新定位。
+          if (knownPath) { fatal = errorMessage(error); missing = inspirationProject(path); return; }
+          disk = await files.create(path, INSPIRATION_TEXT);
+          firstCreate = true;
+        }
+        if (generation !== openGeneration) return;
+        config.inspiration = { ...config.inspiration, path };
+        session = await buildSession(inspirationProject(path), disk, generation);
+        if (!session) return;
+      }
+      if (generation !== openGeneration) { switching = false; return; }
+      switching = true; active = session;
+      config.inspiration = { ...(config.inspiration ?? { path: session.project.path }), active: true };
+      resourceDocumentPath = session.project.path;
+      editor!.restoreState(session.state, targetMode ? { ...session.ui, mode: targetMode } : session.ui); switching = false;
+      version += 1; scheduleConfig();
+      // 新建文件时光标落到标题后的末尾，点开即可输入。
+      const cursor = position ?? (firstCreate ? session.state.doc.length : undefined);
+      if (cursor !== undefined) { searchOpen = false; await tick(); editor!.focusAt(cursor); }
+      else editor!.view.focus();
+      if (!session.saver.hasProtectedRecovery) editor!.normalizeArchive();
+      captureUI(); version += 1;
+    } catch (error) {
+      if (generation !== openGeneration) return;
+      switching = false; fatal = errorMessage(error); missing = sessions.get(INSPIRATION_ID)?.project ?? null;
+    }
+  }
+
+  /**
+   * 函数职责：为缺失的灵感簿重建空文件并重新打开，不删除或改写磁盘上的旧文件。
+   * 输入说明：只由缺失横幅在灵感簿缺失时触发。
+   * 输出说明：重建成功后清空错误界面；旧阅读状态一并作废，避免把光标与折叠套到新文档。
+   * 实现思路：原路径能重新读取则直接复用，读不到才创建新空文件。
+   */
+  async function recreateInspiration(): Promise<void> {
+    if (missing?.id !== INSPIRATION_ID) return;
+    const path = config.inspiration?.path ?? missing.path;
+    try {
+      let disk: FileSnapshot;
+      try { disk = await files.read(path); }
+      catch { disk = await files.create(path, INSPIRATION_TEXT); }
+      ++openGeneration;
+      sessions.get(INSPIRATION_ID)?.stopWatch();
+      sessions.get(INSPIRATION_ID)?.saver.dispose();
+      sessions.delete(INSPIRATION_ID);
+      config.inspiration = { path };
+      missing = null; fatal = '';
+      // 新文件与首次创建一致，光标落到标题后的末尾。
+      await openInspiration(INSPIRATION_TEXT.length);
+      scheduleConfig();
+    } catch (error) { fatal = errorMessage(error); }
+  }
+
+  /**
+   * 函数职责：为文档路径构建可复用的编辑会话，覆盖恢复草稿、保存协调器与文件监听。
+   * 输入说明：project 为会话身份（真实项目或灵感簿伪项目）；disk 是磁盘基线；generation 使较早的读取失效。
+   * 输出说明：会话写入 sessions 后返回；代次失效时返回 null，调用方直接结束本次打开。
+   * 实现思路：编辑器实例全局唯一，按需创建或换入状态；阅读状态按会话身份分流到配置的不同字段。
+   */
+  async function buildSession(project: Project, disk: FileSnapshot, generation: number): Promise<ProjectSession | null> {
+    let draft: RecoveryDraft | null = null;
+    let recoveryWarning = '';
+    try { draft = await files.loadRecovery(project.path); }
+    catch (error) { recoveryWarning = $t("恢复草稿无法读取：{error}", { error: errorMessage(error) }); }
+    if (generation !== openGeneration) return null;
+    const ui = project.id === INSPIRATION_ID
+      ? config.inspiration?.view ?? { mode: 'todo' as ViewMode, cursor: 0, scrollTop: 0, folded: [] }
+      : freshUI(project);
+    resourceDocumentPath = project.path;
+    switching = true;
+    if (!editor) editor = new EditorController(editorHost, {
+      text: disk.text, mode: ui.mode, onChange: documentChanged, onUIChange: editorUIChanged,
+      onStatus: message => notify(message, message.includes($t("可撤销"))),
+      resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
+      openLink: openDocumentLink,
+    });
+    else editor.restoreState(editor.createState(disk.text, ui.mode));
+    editor.setUIState(ui);
+    const current: ProjectSession = {
+      project, state: editor.state, ui, recoveryWarning, stopWatch: () => {}, status: { kind: 'saved', message: $t("所有更改已保存") },
+      saver: undefined as unknown as SaveCoordinator,
+    };
+    current.saver = new SaveCoordinator({
+      files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
+      reload: (text, reason) => {
+        if (active?.project.id === project.id && editor) {
+          switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
+          if (reason === 'external' && !current.saver.hasProtectedRecovery) editor.normalizeArchive();
+        } else if (editor) current.state = editor.createState(text, current.ui.mode);
+        version += 1; scheduleIndex();
+      },
+      onStatus: status => { current.status = status; version += 1; },
+    });
+    sessions.set(project.id, current);
+    void files.watch(project.path, () => { void current.saver.checkExternal(); indexCache.delete(project.id); })
+      .then(stop => { if (sessions.has(project.id)) current.stopWatch = stop; else stop(); })
+      .catch(error => notify($t("文件监听暂不可用：{error}", { error: errorMessage(error) })));
+    if (draft && draft.text !== disk.text) { recovery = { project, disk, text: draft.text }; dialog = 'recovery'; }
+    return current;
   }
 
   function setMode(next: ViewMode): void {
@@ -511,9 +623,24 @@
       // 每个项目之间让出事件循环，索引不同时创建多个编辑器。
       await new Promise(resolve => setTimeout(resolve, 0));
     }
+    // 灵感簿任务参与全局搜索，但不进入全部待办聚合；文件缺失由打开流程提供重建与重新定位。
+    if (config.inspiration) {
+      if (generation !== indexGeneration) return;
+      try {
+        const text = sessions.get(INSPIRATION_ID)?.state.doc.toString() ?? (await files.read(config.inspiration.path)).text;
+        const model = modelForProject(INSPIRATION_ID, text);
+        for (const result of searchTasks(model, query, searchOpen && includeArchived)) {
+          found.push({ projectId: INSPIRATION_ID, projectName: $t("灵感"), from: result.from, title: result.title, section: result.heading, checked: result.archived });
+        }
+      } catch { /* 缺失的灵感簿文件不阻塞其他项目的查询。 */ }
+    }
     if (generation === indexGeneration) { results = found; resultLimit = 100; aggregateResults = allFound; indexing = false; }
   }
   async function locate(result: TaskResult): Promise<void> {
+    if (result.projectId === INSPIRATION_ID) {
+      await openInspiration(result.from, result.checked ? 'archive' : 'todo');
+      return;
+    }
     const project = config.projects.find(item => item.id === result.projectId);
     if (project) {
       await openProject(project, result.from, result.checked ? 'archive' : 'todo');
@@ -556,7 +683,8 @@
   async function addProject(): Promise<void> {
     if (!projectName.trim() || !projectPath) { dialogError = $t("填写项目名称并选择 Markdown 文件。"); return; }
     try {
-      if (config.projects.some(item => item.path.replace(/\\/g, '/').toLocaleLowerCase() === projectPath.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error($t("这个文件已经关联到项目。"));
+      if (config.projects.some(item => samePath(item.path, projectPath))) throw new Error($t("这个文件已经关联到项目。"));
+      if (config.inspiration && samePath(config.inspiration.path, projectPath)) throw new Error($t("这个文件已用作灵感簿。"));
       if (createFile) await files.create(projectPath, `# ${projectName.trim()}\n\n- [ ] \n`);
       else await files.read(projectPath);
       const project = { id: crypto.randomUUID(), name: projectName.trim(), path: projectPath };
@@ -597,8 +725,8 @@
       const replaceActive = active?.project.id === project.id;
       if (replaceActive) {
         active = null; config.activeProjectId = null;
-        // 缓存会话恢复依赖同一个编辑器；仅在没有可打开项目时释放它。
-        if (!config.projects.some(item => !item.archived)) { editor?.destroy(); editor = undefined; }
+        // 灵感簿会话仍依赖同一个编辑器；只有没有任何存活会话时才释放它。
+        if (sessions.size === 0) { editor?.destroy(); editor = undefined; }
       }
       if (missing?.id === project.id) { missing = null; fatal = ''; }
       dialog = null;
@@ -608,7 +736,11 @@
       aggregateResults = aggregateResults.filter(item => item.projectId !== project.id);
       projectActionBusy = false;
       const next = config.projects.find(item => !item.archived);
-      if (replaceActive && next && screen === 'project') await openProject(next);
+      if (replaceActive && screen === 'project') {
+        if (next) await openProject(next);
+        // 最后一个项目被移走后落到灵感簿，避免只剩空白欢迎页。
+        else if (config.inspiration || sessions.has(INSPIRATION_ID)) await openInspiration();
+      }
       scheduleConfig(); scheduleIndex();
     } finally { projectActionBusy = false; }
   }
@@ -638,15 +770,23 @@
     if (!project) return;
     try {
       const path = await files.chooseFile(false); if (!path) return;
-      if (config.projects.some(item => item.id !== project.id && item.path.replace(/\\/g, '/').toLocaleLowerCase() === path.replace(/\\/g, '/').toLocaleLowerCase())) throw new Error($t("这个文件已经关联到另一个项目。"));
+      if (config.projects.some(item => item.id !== project.id && samePath(item.path, path))) throw new Error($t("这个文件已经关联到另一个项目。"));
+      if (project.id !== INSPIRATION_ID && config.inspiration && samePath(config.inspiration.path, path)) throw new Error($t("这个文件已用作灵感簿。"));
       const disk = await files.read(path);
       const session = sessions.get(project.id);
       // 新文件与内存草稿可能不同；先持久化待恢复文本，打开后展示双方内容供选择。
       if (session?.saver.hasLocalChanges && session.state.doc.toString() !== disk.text) {
         await files.saveRecovery({ path, text: session.state.doc.toString(), baseRevision: disk.revision, savedAt: Date.now() });
       }
-      session?.stopWatch(); session?.saver.dispose(); sessions.delete(project.id); project.path = path;
-      await openProject(project); scheduleConfig();
+      session?.stopWatch(); session?.saver.dispose(); sessions.delete(project.id);
+      if (project.id === INSPIRATION_ID) {
+        config.inspiration = { path, active: true };
+        await openInspiration();
+      } else {
+        project.path = path;
+        await openProject(project);
+      }
+      scheduleConfig();
     } catch (error) { fatal = errorMessage(error); }
   }
   async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify($t("已保存")); } }
@@ -751,6 +891,10 @@
     }
     if (event.key.toLowerCase() === 's') { event.preventDefault(); void save(); }
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); openProjectSearch(); }
+    if (event.key.toLowerCase() === 'i' && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      if (!event.repeat) void openInspiration();
+    }
     if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); closeProjectSearch(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
   }
 
@@ -775,7 +919,8 @@
         }
         if (disposed) return; configReady = true; ready = true;
         const project = availableProjects.find(item => item.id === config.activeProjectId) ?? availableProjects[0];
-        if (project) await openProject(project);
+        if (config.inspiration?.active) await openInspiration();
+        else if (project) await openProject(project);
         else config.activeProjectId = null;
         if (desktop) {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -830,6 +975,7 @@
     <aside class="sidebar" aria-label={$t("项目导航")} inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
       <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 7h8M6 10h8M6 13h5"/></svg> {$t("全部待办")} <svg class="shortcut" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7H5a2 2 0 1 1 2-2v10a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H7Z"/></svg></button>
+      <button class:nav-active={screen === 'project' && active?.project.id === INSPIRATION_ID} class="nav-item inspiration-nav" onclick={() => void openInspiration()} title={$t("灵感 (Ctrl I)")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5a5.5 5.5 0 0 0-3.3 9.9c.8.6 1.3 1.5 1.3 2.4v.7h4v-.7c0-.9.5-1.8 1.3-2.4A5.5 5.5 0 0 0 10 2.5Z"/><path d="M8.5 17.5h3"/></svg> {$t("灵感")}</button>
       <div class="sidebar-section"><span>{$t("项目")}</span><div class="project-actions">
         <div class="project-search" data-project-search>
           <button class="icon-button" aria-label={$t("查找项目")} title={$t("查找项目 (Ctrl P)")} aria-expanded={projectSearchOpen} aria-controls="project-search-panel" onclick={() => projectSearchOpen ? closeProjectSearch() : openProjectSearch()}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg></button>
@@ -865,7 +1011,7 @@
     <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
     {#if !cardMode}
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
-      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label={$t("展开项目导航")} onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">{$t("工作空间")}</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? $t("全部待办") : active?.project.name ?? $t("欢迎")}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label={$t("未保存")} title={$t("未保存")}>*</span>{/if}</div>
+      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label={$t("展开项目导航")} onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">{$t("工作空间")}</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? $t("全部待办") : active?.project.id === INSPIRATION_ID ? $t("灵感") : active?.project.name ?? $t("欢迎")}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label={$t("未保存")} title={$t("未保存")}>*</span>{/if}</div>
       <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>{$t("搜索")}<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label={$t("更多操作")} aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
       {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
@@ -875,9 +1021,9 @@
         <button role="menuitem" onclick={() => currentItemAction('fold')}>{$t("折叠 / 展开当前项")}</button>
         <button role="menuitem" onclick={() => currentItemAction('up')}>{$t("同级上移")}</button>
         <button role="menuitem" onclick={() => currentItemAction('down')}>{$t("同级下移")}</button>
-        <hr/><button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>
+        <hr/>{#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>{/if}
         <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
-        <button role="menuitem" onclick={() => openDialog('remove')}>{$t("移除项目关联")}</button>
+        {#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('remove')}>{$t("移除项目关联")}</button>{/if}
         <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button><button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>
       </div>{/if}
     </header>
@@ -895,7 +1041,7 @@
       <div class="viewbar"><div class="tabs" aria-label={$t("文档视图")}>{#each [['todo',$t("待办"),counts.todo],['archive',$t("归档"),counts.archive]] as tab}<button class:tab-active={previewMode === tab[0]} onclick={() => setMode(tab[0] as ViewMode)}>{tab[1]}{#if tab[2] !== null}<span>{tab[2]}</span>{/if}</button>{/each}</div></div>
     {/if}
 
-    {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>{$t("重新定位文件")}</button>{/if}</div>{/if}
+    {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>{$t("重新定位文件")}</button>{/if}{#if missing?.id === INSPIRATION_ID}<button onclick={recreateInspiration}>{$t("新建空灵感簿")}</button>{/if}</div>{/if}
     {#if configError}<div class="error-banner" role="alert">{configError}<button onclick={() => persistConfig()}>{$t("重试配置保存")}</button></div>{/if}
     {#if active?.recoveryWarning}<div class="error-banner" role="alert">{active.recoveryWarning}{$t("。当前显示完好的 Markdown 原文件。")}</div>{/if}
     {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">{$t("磁盘文件有新的修改，你的编辑已保留。")}<button onclick={() => openDialog('conflict')}>{$t("比较并处理")}</button></div>{/if}
@@ -992,7 +1138,7 @@
           onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}/>
       {:else if dialog === 'help'}
         <h2 id="dialog-title">{$t("快捷键")}</h2>
-        <dl class="shortcuts"><dt>Ctrl N</dt><dd>{$t("新增任务")}</dd><dt>Enter</dt><dd>{$t("继续任务；空任务退出列表")}</dd><dt>Shift Enter</dt><dd>{$t("在任务正文中换行")}</dd><dt>Tab / Shift Tab</dt><dd>{$t("整项缩进 / 反缩进")}</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>{$t("撤销 / 重做当前项目的编辑")}</dd><dt>Ctrl S</dt><dd>{$t("立即保存")}</dd><dt>Ctrl P</dt><dd>{$t("快速查找项目")}</dd><dt>Ctrl Shift F</dt><dd>{$t("跨项目搜索")}</dd></dl>
+        <dl class="shortcuts"><dt>Ctrl N</dt><dd>{$t("新增任务")}</dd><dt>Enter</dt><dd>{$t("继续任务；空任务退出列表")}</dd><dt>Shift Enter</dt><dd>{$t("在任务正文中换行")}</dd><dt>Tab / Shift Tab</dt><dd>{$t("整项缩进 / 反缩进")}</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>{$t("撤销 / 重做当前项目的编辑")}</dd><dt>Ctrl S</dt><dd>{$t("立即保存")}</dd><dt>Ctrl P</dt><dd>{$t("快速查找项目")}</dd><dt>Ctrl I</dt><dd>{$t("跳转到灵感簿")}</dd><dt>Ctrl Shift F</dt><dd>{$t("跨项目搜索")}</dd></dl>
       {:else if dialog === 'conflict'}
         <p class="eyebrow">{$t("外部修改")}</p><h2 id="dialog-title">{$t("选择要保留的内容")}</h2><p class="muted">{$t("可先另存副本，再选择版本；也可以关闭此窗口，在编辑器中手动合并。")}</p>
         <div class="compare"><label>{$t("当前编辑")}<textarea readonly value={active?.state.doc.toString()}></textarea></label><label>{$t("磁盘版本")}<textarea readonly value={active?.status.external?.text}></textarea></label></div>

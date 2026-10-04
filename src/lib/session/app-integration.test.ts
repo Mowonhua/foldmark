@@ -1817,3 +1817,71 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     expect(desktopBoundary.destroy).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('灵感簿', () => {
+  it('首次打开自动创建托管文件，编辑保存后重启直接回到灵感簿', async () => {
+    await start(['- [ ] 甲一\n']);
+    shortcut('I');
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(localStorage.getItem('foldmark:file:浏览器/灵感.md')).not.toBeNull());
+    await insertTask(); await paste('随手记下的灵感');
+    await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('随手记下的灵感'));
+    // 等待配置防抖落盘，重启后验证“上次停留界面”恢复到灵感簿。
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await remount();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    expect(documentInput().textContent).toContain('随手记下的灵感');
+  });
+
+  it('全局搜索包含灵感簿任务并定位回原文，全部待办不聚合灵感簿', async () => {
+    await start(['- [ ] 甲一\n']);
+    button('灵感').click();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await insertTask(); await paste('速记想法');
+    await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('速记想法'));
+    button(/^搜索/).click(); await tick();
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索所有项目"]')!;
+    search.value = '速记想法'; search.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('灵感'), { timeout: 3000 });
+    document.querySelector<HTMLButtonElement>('.search-result')!.click();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    expect(documentInput().textContent).toContain('速记想法');
+    button(/全部待办/).click();
+    await vi.waitFor(() => expect(document.querySelector('.aggregate')?.textContent).toContain('甲一'), { timeout: 3000 });
+    expect(document.querySelector('.aggregate')?.textContent).not.toContain('速记想法');
+  });
+
+  it('更多菜单隐藏项目专属操作，任务操作与另存副本保留', async () => {
+    await start(['- [ ] 甲一\n']);
+    button('灵感').click();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    button('更多操作').click(); await tick();
+    const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(item => item.textContent ?? '');
+    expect(items().some(text => text.includes('重命名项目'))).toBe(false);
+    expect(items().some(text => text.includes('移除项目关联'))).toBe(false);
+    expect(items().some(text => text.includes('另存 Markdown 副本'))).toBe(true);
+    expect(items().some(text => text.includes('新增任务'))).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await tick();
+    await switchProject(firstProject);
+    button('更多操作').click(); await tick();
+    expect(items().some(text => text.includes('重命名项目'))).toBe(true);
+  });
+
+  it('灵感簿文件被删除后进入缺失横幅，一键重建空文件并作废旧阅读状态', async () => {
+    await start(['- [ ] 甲一\n']);
+    button('灵感').click();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await insertTask(); await paste('将被删除的灵感');
+    await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('将被删除的灵感'));
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    localStorage.removeItem('foldmark:file:浏览器/灵感.md');
+    if (mounted) await unmount(mounted);
+    mounted = mount(App, { target: container }); await tick();
+    await vi.waitFor(() => expect(document.querySelector('.error-banner')).not.toBeNull());
+    button('新建空灵感簿').click();
+    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toBe('# 灵感\n\n'));
+    expect(documentInput().textContent).not.toContain('将被删除的灵感');
+  });
+});

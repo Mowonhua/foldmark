@@ -61,6 +61,15 @@ describe('配置边界', () => {
       expect(validateAppConfig(config)).toBe(config);
     }
   });
+  it('灵感簿字段兼容旧配置，拒绝非法路径与阅读状态', () => {
+    expect(validateAppConfig({ projects: [], inspiration: undefined })).not.toBeNull();
+    const view = { mode: 'todo', cursor: 0, scrollTop: 0, folded: [] };
+    const valid = { projects: [], inspiration: { path: '灵感.md', active: true, view } };
+    expect(validateAppConfig(valid)).toBe(valid);
+    for (const inspiration of [null, '', 42, [], {}, { active: true }, { path: '' }, { path: '灵感.md', active: 'yes' }, { path: '灵感.md', view: { mode: 'todo', cursor: 'zero' } }]) {
+      expect(() => validateAppConfig({ projects: [], inspiration })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('拒绝无效源码来源和无法安全恢复的阅读坐标', () => {
     const view = { mode: 'source', cursor: 0, scrollTop: 0, folded: [] };
     const sourceReturn = { cursor: 0, scrollTop: 0, anchor: 0, offset: 0 };

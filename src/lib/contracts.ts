@@ -25,8 +25,16 @@ export interface Preferences {
   /** 缺省为 false，沿用系统材质行为；true 时请求 Acrylic 在窗口失焦后继续透明。仅原生材质支持时生效。 */
   keepTransparentOnBlur?: boolean;
 }
+/** 结构职责：托管灵感簿的文件关联与阅读状态；文件由应用创建，可重新定位，不进入项目列表。 */
+export interface InspirationDoc {
+  path: string;
+  /** 缺省视为未打开过；形状与项目阅读状态一致，独立保存避免与项目键空间混用。 */
+  view?: ProjectView;
+  /** 缺省为 false；true 表示上次停留在灵感簿，启动时直接恢复。 */
+  active?: boolean;
+}
 /** 结构职责：保存独立于 Markdown 的配置；正文及编辑历史不属于配置。 */
-export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[] }
+export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[]; /** 灵感簿；缺省表示从未打开，首次进入时在托管位置创建。 */ inspiration?: InspirationDoc }
 /** 结构职责：保存可可靠恢复的界面定位；折叠键失配时默认展开。 */
 export interface ProjectView {
   mode: ViewMode; cursor: number; scrollTop: number; folded: string[];

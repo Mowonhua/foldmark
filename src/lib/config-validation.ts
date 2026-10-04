@@ -49,23 +49,35 @@ export function validateAppConfig(value: unknown): AppConfig | null {
   }
   if (value.projectViews !== undefined) {
     if (!record(value.projectViews)) return fail();
-    for (const view of Object.values(value.projectViews)) {
-      if (!record(view) || !['todo', 'archive', 'source'].includes(String(view.mode))) return fail();
-      if (typeof view.cursor !== 'number' || !Number.isSafeInteger(view.cursor) || view.cursor < 0) return fail();
-      if (typeof view.scrollTop !== 'number' || !Number.isFinite(view.scrollTop) || view.scrollTop < 0) return fail();
-      if (!Array.isArray(view.folded) || view.folded.some(key => typeof key !== 'string')) return fail();
-      if (view.expandedCompletedGroups !== undefined && (!Array.isArray(view.expandedCompletedGroups) || view.expandedCompletedGroups.some(key => typeof key !== 'string'))) return fail();
-      if (view.sourceView !== undefined && view.sourceView !== 'todo' && view.sourceView !== 'archive') return fail();
-      if (view.sourceReturn !== undefined) {
-        if (!record(view.sourceReturn)) return fail();
-        for (const key of ['cursor', 'scrollTop', 'anchor', 'offset']) {
-          const coordinate = view.sourceReturn[key];
-          if (typeof coordinate !== 'number' || !Number.isFinite(coordinate) || (key !== 'offset' && coordinate < 0)) return fail();
-        }
-      }
-    }
+    for (const view of Object.values(value.projectViews)) if (!validView(view)) return fail();
+  }
+  if (value.inspiration !== undefined) {
+    if (!record(value.inspiration) || !nonempty(value.inspiration.path)) return fail();
+    if (value.inspiration.active !== undefined && typeof value.inspiration.active !== 'boolean') return fail();
+    if (value.inspiration.view !== undefined && !validView(value.inspiration.view)) return fail();
   }
   return value as unknown as AppConfig;
+}
+/**
+ * 函数职责：验证项目与灵感簿共用的阅读状态形状，保证恢复逻辑不会遇到非法坐标。
+ * 输入说明：值来自不可信的持久化边界；字段允许旧配置缺省。
+ * 输出说明：形状合法返回 true；调用方负责整体配置的失败处理。
+ */
+function validView(view: unknown): boolean {
+  if (!record(view) || !['todo', 'archive', 'source'].includes(String(view.mode))) return false;
+  if (typeof view.cursor !== 'number' || !Number.isSafeInteger(view.cursor) || view.cursor < 0) return false;
+  if (typeof view.scrollTop !== 'number' || !Number.isFinite(view.scrollTop) || view.scrollTop < 0) return false;
+  if (!Array.isArray(view.folded) || view.folded.some(key => typeof key !== 'string')) return false;
+  if (view.expandedCompletedGroups !== undefined && (!Array.isArray(view.expandedCompletedGroups) || view.expandedCompletedGroups.some(key => typeof key !== 'string'))) return false;
+  if (view.sourceView !== undefined && view.sourceView !== 'todo' && view.sourceView !== 'archive') return false;
+  if (view.sourceReturn !== undefined) {
+    if (!record(view.sourceReturn)) return false;
+    for (const key of ['cursor', 'scrollTop', 'anchor', 'offset']) {
+      const coordinate = view.sourceReturn[key];
+      if (typeof coordinate !== 'number' || !Number.isFinite(coordinate) || (key !== 'offset' && coordinate < 0)) return false;
+    }
+  }
+  return true;
 }
 function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 function nonempty(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
