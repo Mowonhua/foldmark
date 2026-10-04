@@ -906,7 +906,7 @@
       <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">{$t("为想法留白")}</p><h1>{$t("从一份清单开始。")}</h1><p>{$t("写下要做的事，完成后收进归档。")}<br/>{$t("你的 Markdown 文件，始终由你掌握。")}</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>{$t("关联或新建项目")}</button><button class="text-button" onclick={() => openDialog('help')}>{$t("查看快捷键")} <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
     {/if}
     {#if screen === 'all'}
-      <section class="aggregate"><p class="eyebrow">{$t("工作空间")}</p><h1>{$t("全部待办")}<span>{aggregateResults.length}</span></h1><p class="muted">{$t("每件事都有自己的位置。选择一项，回到原文继续。")}</p>
+      <section class="aggregate"><p class="eyebrow">{$t("工作空间")}</p><h1>{$t("全部待办")}<span>{aggregateResults.length}</span></h1>
         {#each availableProjects as project}
           {@const projectResults = aggregateResults.filter(result => result.projectId === project.id)}
           {@const limit = aggregateLimits[project.id] ?? 100}

@@ -67,7 +67,8 @@
 .fm-table-wrap { overflow-x: auto; padding: 12px 0; }.fm-table-wrap table { width: 100%; border-collapse: collapse; font-size: .92em; }
 .fm-table-wrap th, .fm-table-wrap td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
 .fm-table-wrap th { background: var(--surface-alt); font-weight: 600; }
-.fm-drag-preview { position: fixed; z-index: 200; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 6px 25px var(--shadow-color); border-radius: 6px; pointer-events: none; opacity: .9; }
+/* 预览挂载在 body 下，脱离了 .cm-editor 的字体继承链，需显式跟随正文字体。 */
+.fm-drag-preview { position: fixed; z-index: 200; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 6px 25px var(--shadow-color); border-radius: 6px; pointer-events: none; opacity: .9; font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); }
 .fm-drop-line { position: fixed; height: 3px; background: var(--accent); z-index: 199; pointer-events: none; border-radius: 2px; }
 .fm-dragging, .fm-dragging * { cursor: grabbing !important; user-select: none !important; }
 .dropdown.fm-item-menu { position: fixed; right: auto; z-index: 210; display: grid; width: auto; min-width: 130px; }

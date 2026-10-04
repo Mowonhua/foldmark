@@ -56,7 +56,6 @@ export const appMessages: Readonly<Record<string, string>> = {
   "你的 Markdown 文件，始终由你掌握。": "Your Markdown files stay in your hands.",
   "关联或新建项目": "Link or create a project",
   "查看快捷键": "View keyboard shortcuts",
-  "每件事都有自己的位置。选择一项，回到原文继续。": "Everything has its place. Select a task to continue in its document.",
   "正在读取项目…": "Loading projects…",
   "暂时没有待办。给自己留一点空闲。": "No tasks for now. Enjoy a little free time.",
   "返回预览": "Back to preview",
