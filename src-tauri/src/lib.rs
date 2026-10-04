@@ -5,6 +5,7 @@ mod recovery;
 #[cfg(target_os = "windows")]
 mod single_instance;
 mod storage;
+mod system_fonts;
 mod window_material;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
@@ -305,6 +306,7 @@ pub fn run() {
             clear_recovery,
             watch_file,
             unwatch_file,
+            system_fonts::list_system_fonts,
             window_material::set_window_material
         ])
         .run(context)

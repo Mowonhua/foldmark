@@ -8,6 +8,8 @@
   import type { WindowMaterial } from './window-material';
   import { t, type LocalePreference } from './i18n';
   import { builtInThemes, type ThemeMode } from './themes';
+  import { composeFontStack, DEFAULT_FONT_STACK, GENERIC_FAMILIES, parseFontStack, probeFontInstalled, quoteFontFamily } from './font-stack';
+  import FontSelect from './FontSelect.svelte';
   import ThemeSelect from './ThemeSelect.svelte';
 
   /**
@@ -33,6 +35,53 @@
   let helpDetails: HTMLDetailsElement;
   let themeInput: HTMLInputElement;
   const transparencyAvailable = $derived(desktop && material === 'acrylic');
+  /** 当前字体栈的槽位视图；手动输入与选择器共用同一字符串真源。 */
+  const fontSlots = $derived(parseFontStack(preferences.fontFamily));
+  /** 字体栈偏离默认值时提供一键恢复；空栈同样视为默认以外的状态。 */
+  const fontStackModified = $derived(preferences.fontFamily !== DEFAULT_FONT_STACK);
+
+  /**
+   * 函数职责：替换字体栈指定槽位的具名字体并重组字符串。
+   * 输入说明：index 0 为主字体、1 为备用字体；family 为 null 表示移除该槽位。
+   * 输出说明：写回 preferences.fontFamily，由 App 的既有效果热应用并持久化。
+   * 实现思路：基于解析结果原地替换；槽位不足时追加，移除时其后条目前移。
+   */
+  function replaceNamedSlot(index: number, family: string | null): void {
+    const { named, generic } = parseFontStack(preferences.fontFamily);
+    const next = [...named];
+    if (family === null) {
+      if (index < next.length) next.splice(index, 1);
+    } else if (index < next.length) {
+      next[index] = family;
+    } else {
+      next.push(family);
+    }
+    preferences.fontFamily = composeFontStack(next, generic);
+  }
+
+  /**
+   * 函数职责：设置栈尾通用兜底关键字。
+   * 输入说明：generic 为 null 表示移除兜底，栈中只剩具名字体。
+   * 输出说明：写回 preferences.fontFamily，具名字体保持原顺序。
+   */
+  function setGenericFamily(generic: string | null): void {
+    preferences.fontFamily = composeFontStack(fontSlots.named, generic);
+  }
+
+  /**
+   * 函数职责：在徽章行上把纵向滚轮转为横向滚动，查看被裁剪的徽章。
+   * 输入说明：wheel 事件；带横向分量或无溢出时交给浏览器默认行为。
+   * 输出说明：滚动条不绘制；已滚到一端时放行滚动链，外层容器继续滚动。
+   */
+  function onChipsWheel(event: WheelEvent): void {
+    const chips = event.currentTarget as HTMLDivElement;
+    const maxScroll = chips.scrollWidth - chips.clientWidth;
+    if (maxScroll <= 0 || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    const target = chips.scrollLeft + event.deltaY;
+    if ((target <= 0 && chips.scrollLeft <= 0) || (target >= maxScroll && chips.scrollLeft >= maxScroll)) return;
+    event.preventDefault();
+    chips.scrollLeft = Math.max(0, Math.min(maxScroll, target));
+  }
 
   /**
    * 函数职责：让帮助浮层先消费 Escape，保留其所属的设置对话框。
@@ -97,7 +146,36 @@
 
   <section class="settings-section" aria-labelledby="settings-reading-heading">
     <h3 id="settings-reading-heading">{$t('正文')}</h3>
-    <div class="settings-row"><label for="settings-font">{$t('正文字体')}</label><input id="settings-font" class="settings-font-input" bind:value={preferences.fontFamily}/></div>
+    <FontSelect inline id="settings-font-primary" label={$t('正文字体')} bind:value={() => fontSlots.named[0] ?? null, family => replaceNamedSlot(0, family)} />
+    <FontSelect inline id="settings-font-fallback" label={$t('备用字体')} allowEmpty bind:value={() => fontSlots.named[1] ?? null, family => replaceNamedSlot(1, family)} />
+    <ThemeSelect inline id="settings-font-generic" label={$t('兜底字体')} bind:value={() => fontSlots.generic ?? 'none', family => setGenericFamily(family === 'none' ? null : family)}
+      options={[{ value: 'none', label: $t('无') }, ...GENERIC_FAMILIES.map(family => ({ value: family, label: family }))]} />
+    <details class="settings-font-manual">
+      <summary>
+        <span>{$t('手动输入字体')}</span>
+        <span class="settings-font-current">{preferences.fontFamily || $t('未选择')}</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg>
+      </summary>
+      <div class="settings-font-editor">
+        <input id="settings-font" class="settings-font-input" bind:value={preferences.fontFamily} placeholder={DEFAULT_FONT_STACK} aria-label={$t('手动输入字体')}/>
+        <div class="settings-font-status" role="status">
+          <div class="settings-font-chips" onwheel={onChipsWheel}>
+            {#each fontSlots.named as family (family)}
+              <span class="settings-font-chip" class:settings-font-chip-missing={!probeFontInstalled(family)} style:font-family={quoteFontFamily(family)}>
+                <span aria-hidden="true">{probeFontInstalled(family) ? '✓' : '✗'}</span>{family}
+              </span>
+            {/each}
+            {#if fontSlots.generic}<span class="settings-font-chip settings-font-chip-generic">{fontSlots.generic}</span>{/if}
+            {#if fontSlots.named.length === 0 && !fontSlots.generic}
+              <span class="settings-font-status-empty">{$t('尚未选择字体，正文使用应用默认字体。')}</span>
+            {/if}
+          </div>
+          {#if fontStackModified}
+            <button type="button" class="settings-font-reset" onclick={() => preferences.fontFamily = DEFAULT_FONT_STACK}>{$t('恢复默认')}</button>
+          {/if}
+        </div>
+      </div>
+    </details>
     <div class="settings-row"><label for="settings-font-size">{$t('字号')}</label><div class="settings-range-control"><input id="settings-font-size" type="range" min="13" max="24" step="1" bind:value={preferences.fontSize}/><output for="settings-font-size">{preferences.fontSize} px</output></div></div>
     <div class="settings-row"><label for="settings-content-width">{$t('正文宽度')}</label><div class="settings-range-control"><input id="settings-content-width" type="range" min="640" max="960" step="20" bind:value={preferences.contentWidth}/><output for="settings-content-width">{preferences.contentWidth} px</output></div></div>
   </section>

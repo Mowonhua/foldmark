@@ -262,6 +262,39 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .theme-select-popup button.theme-select-option[aria-selected=true]{font-weight:600;color:var(--accent);background:var(--nav-active-background,var(--accent-soft))}
 .theme-select-popup button.theme-select-option[data-active=true]{background:var(--selection);color:var(--selection-ink)}
 .theme-select-check{flex-shrink:0;width:1em;text-align:center}
+/* 字体选择弹层在共享下拉契约上改为固定搜索框加独立滚动选项区；只定义布局与交互，视觉继续消费语义变量。 */
+/* 作者样式的 display:flex 会压过 UA 的 [hidden] 规则；关闭态必须显式恢复隐藏。 */
+.font-select-popup[hidden]{display:none}
+.font-select-popup{display:flex;flex-direction:column;overflow:hidden}
+.font-select-popup .font-select-search{flex-shrink:0;display:block;width:100%;margin:0 0 4px;padding:8px 10px;font-size:12px}
+.font-select-popup .font-select-options{position:relative;flex:1;min-height:0;overflow:auto}
+.font-select-popup .font-select-sample{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.font-select-popup .font-select-status{margin:4px 2px 2px;font-size:11px;color:var(--muted)}
+/* 手动字体栈折叠区沿用主题管理的摘要模式：标题加当前值预览，展开后为说明、等宽输入与逐字体状态徽章。 */
+.settings-font-manual{margin:0;padding:2px 0 6px}
+.settings-font-manual>summary{display:flex;align-items:center;gap:10px;min-height:36px;font-size:12px;color:var(--muted);cursor:pointer;list-style:none;border-radius:var(--control-radius,5px)}
+.settings-font-manual>summary::-webkit-details-marker{display:none}
+.settings-font-manual>summary:hover,.settings-font-manual[open]>summary{color:var(--accent)}
+.settings-font-manual>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.settings-font-manual>summary>svg{flex-shrink:0;transition:transform .15s}
+.settings-font-manual[open]>summary>svg{transform:rotate(90deg)}
+.settings-font-manual>summary>span:first-child{flex-shrink:0;white-space:nowrap}
+.settings-font-current{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,monospace;font-size:10px}
+/* 展开后编辑框就在下方，当前值预览不再占位，避免挤压标题。 */
+.settings-font-manual[open]>summary .settings-font-current{display:none}
+.settings-font-editor{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:2px 0 4px}
+.settings-font-manual .settings-font-input{width:100%;font-family:Consolas,monospace;font-size:12px}
+/* 状态行把恢复按钮固定在行尾；徽章单行排列，溢出部分被裁剪但不整枚隐藏——
+   悬停滚轮可横向滚动查看（见组件的 wheel 处理），滚动条本身不绘制。 */
+.settings-font-status{display:flex;align-items:center;gap:6px;min-width:0}
+.settings-font-chips{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.settings-font-chips::-webkit-scrollbar{display:none}
+.settings-font-chip{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;padding:3px 9px;border:1px solid var(--field-border,var(--line));border-radius:var(--control-radius,12px);font-size:11px;line-height:1.5;white-space:nowrap}
+.settings-font-chip>span{flex-shrink:0}
+.settings-font-chip-missing{color:var(--danger);border-color:var(--danger);border-style:dashed}
+.settings-font-chip-generic{color:var(--muted)}
+.settings-font-status-empty{font-size:11px;color:var(--muted)}
+.settings-font-reset{margin-left:auto;flex-shrink:0;font-size:11px;color:var(--accent);padding:4px 8px;border-radius:var(--control-radius,5px)}
 .modal input[type=range]{padding:0;accent-color:var(--accent)}
 .file-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
 .file-buttons button,.modal-actions button:not(.primary){border:1px solid var(--control-border,var(--line));border-radius:5px;padding:10px 12px;font-size:12px}
