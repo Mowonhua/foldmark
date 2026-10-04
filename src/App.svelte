@@ -21,6 +21,7 @@
   import type { ProjectSession, TaskResult } from './lib/session/types';
   import { getHiddenRanges, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel, ListItem } from './lib/markdown';
+  import { activeOutlineFrom, outlineEntries } from './lib/markdown/outline';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
   import { applyTheme, builtInThemes, parseTheme } from './lib/themes';
@@ -54,6 +55,9 @@
   let version = $state(0);
   let screen = $state<'project' | 'all'>('project');
   let sidebar = $state(true);
+  // 大纲目录是侧栏的另一种内容形态；展开意愿持久化在偏好中，视图切换不改变它。
+  let sidebarView = $state<'nav' | 'outline'>('nav');
+  let activeHeadingFrom = $state<number | null>(null);
   let reducedMotion = $state(false);
   // 卡片仅改变当前窗口布局，不写入项目配置；原侧栏状态和编辑器实例保留供退出恢复。
   let cardMode = $state(false);
@@ -155,6 +159,8 @@
   let menuOpen = $state(false);
   /** 右键目标独立于当前编辑会话，避免删除或归档错误的项目。 */
   let projectMenu = $state<{ project: Project; x: number; y: number } | null>(null);
+  /** 面包屑切换列表锚定触发按钮；大纲侧栏没有项目列表，切换项目从这里进入。 */
+  let crumbMenu = $state<{ x: number; y: number } | null>(null);
   let removeTarget = $state<Project | null>(null);
   let projectActionBusy = $state(false);
   let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | 'archived-projects' | 'updates' | null>(null);
@@ -203,6 +209,14 @@
     const archived = model.tasks.filter(item => taskIsArchived(model, item)).length;
     return { todo: model.tasks.length - archived, archive: archived };
   });
+  // 大纲只在存在当前文档的项目界面生效；全部待办和欢迎页没有可列的章节。
+  const outlineVisible = $derived(sidebarView === 'outline' && screen === 'project' && !!active);
+  const outlineItems = $derived.by(() => {
+    void version;
+    if (!active || !editor) return [];
+    const model = editor.model;
+    return outlineEntries(model, previewMode, getHiddenRanges(model, mode));
+  });
 
   // 语言只改变界面文案；复用配置队列持久化，不重建编辑器或修改正文。
   $effect(() => {
@@ -219,6 +233,35 @@
     if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+
+  // 编辑器滚动是高亮的唯一驱动；rAF 节流避免每个滚动事件都遍历标题。
+  // editor 是普通变量，不参与依赖追踪；依赖 active 使编辑器创建后重新挂载监听。
+  $effect(() => {
+    if (!active) return;
+    const view = editor?.view;
+    if (!view) return;
+    let frame = 0;
+    const schedule = (): void => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; if (outlineVisible) activeHeadingFrom = computeActiveHeading(); });
+    };
+    view.scrollDOM.addEventListener('scroll', schedule, { passive: true });
+    return () => { view.scrollDOM.removeEventListener('scroll', schedule); if (frame) cancelAnimationFrame(frame); };
+  });
+  // 模式切换、正文编辑和进入大纲都会移动章节位置；滚动事件不覆盖这些来源，需主动重算。
+  $effect(() => {
+    void version;
+    void mode;
+    if (!outlineVisible) return;
+    const frame = requestAnimationFrame(() => { activeHeadingFrom = computeActiveHeading(); });
+    return () => cancelAnimationFrame(frame);
+  });
+  // 高亮跟随正文滚动移动时，大纲列表同步滚动保持当前条目可见。
+  $effect(() => {
+    if (!outlineVisible || activeHeadingFrom === null) return;
+    void activeHeadingFrom;
+    void tick().then(() => document.querySelector('.outline-item.outline-active')?.scrollIntoView({ block: 'nearest' }));
+  });
   // 显式明暗同步原生窗口；system 解除原生覆盖，避免 WebView 的媒体查询被上一次显式模式锁住。
   $effect(() => {
     void windowMaterial.update(selectedWindowMaterial, config.preferences.theme, config.preferences.keepTransparentOnBlur ?? false).catch(error => { toast = $t("窗口材质应用失败：{error}", { error: errorMessage(error) }); });
@@ -759,6 +802,13 @@
     menuOpen = false;
     void tick().then(() => document.querySelector<HTMLElement>('[data-project-menu] button')?.focus());
   }
+
+  /** 切换列表锚定面包屑项目名下方；键盘焦点进入列表便于方向键选择。 */
+  function showCrumbMenu(event: MouseEvent): void {
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    crumbMenu = { x: Math.min(bounds.left, window.innerWidth - 230), y: bounds.bottom + 6 };
+    void tick().then(() => document.querySelector<HTMLElement>('[data-crumb-menu] button')?.focus());
+  }
   /** 菜单关闭时回到原项目行；右键操作不改变当前文档。 */
   function closeProjectMenu(): void {
     const path = projectMenu?.project.path;
@@ -854,10 +904,61 @@
   }
 
   function openProjectSearch(): void {
-    sidebar = true;
+    // 项目搜索属于导航能力；大纲模式没有搜索入口，先切回导航再展开侧栏。
+    setSidebarView('nav');
+    expandSidebar();
     projectSearchOpen = true;
     searchOpen = false;
     void tick().then(() => document.getElementById('project-filter')?.focus());
+  }
+
+  /** 切换侧栏视图并同步持久化偏好；项目搜索等导航入口切回导航时走同一出口。 */
+  function setSidebarView(next: 'nav' | 'outline'): void {
+    if (sidebarView === next) return;
+    sidebarView = next;
+    if (config.preferences.sidebarView !== next) { config.preferences.sidebarView = next; scheduleConfig(); }
+  }
+
+  /** 收起侧栏同时写入持久化展开意愿；大纲模式内手动收起在退出大纲后仍然生效。 */
+  function closeSidebar(): void {
+    sidebar = false;
+    if (config.preferences.sidebarOpen !== false) { config.preferences.sidebarOpen = false; scheduleConfig(); }
+  }
+
+  function expandSidebar(): void {
+    sidebar = true;
+    if (!config.preferences.sidebarOpen) { config.preferences.sidebarOpen = true; scheduleConfig(); }
+  }
+
+  /**
+   * 底栏大纲按钮只切换侧栏的导航/大纲视图，不负责展开收起。
+   * 从收起状态进入大纲是临时展开，不改写持久化意愿；切回导航时恢复进入前的展开状态。
+   */
+  function toggleOutlineView(): void {
+    if (outlineVisible) {
+      setSidebarView('nav');
+      sidebar = config.preferences.sidebarOpen ?? true;
+    } else {
+      setSidebarView('outline');
+      if (!sidebar) sidebar = true;
+    }
+  }
+
+  function jumpToHeading(from: number): void {
+    if (!editor) return;
+    editor.focusAt(from);
+    // 定位可能不触发滚动事件（目标已在视口内），主动按视口规则重算一次高亮。
+    requestAnimationFrame(() => { if (outlineVisible) activeHeadingFrom = computeActiveHeading(); });
+  }
+
+  /** 视口顶部以上最后一个标题即当前章节；候选不在当前大纲列表中时不产生高亮。 */
+  function computeActiveHeading(): number | null {
+    if (!editor || !active || screen !== 'project') return null;
+    const view = editor.view;
+    const scroller = view.scrollDOM;
+    const positions = editor.model.headings.map(heading => ({ from: heading.from, top: view.lineBlockAt(heading.from).top }));
+    const listed = new Set(outlineItems.filter(entry => entry.visible).map(entry => entry.from));
+    return activeOutlineFrom(positions, scroller.scrollTop, listed, scroller.scrollHeight - scroller.clientHeight);
   }
 
   function dismissDialog(event: MouseEvent): void {
@@ -874,12 +975,13 @@
     if (!target.closest('[data-global-search]')) searchOpen = false;
     if (!target.closest('[data-more-menu]')) menuOpen = false;
     if (!target.closest('[data-project-menu]')) projectMenu = null;
+    if (!target.closest('[data-crumb-menu]')) crumbMenu = null;
   }
 
   function keydown(event: KeyboardEvent): void {
     if (updateInstalling || projectActionBusy) { event.preventDefault(); return; }
     if (event.isComposing) return;
-    if (event.key === 'Escape') { closeProjectMenu(); dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; return; }
+    if (event.key === 'Escape') { closeProjectMenu(); dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; crumbMenu = null; return; }
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key.toLowerCase() === 'n' && !event.shiftKey && !event.altKey) {
       // 全部待办仍保留后台编辑器；只有当前项目且未被弹窗或独立输入框占用时才能追加任务。
@@ -917,6 +1019,8 @@
           try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
           config.projects = [{ id: 'welcome', name: '开始', path }]; config.activeProjectId = 'welcome';
         }
+        sidebar = config.preferences.sidebarOpen ?? true;
+        sidebarView = config.preferences.sidebarView ?? 'nav';
         if (disposed) return; configReady = true; ready = true;
         const project = availableProjects.find(item => item.id === config.activeProjectId) ?? availableProjects[0];
         if (config.inspiration?.active) await openInspiration();
@@ -972,8 +1076,19 @@
   {#if sidebar && !cardMode}
     <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
     <div class="sidebar-slot">
-    <aside class="sidebar" aria-label={$t("项目导航")} inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
-      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={() => sidebar = false} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
+    <aside class="sidebar" aria-label={outlineVisible ? $t("大纲目录") : $t("项目导航")} inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
+      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={closeSidebar} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
+      {#if outlineVisible}
+        {#key previewMode}
+          <nav class="outline-list" aria-label={$t("大纲目录")}>
+            {#each outlineItems as entry (entry.from)}
+              <button class="outline-item" class:outline-active={entry.from === activeHeadingFrom} disabled={!entry.visible} style:--depth={entry.level - 1} title={entry.text} onclick={() => jumpToHeading(entry.from)}>{entry.text}</button>
+            {:else}
+              <p class="outline-empty">{$t("暂无标题")}</p>
+            {/each}
+          </nav>
+        {/key}
+      {:else}
       <button class:nav-active={screen === 'all'} class="nav-item all-nav" onclick={showAll}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 7h8M6 10h8M6 13h5"/></svg> {$t("全部待办")} <svg class="shortcut" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7H5a2 2 0 1 1 2-2v10a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H7Z"/></svg></button>
       <button class:nav-active={screen === 'project' && active?.project.id === INSPIRATION_ID} class="nav-item inspiration-nav" onclick={() => void openInspiration()} title={$t("灵感 (Ctrl I)")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5a5.5 5.5 0 0 0-3.3 9.9c.8.6 1.3 1.5 1.3 2.4v.7h4v-.7c0-.9.5-1.8 1.3-2.4A5.5 5.5 0 0 0 10 2.5Z"/><path d="M8.5 17.5h3"/></svg> {$t("灵感")}</button>
       <div class="sidebar-section"><span>{$t("项目")}</span><div class="project-actions">
@@ -999,6 +1114,7 @@
         {/each}
       </nav>
       <div class="sidebar-bottom"><button class="icon-button" aria-label={$t("设置")} onclick={() => openDialog('settings')}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2-1.5.9-2-.6-2 3.4 1.5 1.4v1.8L2 12.3l2 3.4 2-.6 1.5.9.5 2h4l.5-2 1.5-.9 2 .6 2-3.4-1.5-1.4V9.1L18 7.7l-2-3.4-2 .6-1.5-.9-.5-2Z"/><circle cx="10" cy="10" r="3"/></svg></button></div>
+      {/if}
     </aside>
     </div>
   {/if}
@@ -1011,7 +1127,7 @@
     <!-- 拖动仅命中顶部非交互区域；按钮保留点击行为，Tauri 处理拖动和双击最大化。 -->
     {#if !cardMode}
     <header class="topbar" data-tauri-drag-region={desktop ? true : undefined}>
-      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label={$t("展开项目导航")} onclick={() => sidebar = true}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">{$t("工作空间")}</span><span class="crumb-divider">/</span><strong>{screen === 'all' ? $t("全部待办") : active?.project.id === INSPIRATION_ID ? $t("灵感") : active?.project.name ?? $t("欢迎")}</strong>{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label={$t("未保存")} title={$t("未保存")}>*</span>{/if}</div>
+      <div class="breadcrumb" data-tauri-drag-region={desktop ? true : undefined}>{#if !sidebar}<button class="icon-button" aria-label={$t("展开项目导航")} onclick={expandSidebar}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 6h10M5 10h10M5 14h10"/></svg></button>{/if}<span class="crumb-label">{$t("工作空间")}</span><span class="crumb-divider">/</span>{#if screen === 'project' && active}<button class="crumb-project" data-crumb-menu aria-label={$t("切换项目")} title={$t("切换项目")} aria-expanded={!!crumbMenu} onclick={showCrumbMenu}><span>{active.project.id === INSPIRATION_ID ? $t("灵感") : active.project.name}</span><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></button>{:else}<strong>{screen === 'all' ? $t("全部待办") : $t("欢迎")}</strong>{/if}{#if screen === 'project' && hasUnsavedChanges}<span class="unsaved-mark" role="status" aria-label={$t("未保存")} title={$t("未保存")}>*</span>{/if}</div>
       <div class="top-actions"><button class="search-button" data-global-search aria-expanded={searchOpen} onclick={() => { searchOpen = !searchOpen; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m12 12 5 5" stroke="currentColor" stroke-width="1.7"/></svg>{$t("搜索")}<span class="key-hint">Ctrl ⇧ F</span></button><button class="icon-button" data-more-menu aria-label={$t("更多操作")} aria-expanded={menuOpen} onclick={() => menuOpen = !menuOpen}><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>{#if desktop}<WindowControls onerror={notify} />{/if}</div>
       {#if menuOpen}<div class="dropdown" data-more-menu role="menu">
         {#if screen === 'project' && active}
@@ -1078,6 +1194,7 @@
       <footer class="statusbar" data-tauri-drag-region={desktop && cardMode ? true : undefined}>
         <div class="statusbar-actions">
           <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? $t("返回预览") : $t("查看源码")} title={mode === 'source' ? $t("返回预览") : $t("查看源码")} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
+          <button class="outline-button" class:outline-active={outlineVisible} aria-label={outlineVisible ? $t("返回导航") : $t("大纲目录")} title={outlineVisible ? $t("返回导航") : $t("大纲目录")} aria-pressed={outlineVisible} disabled={screen !== 'project' || !active} onclick={toggleOutlineView}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01M8 5.5h8.5M8 10h8.5M8 14.5h8.5"/></svg></button>
           <button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
         </div>
         {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? $t("正在下载更新…") : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
@@ -1099,6 +1216,24 @@
     }}>
     <button role="menuitem" onclick={() => { if (projectMenu) void retireProject(projectMenu.project, true); }}>{$t("归档项目")}</button>
     <button role="menuitem" onclick={() => { const target = projectMenu?.project; openDialog('remove'); removeTarget = target ?? null; }}>{$t("删除项目")}</button>
+  </div>
+{/if}
+
+{#if crumbMenu}
+  <div class="dropdown crumb-menu" data-crumb-menu role="menu" tabindex="-1" aria-label={$t("切换项目")} style:left={`${crumbMenu.x}px`} style:top={`${crumbMenu.y}px`}
+    onkeydown={event => {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+      }
+      if (event.key === 'Tab') crumbMenu = null;
+    }}>
+    <button role="menuitem" class:crumb-current={active?.project.id === INSPIRATION_ID} onclick={() => { crumbMenu = null; void openInspiration(); }}><span>{$t("灵感")}</span></button>
+    {#each availableProjects as project (project.id)}
+      <button role="menuitem" class:crumb-current={active?.project.id === project.id} onclick={() => { const target = project; crumbMenu = null; void openProject(target); }}><span>{project.name}</span></button>
+    {/each}
   </div>
 {/if}
 

@@ -5,6 +5,10 @@
 export const appMessages: Readonly<Record<string, string>> = {
   "项目导航": "Project navigation",
   "收起项目导航": "Collapse project navigation",
+  "大纲目录": "Outline",
+  "返回导航": "Back to navigation",
+  "暂无标题": "No headings",
+  "切换项目": "Switch project",
   "全部待办": "All tasks",
   "灵感": "Ideas",
   "灵感 (Ctrl I)": "Ideas (Ctrl I)",

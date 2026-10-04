@@ -223,6 +223,14 @@ beforeEach(() => {
   localStorage.clear(); document.body.replaceChildren();
   Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
   Range.prototype.getBoundingClientRect = () => new DOMRect();
+  // jsdom 未实现滚动 API；大纲列表的跟随滚动只验证调用路径，不验证视觉位置。
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+  // jsdom 未实现 Web 动画；立即完成的假动画让侧栏飞入飞出等 Svelte 过渡走完回调链。
+  if (!Element.prototype.animate) Element.prototype.animate = function () {
+    const animation = { finished: Promise.resolve(), effect: null, playState: 'finished', cancel() {}, onfinish: null as null | (() => void), oncancel: null as null | (() => void) };
+    queueMicrotask(() => animation.onfinish?.());
+    return animation;
+  } as unknown as typeof Element.prototype.animate;
   if (!window.matchMedia) window.matchMedia = (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false });
   container = document.createElement('div'); document.body.append(container);
 });
@@ -265,12 +273,17 @@ function button(name: string | RegExp): HTMLButtonElement {
   return result;
 }
 
+/** 面包屑项目名在项目界面是切换按钮，全部待办和欢迎页是纯文本。 */
+function crumbName(): string | undefined {
+  return document.querySelector('.breadcrumb .crumb-project, .breadcrumb strong')?.textContent;
+}
+
 /** 通过用户可见路径选择项目，等待导航标题与编辑文档完成切换。 */
 async function switchProject(project: Project): Promise<void> {
   const control = [...document.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.title === project.path);
   if (!control) throw new Error(`找不到项目：${project.name}`);
   control.click(); await tick();
-  await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(project.name));
+  await vi.waitFor(() => expect(crumbName()).toBe(project.name));
 }
 
 /** 返回具有公开无障碍名称的真实 CodeMirror 内容区域。 */
@@ -313,7 +326,7 @@ describe('弹窗外部关闭', () => {
     desktopBoundary.enabled = true;
     await start(['# 清单\n']);
     const trigger = button('设置'); trigger.focus(); trigger.click(); await tick();
-    document.querySelector<HTMLElement>('.breadcrumb strong')!.click(); await tick();
+    document.querySelector<HTMLElement>('.crumb-label')!.click(); await tick();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
@@ -358,7 +371,7 @@ describe('项目归档与删除', () => {
     expect(button('删除项目')).toBeDefined();
     button('归档项目').click(); await tick();
     await vi.waitFor(() => expect(projectButton(secondProject)).toBeUndefined());
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(crumbName()).toBe(firstProject.name);
     expect(documentInput().textContent).toContain('甲项目持续编辑');
     await vi.waitFor(async () => expect((await files.loadConfig())?.projects.find(project => project.id === secondProject.id)).toMatchObject({ archived: true }));
     expect((await files.read(secondProject.path)).text).toBe(secondText);
@@ -382,11 +395,11 @@ describe('项目归档与删除', () => {
     await start(['- [ ] 甲项目任务\n', '- [ ] 乙项目任务\n']);
     await insertTask(); await paste('归档前的新正文');
     await openProjectMenu(firstProject); button('归档项目').click(); await tick();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(secondProject.name));
+    await vi.waitFor(() => expect(crumbName()).toBe(secondProject.name));
     expect((await files.read(firstProject.path)).text).toContain('归档前的新正文');
     await vi.waitFor(async () => expect((await files.loadConfig())?.projects.find(project => project.id === firstProject.id)).toMatchObject({ archived: true }));
     await remount();
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(secondProject.name);
+    expect(crumbName()).toBe(secondProject.name);
     expect(projectButton(firstProject)).toBeUndefined();
   });
 
@@ -395,7 +408,7 @@ describe('项目归档与删除', () => {
     await switchProject(secondProject);
     await openProjectMenu(secondProject); button(operation).click(); await tick();
     if (operation === '删除项目') { button('删除项目').click(); await tick(); }
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name));
+    await vi.waitFor(() => expect(crumbName()).toBe(firstProject.name));
     expect(documentInput().textContent).toContain('甲项目缓存任务');
     await insertTask(); await paste('返回缓存项目后继续编辑');
     await vi.waitFor(async () => expect((await files.read(firstProject.path)).text).toContain('返回缓存项目后继续编辑'));
@@ -441,7 +454,7 @@ describe('项目归档与删除', () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('删除「乙项目」项目？');
     button('删除项目').click(); await tick();
     await vi.waitFor(() => expect(projectButton(secondProject)).toBeUndefined());
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(crumbName()).toBe(firstProject.name);
     expect(documentInput().textContent).toContain('甲项目任务');
     expect((await files.read(secondProject.path)).text).toBe(secondText);
     await vi.waitFor(async () => expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([firstProject.id]));
@@ -492,10 +505,10 @@ describe('左栏项目拖动排序', () => {
     await vi.waitFor(async () => expect((await files.loadConfig())?.projects.map(project => project.id)).toEqual([secondProject.id, firstProject.id]));
     expect(projectOrder()).toEqual([secondProject.path, firstProject.path]);
     expect((await files.loadConfig())?.activeProjectId).toBe(firstProject.id);
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(crumbName()).toBe(firstProject.name);
     await remount();
     expect(projectOrder()).toEqual([secondProject.path, firstProject.path]);
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(crumbName()).toBe(firstProject.name);
   });
 
   it('取消拖动及外部拖放不保存项目顺序', async () => {
@@ -1238,7 +1251,7 @@ describe('App 真实编辑与文件闭环', () => {
     await vi.waitFor(() => expect(document.querySelector('.file-path')).not.toBeNull());
     const path = document.querySelector('.file-path')!.textContent!;
     button('添加项目').click(); await tick();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('新项目'));
+    await vi.waitFor(() => expect(crumbName()).toBe('新项目'));
     expect((await files.read(path)).text).toBe('# 新项目\n\n- [ ] \n');
     button('查看源码').click(); await tick();
     documentInput().focus();
@@ -1411,7 +1424,7 @@ describe('App 真实编辑与文件闭环', () => {
     expect(row.querySelector('img')?.getAttribute('src')).toBe('/浏览器/image.png');
     expect(row.querySelector('a, button, input')).toBeNull();
     row.querySelector('em')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); await tick();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name));
+    await vi.waitFor(() => expect(crumbName()).toBe(firstProject.name));
     expect((await files.read(firstProject.path)).text).toBe(source);
   });
   it('聚合标题限制在首行，转义 HTML 且不激活危险链接和图片', async () => {
@@ -1590,7 +1603,7 @@ describe('App 真实编辑与文件闭环', () => {
     await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('独特检索目标'));
     expect(document.querySelector('.search-results')?.textContent).not.toContain('独特归档目标');
     button(/待办.*独特检索目标/).click(); await tick();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(secondProject.name));
+    await vi.waitFor(() => expect(crumbName()).toBe(secondProject.name));
     expect(documentInput().textContent).toContain('独特检索目标');
     expect(document.querySelector('[aria-label="折叠条目"][aria-expanded="true"]')).not.toBeNull();
     expect(document.activeElement).toBe(documentInput());
@@ -1649,7 +1662,7 @@ describe('项目操作失败与聚合视图边界', () => {
     await switchProject(firstProject);
     rejectEarlier(new Error('FILE_NOT_FOUND: 过期的项目读取失败'));
     await new Promise(resolve => setTimeout(resolve, 0)); await tick();
-    expect(document.querySelector('.breadcrumb strong')?.textContent).toBe(firstProject.name);
+    expect(crumbName()).toBe(firstProject.name);
     expect(documentInput().textContent).toContain('当前保留任务');
     expect(document.querySelector('[role="alert"]')).toBeNull();
   });
@@ -1823,21 +1836,21 @@ describe('灵感簿', () => {
   it('首次打开自动创建托管文件，编辑保存后重启直接回到灵感簿', async () => {
     await start(['- [ ] 甲一\n']);
     shortcut('I');
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     await vi.waitFor(() => expect(localStorage.getItem('foldmark:file:浏览器/灵感.md')).not.toBeNull());
     await insertTask(); await paste('随手记下的灵感');
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('随手记下的灵感'));
     // 等待配置防抖落盘，重启后验证“上次停留界面”恢复到灵感簿。
     await new Promise(resolve => setTimeout(resolve, 1000));
     await remount();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     expect(documentInput().textContent).toContain('随手记下的灵感');
   });
 
   it('全局搜索包含灵感簿任务并定位回原文，全部待办不聚合灵感簿', async () => {
     await start(['- [ ] 甲一\n']);
     button('灵感').click();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     await insertTask(); await paste('速记想法');
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('速记想法'));
     button(/^搜索/).click(); await tick();
@@ -1845,7 +1858,7 @@ describe('灵感簿', () => {
     search.value = '速记想法'; search.dispatchEvent(new Event('input', { bubbles: true }));
     await vi.waitFor(() => expect(document.querySelector('.search-results')?.textContent).toContain('灵感'), { timeout: 3000 });
     document.querySelector<HTMLButtonElement>('.search-result')!.click();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     expect(documentInput().textContent).toContain('速记想法');
     button(/全部待办/).click();
     await vi.waitFor(() => expect(document.querySelector('.aggregate')?.textContent).toContain('甲一'), { timeout: 3000 });
@@ -1855,7 +1868,7 @@ describe('灵感簿', () => {
   it('更多菜单隐藏项目专属操作，任务操作与另存副本保留', async () => {
     await start(['- [ ] 甲一\n']);
     button('灵感').click();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     button('更多操作').click(); await tick();
     const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(item => item.textContent ?? '');
     expect(items().some(text => text.includes('重命名项目'))).toBe(false);
@@ -1871,7 +1884,7 @@ describe('灵感簿', () => {
   it('灵感簿文件被删除后进入缺失横幅，一键重建空文件并作废旧阅读状态', async () => {
     await start(['- [ ] 甲一\n']);
     button('灵感').click();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     await insertTask(); await paste('将被删除的灵感');
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('将被删除的灵感'));
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1880,8 +1893,69 @@ describe('灵感簿', () => {
     mounted = mount(App, { target: container }); await tick();
     await vi.waitFor(() => expect(document.querySelector('.error-banner')).not.toBeNull());
     button('新建空灵感簿').click();
-    await vi.waitFor(() => expect(document.querySelector('.breadcrumb strong')?.textContent).toBe('灵感'));
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toBe('# 灵感\n\n'));
     expect(documentInput().textContent).not.toContain('将被删除的灵感');
+  });
+});
+
+describe('侧栏大纲目录', () => {
+  const outlineTexts = (): string[] => [...document.querySelectorAll('.outline-item')].map(item => item.textContent ?? '');
+
+  it('底栏按钮在导航和大纲之间切换，大纲只列当前分区的标题', async () => {
+    await start(['# 工作\n\n- [ ] 甲\n\n# 归档\n\n## 旧事\n\n- [x] 旧任务\n\n## 杂项\n']);
+    expect(document.querySelector('.outline-list')).toBeNull();
+    button('大纲目录').click(); await tick();
+    expect(outlineTexts()).toEqual(['工作']);
+    // 几何全为零时按滚动到底规则取最后一个可见条目，验证高亮管线已接线。
+    await vi.waitFor(() => expect(document.querySelector('.outline-item.outline-active')?.textContent).toBe('工作'));
+    button(/^归档/).click(); await tick();
+    const disabled = outlineTexts();
+    expect(disabled).toEqual(['归档', '旧事', '杂项']);
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.outline-item')];
+    expect(items.at(-1)!.disabled).toBe(true);
+    expect(items[0]!.disabled).toBe(false);
+    await vi.waitFor(() => expect(document.querySelector('.outline-item.outline-active')?.textContent).toBe('旧事'));
+    button('返回导航').click(); await tick();
+    expect(document.querySelector('.outline-list')).toBeNull();
+    expect(document.querySelector('.project-list')).not.toBeNull();
+  });
+
+  it('从收起状态进入大纲是临时展开，切回导航恢复收起且不写入展开偏好', async () => {
+    await start(['# 工作\n\n- [ ] 甲\n']);
+    button('收起项目导航').click();
+    await vi.waitFor(() => expect(document.querySelector('.sidebar')).toBeNull());
+    button('大纲目录').click(); await tick();
+    expect(document.querySelector('.outline-list')).not.toBeNull();
+    button('返回导航').click();
+    await vi.waitFor(() => expect(document.querySelector('.sidebar')).toBeNull());
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.sidebarOpen).toBe(false));
+    button('展开项目导航').click(); await tick();
+    expect(document.querySelector('.project-list')).not.toBeNull();
+  });
+
+  it('大纲视图与展开状态持久化，重启按偏好恢复', async () => {
+    await start(['# 工作\n\n## 细分\n\n- [ ] 甲\n']);
+    button('大纲目录').click();
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.sidebarView).toBe('outline'));
+    await remount();
+    expect(outlineTexts()).toEqual(['工作', '细分']);
+    button('返回导航').click(); await tick();
+    expect(document.querySelector('.project-list')).not.toBeNull();
+  });
+
+  it('面包屑项目名打开切换列表，可跳转灵感与其他项目', async () => {
+    await start(['# 甲\n\n- [ ] 任务\n', '# 乙\n']);
+    button('切换项目').click(); await tick();
+    const menu = document.querySelector('.crumb-menu');
+    expect(menu).not.toBeNull();
+    const items = [...menu!.querySelectorAll<HTMLButtonElement>('button')];
+    expect(items.map(item => item.textContent?.trim())).toEqual(['灵感', '甲项目', '乙项目']);
+    items.find(item => item.textContent?.trim() === '乙项目')!.click();
+    await vi.waitFor(() => expect(crumbName()).toBe('乙项目'));
+    button('切换项目').click(); await tick();
+    [...document.querySelectorAll<HTMLButtonElement>('.crumb-menu button')]
+      .find(item => item.textContent?.trim() === '灵感')!.click();
+    await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
   });
 });

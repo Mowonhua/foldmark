@@ -41,7 +41,8 @@ export function validateAppConfig(value: unknown): AppConfig | null {
     const p = value.preferences;
     // 旧配置允许缺省；未知语言标识由翻译层回退，便于跨版本共享配置。
     if (p.locale !== undefined && typeof p.locale !== 'string') return fail();
-    for (const flag of [p.autoCheckUpdates, p.autoDownloadUpdates, p.keepTransparentOnBlur]) if (flag !== undefined && typeof flag !== 'boolean') return fail();
+    for (const flag of [p.autoCheckUpdates, p.autoDownloadUpdates, p.keepTransparentOnBlur, p.sidebarOpen]) if (flag !== undefined && typeof flag !== 'boolean') return fail();
+    if (p.sidebarView !== undefined && p.sidebarView !== 'nav' && p.sidebarView !== 'outline') return fail();
     if (p.theme !== undefined && (typeof p.theme !== 'string' || !['light', 'dark', 'system'].includes(p.theme))) return fail();
     if (p.themeId !== undefined && (typeof p.themeId !== 'string' || !themeIds.has(p.themeId))) return fail();
     if (p.fontFamily !== undefined && typeof p.fontFamily !== 'string') return fail();

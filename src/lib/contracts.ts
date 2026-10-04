@@ -24,6 +24,10 @@ export interface Preferences {
   autoDownloadUpdates?: boolean;
   /** 缺省为 false，沿用系统材质行为；true 时请求 Acrylic 在窗口失焦后继续透明。仅原生材质支持时生效。 */
   keepTransparentOnBlur?: boolean;
+  /** 缺省为 'nav'；侧栏显示项目导航还是当前文档的大纲目录。 */
+  sidebarView?: 'nav' | 'outline';
+  /** 缺省为 true；导航模式下侧栏的展开意愿。大纲模式从收起状态临时展开时不改写此值。 */
+  sidebarOpen?: boolean;
 }
 /** 结构职责：托管灵感簿的文件关联与阅读状态；文件由应用创建，可重新定位，不进入项目列表。 */
 export interface InspirationDoc {
