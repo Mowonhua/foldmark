@@ -37,7 +37,7 @@ fn cached_families() -> Result<Vec<String>, String> {
 fn enumerate_families() -> Result<Vec<String>, String> {
     let mut database = fontdb::Database::new();
     database.load_system_fonts();
-    if database.len() == 0 {
+    if database.is_empty() {
         return Err("未在系统中找到任何字体。".to_owned());
     }
     let mut seen = std::collections::HashSet::new();
@@ -51,7 +51,7 @@ fn enumerate_families() -> Result<Vec<String>, String> {
         }
         families.push(name.clone());
     }
-    families.sort_by(|left, right| left.to_lowercase().cmp(&right.to_lowercase()));
+    families.sort_by_key(|left| left.to_lowercase());
     Ok(families)
 }
 
