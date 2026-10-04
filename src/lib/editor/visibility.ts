@@ -7,6 +7,7 @@ import { EditorSelection, EditorState, Prec, Transaction, type Extension } from 
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view';
 import { completedChildGroups, getHiddenRanges, type DocumentModel } from '../markdown';
 import { documentField, expandedCompletedGroupsField, foldsField, modeFacet, sourceViewFacet } from './state';
+import { paragraphLayout } from './paragraphs';
 import { fencedBlockEditing } from './fenced-block-editing';
 import { sourceScopeField } from './source-scope';
 
@@ -42,13 +43,19 @@ export function hiddenContentRanges(state: EditorState): readonly HiddenContentR
   const expandedGroups = state.field(expandedCompletedGroupsField, false) ?? new Set<number>();
   const cached = visibilityCache.get(model);
   if (cached?.mode === mode && cached.folds === folds && cached.expandedGroups === expandedGroups) return cached.ranges;
+  // 预览中段落分隔空行不占高度；隐藏范围须吞掉末行换行与紧随分隔，块替换才不残留空文本行。
+  const separators = paragraphLayout(state).separators;
+  const absorbSeparator = (to: number): number => separators.find(range => range.from === to - 1)?.to ?? to;
   const ranges: HiddenContentRange[] = getHiddenRanges(model,mode)
-    .map(range => ({ from: range.from, to: range.to, kind: mode === 'todo' ? 'completed' : 'filtered', itemFrom: range.parentFrom, count: range.count }));
+    .map(range => ({ from: range.from, to: mode === 'todo' ? absorbSeparator(range.to) : range.to, kind: mode === 'todo' ? 'completed' : 'filtered', itemFrom: range.parentFrom, count: range.count }));
   for (const item of model.items) {
-    if (folds.has(item.from) && item.to > item.firstLineTo) ranges.push({ from: item.firstLineTo, to: item.to, kind: 'fold', itemFrom: item.from, count: 0 });
+    if (folds.has(item.from) && item.to > item.firstLineTo) {
+      const to = Math.min(state.doc.lineAt(item.to).to + 1, state.doc.length);
+      ranges.push({ from: item.firstLineTo, to: absorbSeparator(to), kind: 'fold', itemFrom: item.from, count: 0 });
+    }
   }
   for (const group of completedChildGroups(model)) {
-    if (!expandedGroups.has(group.parentFrom!)) ranges.push({ ...group, kind: 'completed-group', itemFrom: group.parentFrom });
+    if (!expandedGroups.has(group.parentFrom!)) ranges.push({ ...group, to: absorbSeparator(group.to), kind: 'completed-group', itemFrom: group.parentFrom });
   }
   ranges.sort((a,b)=>a.from-b.from || b.to-a.to);
   const merged: HiddenContentRange[] = [];

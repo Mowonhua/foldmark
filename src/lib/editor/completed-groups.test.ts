@@ -48,6 +48,17 @@ it('已完成同级子树整体隐藏为一个摘要，计数包含后代，展�
   expect(instance.undo()).toBe(false);
 });
 
+it('完成组摘要吞掉紧随的段落分隔空行，不在摘要下方残留空文本行', () => {
+  const instance = editor('- [ ] 主任务\n  - [x] 已完成\n    正文\n\n- [ ] 后续\n');
+  expect(summary(instance)?.textContent).toBe('已完成 1 项');
+  const nodes = Array.from(instance.view.dom.querySelectorAll('.cm-content > .cm-line, .cm-content > button'));
+  const index = nodes.findIndex(el => el.classList.contains('fm-completed-summary'));
+  const following = nodes[index + 1] as HTMLElement | undefined;
+  expect(following?.classList.contains('cm-line')).toBe(true);
+  expect(following?.textContent).toBe('后续');
+  expect(instance.text).toBe('- [ ] 主任务\n  - [x] 已完成\n    正文\n\n- [ ] 后续\n');
+});
+
 it('新完成任务自动收起已展开组，完成与收起一起撤销，不独立归档', () => {
   const instance = editor('- [ ] 主任务\n  - [ ] 新完成\n  - [x] 旧完成\n');
   summary(instance).click();

@@ -285,6 +285,26 @@ describe('唯一文档编辑事务', () => {
     expect(instance.text).toBe(source);
     expect(instance.undo()).toBe(false);
   });
+  it('折叠摘要的块替换吞掉末行换行，不在摘要下方残留空文本行', () => {
+    const instance = editor('- [ ] 父\n  正文\n- [ ] 后');
+    instance.toggleFold(0);
+    const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
+    expect(summary.textContent).toBe('展开内容');
+    const following = summary.nextElementSibling as HTMLElement | null;
+    expect(following?.classList.contains('cm-line')).toBe(true);
+    expect(following?.textContent).toBe('后');
+    expect(instance.text).toBe('- [ ] 父\n  正文\n- [ ] 后');
+  });
+  it('折叠摘要吞掉紧随的段落分隔空行，不在摘要下方残留空文本行', () => {
+    const instance = editor('- [ ] 父\n  正文\n\n- [ ] 后');
+    instance.toggleFold(0);
+    const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
+    expect(summary.textContent).toBe('展开内容');
+    const following = summary.nextElementSibling as HTMLElement | null;
+    expect(following?.classList.contains('cm-line')).toBe(true);
+    expect(following?.textContent).toBe('后');
+    expect(instance.text).toBe('- [ ] 父\n  正文\n\n- [ ] 后');
+  });
   it('归档只读但允许键盘恢复任务，恢复后回到原文位置', () => {
     const instance = editor('- [x] 完成\n- [ ] 待办');
     instance.setMode('archive');

@@ -55,7 +55,7 @@ describe('隐藏正文的导航与删除', () => {
     const instance = editor('- [ ] 父任务\n  长正文\n  - [ ] 子任务\n- [ ] 下一项');
     const parent = instance.model.items[0];
     instance.focusAt(parent.firstLineTo); instance.toggleFold(parent.from);
-    key(instance, 'ArrowRight'); expect(instance.state.selection.main.head).toBe(parent.to);
+    key(instance, 'ArrowRight'); expect(instance.state.selection.main.head).toBe(instance.text.indexOf('- [ ] 下一项'));
     key(instance, 'ArrowLeft'); expect(instance.state.selection.main.head).toBe(parent.firstLineTo);
     expect(instance.undo()).toBe(false);
   });
