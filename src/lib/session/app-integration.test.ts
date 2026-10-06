@@ -165,7 +165,7 @@ describe('应用更新', () => {
       await vi.waitFor(() => expect(saveConfig).toHaveBeenCalledOnce());
       button('安装并重启').click(); await tick();
       await vi.waitFor(() => expect(button('关闭对话框').disabled).toBe(true));
-      document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+      pointerDown(document.querySelector<HTMLElement>('.modal-backdrop')!); await tick();
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
       // 先完成普通关闭的配置，再让安装自己的配置保持未完成，避免以最终状态掩盖提前退出。
       releaseCloseConfig(); await close;
@@ -273,6 +273,11 @@ function button(name: string | RegExp): HTMLButtonElement {
   return result;
 }
 
+/** 弹窗由 window 捕获阶段的 pointerdown 关闭；element.click() 不派发 pointerdown，关闭交互需手动构造按下。 */
+function pointerDown(target: Element): void {
+  target.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+}
+
 /** 面包屑项目名在项目界面是切换按钮，全部待办和欢迎页是纯文本。 */
 function crumbName(): string | undefined {
   return document.querySelector('.breadcrumb .crumb-project, .breadcrumb strong')?.textContent;
@@ -326,22 +331,34 @@ describe('弹窗外部关闭', () => {
     desktopBoundary.enabled = true;
     await start(['# 清单\n']);
     const trigger = button('设置'); trigger.focus(); trigger.click(); await tick();
-    document.querySelector<HTMLElement>('.crumb-label')!.click(); await tick();
+    pointerDown(document.querySelector<HTMLElement>('.crumb-label')!); await tick();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
-  it.each(['新增项目', '重命名项目', '移除项目关联', '查看归档项目', '阅读与外观', '检查更新', '快捷键'])('%s 内部点击保留，点击遮罩关闭', async label => {
+  it.each(['新增项目', '重命名项目', '移除项目关联', '查看归档项目', '阅读与外观', '检查更新', '快捷键'])('%s 内部按下保留，遮罩上按下关闭', async label => {
     await start(['# 清单\n']);
     button('更多操作').click(); await tick();
     button(label).click(); await tick();
     const modal = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(modal).not.toBeNull();
-    modal.click(); await tick();
-    modal.querySelector<HTMLElement>('h2')!.click(); await tick();
+    pointerDown(modal); await tick();
+    pointerDown(modal.querySelector<HTMLElement>('h2')!); await tick();
     expect(document.querySelector('[role="dialog"]')).toBe(modal);
-    document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+    pointerDown(document.querySelector<HTMLElement>('.modal-backdrop')!); await tick();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect((await files.read(firstProject.path)).text).toBe('# 清单\n');
+  });
+  it('弹窗内按下拖动选择、移出窗口松开时，弹窗外合成的 click 不关闭弹窗', async () => {
+    await start(['# 清单\n']);
+    button('更多操作').click(); await tick();
+    button('阅读与外观').click(); await tick();
+    const modal = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    // 按下发生在弹窗内部，即拖动选择文本的起点。
+    pointerDown(modal); await tick();
+    // 鼠标移出窗口松开后，浏览器会把 click 的落点合成到弹窗外（此处以遮罩为代表）。
+    document.querySelector<HTMLElement>('.modal-backdrop')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await tick();
+    expect(document.querySelector('[role="dialog"]')).toBe(modal);
   });
 });
 
@@ -1727,7 +1744,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     await files.saveRecovery(draft); await remount();
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     if (dismissal === '暂不恢复') button('暂不恢复').click();
-    else document.querySelector<HTMLElement>('.modal-backdrop')!.click();
+    else pointerDown(document.querySelector<HTMLElement>('.modal-backdrop')!);
     await tick();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await shortcut('s');
@@ -1758,7 +1775,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
     await vi.waitFor(() => expect(document.querySelector('.conflict-banner')).not.toBeNull());
     button('比较并处理').click(); await tick();
-    document.querySelector<HTMLElement>('.modal-backdrop')!.click(); await tick();
+    pointerDown(document.querySelector<HTMLElement>('.modal-backdrop')!); await tick();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector('.conflict-banner')).not.toBeNull();
     expect(documentInput().textContent).toContain('本地草稿');

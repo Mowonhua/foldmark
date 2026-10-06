@@ -961,9 +961,12 @@
     return activeOutlineFrom(positions, scroller.scrollTop, listed, scroller.scrollHeight - scroller.clientHeight);
   }
 
-  function dismissDialog(event: MouseEvent): void {
+  /** 在弹窗外按下鼠标即关闭；不能用 click 判定：弹窗内按下拖动选择文本、移出窗口松开时，
+   *  浏览器会把 click 合成到窗口根节点，导致误关。捕获阶段先关闭已有弹窗，避免打开按钮的
+   *  同一次点击立即将新弹窗关闭；桌面标题栏也算外部；仅主键关闭，与原 click 语义一致。 */
+  function dismissDialog(event: PointerEvent): void {
     if (!dialog || updateInstalling || projectActionBusy) return;
-    // 捕获阶段先关闭已有弹窗，避免打开按钮的同一次点击立即将新弹窗关闭；桌面标题栏也算外部。
+    if (event.button !== 0) return;
     if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) dialog = null;
   }
 
@@ -1069,7 +1072,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onclickcapture={dismissDialog} onclick={dismissPopovers} />
+<svelte:window onkeydown={keydown} onpointerdowncapture={dismissDialog} onclick={dismissPopovers} />
 
 <div class="app-shell" bind:this={appShell} class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy}>
 
