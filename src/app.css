@@ -62,7 +62,8 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 /* 分区切换时列表整体重新入场；减少动态效果时由全局媒体查询禁用。 */
 @media(prefers-reduced-motion:no-preference){.outline-list{animation:outline-in .16s cubic-bezier(.215,.61,.355,1)}}
 @keyframes outline-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-.outline-item{display:block;width:100%;min-width:0;text-align:left;padding:8px 9px;padding-left:calc(9px + 13px*var(--depth,0));border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 滚动容器按自身视口分配弹性空间，overflow:hidden 又把条目的自动最小尺寸清零；不显式禁止收缩，标题一多条目就会被整体压扁而不是溢出滚动。 */
+.outline-item{display:block;flex-shrink:0;width:100%;min-width:0;text-align:left;padding:8px 9px;padding-left:calc(9px + 13px*var(--depth,0));border-radius:var(--nav-radius,5px);font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .outline-active{background-color:var(--nav-active-background,var(--accent-soft))!important;color:var(--accent);font-weight:550;box-shadow:var(--nav-active-shadow,none)}
 .outline-empty{margin:0;padding:9px;font-size:12px;color:var(--muted)}
 .sidebar-bottom{margin-top:auto;padding:20px 7px 0;display:flex;justify-content:flex-end}
