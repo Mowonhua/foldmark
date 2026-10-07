@@ -1,11 +1,11 @@
 {
-  "version": "0.4.0",
-  "notes": "# Foldmark v0.4.0\r\n\r\n相较于 v0.3.0：\r\n\r\n- 新增灵感簿：侧栏一级入口托管项目外的独立 Markdown 文件，首次进入时在应用数据目录创建，支持重新定位与另存副本；任务、归档、折叠、排序、源码与公式照常，全局搜索覆盖灵感簿。\r\n- 侧边栏新增大纲视图：按当前文档标题分区列目录，点击定位章节，滚动时实时高亮，可从大纲直接跳转其他项目或灵感簿。\r\n- 正文字体改为系统字体点选：主字体、备用字体、兜底字体三个槽位可搜索、逐字体预览，保留手动输入字体栈并即时热切换。\r\n- 「全部待办」按任务层级缩进显示父子关系并绘制章节干线；隐藏一级标题，按层级分级显示二级章节。\r\n- 「全部待办」与拖拽预览跟随正文字体和字号，精简视图页头。\r\n- 修复折叠摘要吞掉末行换行与紧随空行导致的异常高度，摘要行与正文行高等同。\r\n- 修复在标题、引用、任务行等行末右侧空白点击时光标落到下一段开头的问题。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.4.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-10-04T14:04:54.283Z",
+  "version": "0.5.0",
+  "notes": "# Foldmark v0.5.0\r\n\r\n相较于 v0.4.0：\r\n\r\n- 新增标题悬停新增任务（默认关闭）：在设置的界面分区开启后，各级标题文字后悬停或键盘聚焦时淡入「新增任务」按钮，点击在该标题下插入新任务并移入光标，可一次撤销。\r\n- 修复侧边栏大纲标题较多时条目被弹性布局压缩的问题，条目高度固定，超出侧栏后滚动查看。\r\n- 修复在弹窗内拖动选择后移出窗口松开鼠标导致弹窗误关闭的问题，改为按下时不在弹窗内才关闭。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
+  "pub_date": "2026-10-07T04:56:50.025Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NSszQUphSXZad0tUUXlXN2hVSXVFcWJQQjk1NDFyNG1JcWxGaU9OZmNoc3pKREtvenBsMVZNa0U0RFVTTnd1RG1uQmJZMUlTV0ZsbVJJZU5oYXppV2drPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMTIyNjkzCWZpbGU6Rm9sZG1hcmtfMC40LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNC4wCkRLNnVoMFQvUS9wNmlhUmhwRnVUbXBzUy9LZzdUSkhQWll2ZVRMb2wvYktlRnVHOFoybkRoLzI3TFZSNEtLZCtvb0IwMDZXblZ6dDZTV2ZGUTVLSkFRPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.4.0/Foldmark_0.4.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTA4QUowRkRuNEFoZDJFWWp6a2NUZ2NobCtqUURhMTV2TFlLdEYxN2FKd2pvMnI1RDBsR1dXVUNrS1lra0t0YWEyamlFbVJaeEF5SnRNV1I1T09xbXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzQ5MDA5CWZpbGU6Rm9sZG1hcmtfMC41LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4wClpoZW5uL2VpY0N3aXJlNkl2YVlQL3FBQUU5Ykw3NFJJU1FKQ2poSVBjeXlYVUh4V01RZEg4N1N1eTNGRDMzeXBDQ012eE1FdHA4NDFUR0hRRk5iRkRBPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.0/Foldmark_0.5.0_x64-setup.exe"
     }
   }
 }
