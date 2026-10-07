@@ -10,7 +10,7 @@ import type { SyntaxNode } from '@lezer/common';
 import katex from 'katex';
 import { completedChildGroups, getHiddenRanges, type DocumentModel, type ListItem } from '../markdown';
 import { hiddenContentRanges } from './visibility';
-import { actionsFacet, documentField, expandedCompletedGroupsField, foldsField, modeFacet, resourcesFacet } from './state';
+import { actionsFacet, documentField, expandedCompletedGroupsField, foldsField, headingAddFacet, modeFacet, resourcesFacet } from './state';
 import { previewWindowField } from './viewport';
 import type { EditorOptions } from './types';
 import { CodeLanguageWidget } from './code-language';
@@ -39,6 +39,18 @@ function disclosureChevron(): SVGSVGElement {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', 'm7 4 6 6-6 6'); arrow.append(path);
   return arrow;
+}
+
+/** 新增入口的描边加号与列表控件共用图标语言；颜色跟随按钮的 currentColor。 */
+function plusGlyph(): SVGSVGElement {
+  const plus = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  plus.setAttribute('class', 'fm-heading-add-icon');
+  plus.setAttribute('width', '12'); plus.setAttribute('height', '12'); plus.setAttribute('viewBox', '0 0 20 20');
+  plus.setAttribute('fill', 'none'); plus.setAttribute('stroke', 'currentColor'); plus.setAttribute('stroke-width', '1.8');
+  plus.setAttribute('stroke-linecap', 'round'); plus.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M10 4.5v11M4.5 10h11'); plus.append(path);
+  return plus;
 }
 
 /** 创建共享摘要行；事件读取 DOM 中的当前坐标，重用按钮不会保留旧任务位置。 */
@@ -209,6 +221,61 @@ class BlockGapWidget extends WidgetType {
     element.setAttribute('aria-hidden', 'true');
     return element;
   }
+}
+
+/**
+ * 标题后的新增任务入口：控件是挂在标题文字末尾的零尺寸内联元素，
+ * 按钮绝对定位在其右侧，悬停标题或键盘聚焦时淡入，显示与隐藏都不改变标题行布局。
+ * 点击在 anchor（标题块之后的行边界）插入任务；headingFrom 同时作为
+ * 控件与标题行悬停联动的配对标识，语言变化需要重建文案。
+ */
+class HeadingAddWidget extends WidgetType {
+  private readonly uiLocale = get(locale);
+  constructor(readonly headingFrom: number, readonly anchor: number) { super(); }
+  eq(other: HeadingAddWidget): boolean { return this.uiLocale === other.uiLocale && this.headingFrom === other.headingFrom && this.anchor === other.anchor; }
+  toDOM(view: EditorView): HTMLElement {
+    const wrap = document.createElement('span');
+    wrap.className = 'fm-heading-add';
+    wrap.dataset.headingAdd = String(this.headingFrom);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fm-heading-add-button';
+    const label = document.createElement('span');
+    label.textContent = translate('新增任务');
+    button.append(plusGlyph(), label);
+    button.addEventListener('click', event => { event.preventDefault(); view.state.facet(actionsFacet).insertTaskAt(this.anchor); });
+    wrap.append(button);
+    return wrap;
+  }
+  ignoreEvent(): boolean { return true; }
+}
+
+/**
+ * 标题行与其后新增按钮共享一个悬停目标：进入标题行或按钮时展开对应按钮，
+ * 移入其他内容即收起。开合只切换 DOM 类名，不派发事务，也不改变任何布局尺寸。
+ */
+const headingAddHovered = new WeakMap<EditorView, HTMLElement | null>();
+export const headingAddHover = EditorView.domEventHandlers({
+  pointerover(event, view) {
+    if (!(event.target instanceof Element)) return;
+    setOpenHeadingAdd(view, event.target.closest<HTMLElement>('[data-heading-line], .fm-heading-add'));
+  },
+  pointerout(event, view) {
+    // 视图内部的移动交给随后的 pointerover 处理；真正离开编辑器 DOM 时才收起。
+    if (event.relatedTarget instanceof Node && view.dom.contains(event.relatedTarget)) return;
+    setOpenHeadingAdd(view, null);
+  },
+});
+
+function setOpenHeadingAdd(view: EditorView, zone: HTMLElement | null): void {
+  const previous = headingAddHovered.get(view) ?? null;
+  if (!zone && !previous) return;
+  const heading = zone?.dataset.headingLine ?? zone?.dataset.headingAdd;
+  const next = heading ? view.dom.querySelector<HTMLElement>(`.fm-heading-add[data-heading-add="${heading}"]`) : null;
+  if (previous === next) return;
+  previous?.classList.remove('is-open');
+  next?.classList.add('is-open');
+  headingAddHovered.set(view, next);
 }
 
 /** 块控件沿用所属列表的布局；坐标和事件仍由原控件负责，缩进不写回源文。 */
@@ -642,7 +709,22 @@ function buildPreview(state: EditorState): DecorationSet {
     spacedLines.add(line.from);
     ranges.push(Decoration.widget({ widget: new BlockGapWidget(), block: true, side: -1 }).range(line.from));
   };
-  const visit = (node: SyntaxNode): void => {
+  /**
+   * 待办视图为每个可见章节标题预留新增入口；列表或引用内的标题不属于章节，锚点行被隐藏时也不预留。
+   * 标题行携带 data-heading-line 与控件配对，供悬停联动查找；控件内联在标题首行文字末尾，
+   * 零尺寸不参与行盒高度，插入锚点仍是标题块之后的行起点。
+   */
+  const addHeadingWidget = (node: SyntaxNode, contained: boolean): void => {
+    // 开关关闭时不登记锚点，也不给标题行挂悬停配对属性。
+    if (mode !== 'todo' || contained || !state.facet(headingAddFacet)) return;
+    const headingLine = state.doc.lineAt(node.from);
+    const anchor = Math.min(state.doc.length, state.doc.lineAt(node.to).to + 1);
+    if (overlapsHidden(anchor, anchor + 1)) return;
+    ranges.push(Decoration.line({ attributes: { 'data-heading-line': String(headingLine.from) } }).range(headingLine.from));
+    // setext 标题的 node.to 在下划线行，控件需回退到文字行行尾。
+    ranges.push(Decoration.widget({ widget: new HeadingAddWidget(headingLine.from, anchor), side: 1 }).range(Math.min(headingLine.to, node.to)));
+  };
+  const visit = (node: SyntaxNode, contained: boolean): void => {
     if (node.to < window.from || node.from > window.to) return;
     const hiddenRange = overlappingRange(node.from, node.to);
     if (hiddenRange && node.from >= hiddenRange.from && node.to <= hiddenRange.to) return;
@@ -675,6 +757,7 @@ function buildPreview(state: EditorState): DecorationSet {
         if (!overlapsHidden(line.from, to)) ranges.push(Decoration.replace({ block: true }).range(line.from, to));
       }
     }
+    if (/^(?:ATXHeading|SetextHeading)[1-6]$/.test(name)) addHeadingWidget(node, contained);
     if (name === 'Emphasis' || name === 'StrongEmphasis' || name === 'Strikethrough' || name === 'InlineCode') {
       addMark(node.from, node.to, ({ Emphasis: 'fm-em', StrongEmphasis: 'fm-strong', Strikethrough: 'fm-strike', InlineCode: 'fm-code' } as Record<string, string>)[name]);
       if (!editing) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
@@ -766,9 +849,9 @@ function buildPreview(state: EditorState): DecorationSet {
       }
       return;
     }
-    for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child);
+    for (let child = node.firstChild; child && child.from <= window.to; child = child.nextSibling) if (child.to >= window.from) visit(child, contained || node.name === 'ListItem' || node.name === 'Blockquote');
   };
-  visit(model.tree.topNode);
+  visit(model.tree.topNode, false);
   // 段落模型是源码分隔的唯一来源；投影只隐藏分隔空行，不再从视口或光标推断空段落。
   for (const separator of paragraphs.separators) {
     if (separator.from > window.to) break;

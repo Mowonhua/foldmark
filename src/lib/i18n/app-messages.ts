@@ -122,6 +122,7 @@ export const appMessages: Readonly<Record<string, string>> = {
   "尚未选择字体，正文使用应用默认字体。": "No font selected; the default document font is used.",
   "字号": "Font size",
   "正文宽度": "Document width",
+  "标题后新增任务按钮": "Add-task button after headings",
   "应用更新": "App updates",
   "继续任务；空任务退出列表": "Continue a task; leave the list from an empty task",
   "在任务正文中换行": "Insert a line break within a task",

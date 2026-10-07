@@ -10,6 +10,16 @@
 .cm-editor .fm-heading { color: var(--text); font-weight: 650; letter-spacing: -.025em; padding-top: 1.3em; padding-bottom: .55em; line-height: 1.45; }
 .cm-editor .fm-heading span { text-decoration: none; }
 .fm-h1 { font-size: 1.8em; }.fm-h2 { font-size: 1.45em; }.fm-h3 { font-size: 1.18em; }
+/* 标题后的新增入口：控件是挂在标题文字末尾的零尺寸内联元素（宽高均为 0，不参与行盒高度），
+   按钮绝对定位在文字右侧，悬停标题或键盘聚焦时淡入。显示与隐藏都不改变标题行的任何布局
+   尺寸，隐藏态与关闭开关时的排版逐像素一致。 */
+.fm-heading-add { position: relative; display: inline-block; width: 0; height: 0; vertical-align: middle; white-space: nowrap; }
+.fm-heading-add-button { position: absolute; left: calc(var(--editor-font-size, 16px) * .5); top: 0; transform: translateY(-50%) translateX(-4px); display: flex; width: fit-content; align-items: center; gap: 5px; height: calc(var(--editor-font-size, 16px) * 1.25); padding: 0 9px 0 6px; border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); font: inherit; font-size: calc(var(--editor-font-size, 16px) * .75); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; user-select: none; opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease, background-color 120ms, color 120ms; }
+.fm-heading-add.is-open .fm-heading-add-button, .fm-heading-add:focus-within .fm-heading-add-button { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+.fm-heading-add-button:hover, .fm-heading-add-button:focus-visible { color: var(--accent); background: var(--control-hover-background, var(--hover)); }
+.fm-heading-add-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fm-heading-add-button:active { background: var(--selection); color: var(--selection-ink); }
+.fm-heading-add-icon { flex: none; }
 .fm-em { font-style: italic; }.fm-strong { font-weight: 650; }.fm-strike { text-decoration: line-through; }
 .fm-code { font-family: ui-monospace, Consolas, monospace; font-size: .88em; background: var(--surface-alt); border-radius: 4px; padding: 2px 3px; }
 .cm-editor .fm-code-line, .cm-editor .fm-math-size-line { position: relative; background: transparent; font-family: ui-monospace, Consolas, monospace; font-size: .88em; padding: 0 14px; border-left: 1px solid var(--muted); border-right: 1px solid var(--muted); }
@@ -86,7 +96,7 @@
   }
 }
 .fm-group-prompt { max-width: 90%; white-space: normal; flex-wrap: wrap; }
-@media (prefers-reduced-motion: reduce) { .fm-item-controls .fm-fold-button, .fm-disclosure-row, .fm-disclosure-chevron { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fm-item-controls .fm-fold-button, .fm-disclosure-row, .fm-disclosure-chevron, .fm-heading-add-button { transition: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }

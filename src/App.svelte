@@ -233,6 +233,12 @@
     if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+  // editor 是普通变量不参与追踪；编辑器创建时经 EditorOptions 取初值，此处只响应偏好变化。
+  $effect(() => {
+    const enabled = config.preferences.headingAdd ?? false;
+    editor?.setHeadingAddEnabled(enabled);
+    if (ready && configReady) scheduleConfig();
+  });
 
   // 编辑器滚动是高亮的唯一驱动；rAF 节流避免每个滚动事件都遍历标题。
   // editor 是普通变量，不参与依赖追踪；依赖 active 使编辑器创建后重新挂载监听。
@@ -551,6 +557,7 @@
       onStatus: message => notify(message, message.includes($t("可撤销"))),
       resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
       openLink: openDocumentLink,
+      headingAddEnabled: config.preferences.headingAdd ?? false,
     });
     else editor.restoreState(editor.createState(disk.text, ui.mode));
     editor.setUIState(ui);

@@ -142,6 +142,7 @@
         </label>
       </div>
     </div>
+    <div class="settings-row"><label for="settings-heading-add">{$t('标题后新增任务按钮')}</label><div class="settings-switch-control"><span class="settings-switch-status" aria-hidden="true">{preferences.headingAdd ? $t('开启') : $t('关闭')}</span><label class="settings-switch"><input id="settings-heading-add" type="checkbox" role="switch" bind:checked={preferences.headingAdd}/><span class="settings-switch-track" aria-hidden="true"><span class="settings-switch-thumb"></span></span></label></div></div>
   </section>
 
   <section class="settings-section" aria-labelledby="settings-reading-heading">

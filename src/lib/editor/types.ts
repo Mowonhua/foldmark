@@ -23,6 +23,8 @@ export interface EditorOptions {
   resolveResource?: (url: string) => string;
   /** 应用负责系统浏览器或本地文件打开；预览不直接访问磁盘。 */
   openLink?: (url: string) => void | Promise<void>;
+  /** 标题下新增任务入口的初始启用状态；运行时切换走 setHeadingAddEnabled。 */
+  headingAddEnabled?: boolean;
 }
 
 /**
@@ -38,6 +40,8 @@ export interface EditorActions {
   moveItem: (from: number, direction: 'up' | 'down') => void;
   moveTo: (from: number, boundary: number | null) => void;
   focusAt: (from: number) => void;
+  /** 在可见源文偏移处插入空任务并移入光标；标题下的新增按钮传入标题块之后的边界。 */
+  insertTaskAt: (position: number) => void;
 }
 
 export type { ProjectView, ViewMode };

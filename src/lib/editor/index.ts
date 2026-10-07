@@ -10,8 +10,8 @@ import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } fr
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { archiveSections, completedChildGroups, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskIsComplete, taskToggleChanges, type DocumentModel } from '../markdown';
-import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, modeFacet, resourcesFacet, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
-import { previewField } from './preview';
+import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, headingAddFacet, modeFacet, resourcesFacet, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
+import { previewField, headingAddHover } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
 import { captureSourcePosition, restoreSourcePosition, setSourceReturn, sourcePositionHistory, sourceReturnField } from './source-position';
@@ -55,6 +55,8 @@ export class EditorController {
   readonly view: EditorView;
   private readonly mode = new Compartment();
   private readonly language = new Compartment();
+  private readonly headingAdd = new Compartment();
+  private headingAddEnabled = false;
   private readonly unsubscribeLocale: () => void;
   private readonly options: EditorOptions;
   private groupPrompt: HTMLElement | null = null;
@@ -63,6 +65,8 @@ export class EditorController {
 
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
+    // createState 读取开关初值，必须先于编辑器状态构建赋值。
+    this.headingAddEnabled = options.headingAddEnabled ?? false;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
     this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
       undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus });
@@ -100,9 +104,10 @@ export class EditorController {
       }),
       history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
+      this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
-      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from) }),
-      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, markerGestures, foldMotion,
+      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position) }),
+      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion,
       keymap.of([...taskKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
@@ -166,6 +171,13 @@ export class EditorController {
     if (enteringSource || returning) restoreSourcePosition(this.view, mappedTarget, () => generation === this.positionGeneration);
   }
 
+  /** 切换标题下新增任务入口；仅重配置界面扩展，不写正文历史或折叠状态。 */
+  setHeadingAddEnabled(enabled: boolean): void {
+    if (this.headingAddEnabled === enabled) return;
+    this.headingAddEnabled = enabled;
+    this.view.dispatch({ effects: this.headingAdd.reconfigure(headingAddFacet.of(enabled)), annotations: Transaction.addToHistory.of(false) });
+  }
+
   /** 将文件布局整理作为可撤销正文操作；应用应在保存协调器就绪后调用。 */
   normalizeArchive(): void {
     if (this.state.facet(modeFacet) === 'source') return;
@@ -201,6 +213,9 @@ export class EditorController {
     // 后台项目保存的状态可能来自旧语言；复用其历史后再同步当前界面语言。
     this.refreshLanguage();
     if (ui) this.setUIState(ui);
+    // 后台项目保存的状态可能带着旧的入口开关值；恢复后立即对齐当前设置。
+    if (this.view.state.facet(headingAddFacet) !== this.headingAddEnabled)
+      this.view.dispatch({ effects: this.headingAdd.reconfigure(headingAddFacet.of(this.headingAddEnabled)), annotations: Transaction.addToHistory.of(false) });
   }
   getUIState(): ProjectView {
     const model = this.state.field(documentField);
@@ -259,11 +274,23 @@ export class EditorController {
         position = Math.min(state.doc.length, state.doc.lineAt(paragraph?.to ?? cursor).to + 1);
       }
     }
-    // 归档页的光标可能仍位于隐藏正文；新增待办只能落到可见分区边界。
-    const hiddenRanges = state.facet(modeFacet) === 'source' ? state.field(sourceScopeField) : getHiddenRanges(model, 'todo');
+    this.writeTaskInsert(position, indent, emptyLine);
+  }
+  /** 在标题块后的可见行边界插入空任务；锚点由预览控件按同一布局规则计算。 */
+  insertTaskAt(position: number): void {
+    if (this.state.facet(modeFacet) === 'archive' || this.state.facet(sourceViewFacet) === 'archive') this.setMode('todo');
+    this.writeTaskInsert(Math.min(position, this.state.doc.length), '');
+  }
+  /**
+   * 落点若被隐藏分区包含则收敛到可见边界；空行配对保证新任务不吞并后续正文或列表。
+   * reuseLine 表示落点在空白行自身的缩进之后（光标路径的空行），必须原位续接，不加换行前缀。
+   */
+  private writeTaskInsert(position: number, indent: string, reuseLine = false): void {
+    const { state } = this;
+    const hiddenRanges = state.facet(modeFacet) === 'source' ? state.field(sourceScopeField) : getHiddenRanges(this.model, 'todo');
     const hidden = hiddenRanges.find(range => position > range.from && position <= range.to);
     if (hidden) { position = hidden.from; indent = ''; }
-    const prefix = !emptyLine && position && state.doc.sliceString(position - 1, position) !== '\n' ? '\n' : '';
+    const prefix = !reuseLine && position && state.doc.sliceString(position - 1, position) !== '\n' ? '\n' : '';
     const insert = `${prefix}${indent}- [ ] `;
     const followingBreaks = /^\n*/.exec(state.doc.sliceString(position, position + 2))![0].length;
     const suffix = position < state.doc.length ? '\n'.repeat(Math.max(0, 2 - followingBreaks)) : '';

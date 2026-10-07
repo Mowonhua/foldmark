@@ -14,6 +14,8 @@ export const modeFacet = Facet.define<ViewMode, ViewMode>({ combine: values => v
 export const sourceViewFacet = Facet.define<'todo' | 'archive', 'todo' | 'archive'>({ combine: values => values[0] ?? 'todo' });
 export const actionsFacet = Facet.define<EditorActions, EditorActions>({ combine: values => values[0] });
 export const resourcesFacet = Facet.define<Pick<EditorOptions, 'resolveResource' | 'openLink'>, Pick<EditorOptions, 'resolveResource' | 'openLink'>>({ combine: values => values[0] ?? {} });
+/** 标题下新增任务入口的启用开关；由应用偏好经控制器注入，缺省关闭。 */
+export const headingAddFacet = Facet.define<boolean, boolean>({ combine: values => values[0] ?? false });
 export const setFolds = StateEffect.define<readonly number[]>();
 /** 替换已展开完成组的父项坐标；effect 坐标属于事务完成后的文档。 */
 export const setExpandedCompletedGroups = StateEffect.define<readonly number[]>();
