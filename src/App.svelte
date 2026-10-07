@@ -1280,7 +1280,8 @@
         <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}
           autoCheck={config.preferences.autoCheckUpdates ?? true} autoDownload={config.preferences.autoDownloadUpdates ?? true}
           onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
-          onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}/>
+          onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}
+          onOpenLink={url => void openDocumentLink(url)}/>
       {:else if dialog === 'help'}
         <h2 id="dialog-title">{$t("快捷键")}</h2>
         <dl class="shortcuts"><dt>Ctrl N</dt><dd>{$t("新增任务")}</dd><dt>Enter</dt><dd>{$t("继续任务；空任务退出列表")}</dd><dt>Shift Enter</dt><dd>{$t("在任务正文中换行")}</dd><dt>Tab / Shift Tab</dt><dd>{$t("整项缩进 / 反缩进")}</dd><dt>Ctrl Z / Ctrl Shift Z</dt><dd>{$t("撤销 / 重做当前项目的编辑")}</dd><dt>Ctrl S</dt><dd>{$t("立即保存")}</dd><dt>Ctrl P</dt><dd>{$t("快速查找项目")}</dd><dt>Ctrl I</dt><dd>{$t("跳转到灵感簿")}</dd><dt>Ctrl Shift F</dt><dd>{$t("跨项目搜索")}</dd></dl>

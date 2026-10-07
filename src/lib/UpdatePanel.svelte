@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
    * 文件职责：呈现更新进度与用户操作入口。
-   * 定义范围：更新状态展示和事件契约；网络、安装与保存由应用协调。
+   * 定义范围：更新状态展示、事件契约与更新说明渲染；网络、安装与保存由应用协调。
    */
   import { t } from './i18n';
+  import type { Action } from 'svelte/action';
   import type { UpdateStatus } from './updater/contracts';
+  import { renderReleaseNotes } from './updater/release-notes';
   /**
    * 结构职责：绑定应用持有的更新状态与持久化偏好。
-   * 字段说明：操作回调由更新协调器提供，偏好修改由应用保存。
+   * 字段说明：操作回调由更新协调器提供，偏好修改由应用保存；onOpenLink 走应用统一外链通道。
    * 约束条件：浏览器预览只显示桌面版说明，安装期间禁止重复操作。
    */
   interface Props {
@@ -15,10 +17,27 @@
     autoCheck: boolean; autoDownload: boolean;
     onCheck: () => void; onDownload: () => void; onInstall: () => void; onRetry: () => void;
     onPreferences: (autoCheck: boolean, autoDownload: boolean) => void;
+    onOpenLink: (url: string) => void;
   }
-  let { desktop, currentVersion, status, autoCheck, autoDownload, onCheck, onDownload, onInstall, onRetry, onPreferences }: Props = $props();
+  let { desktop, currentVersion, status, autoCheck, autoDownload, onCheck, onDownload, onInstall, onRetry, onPreferences, onOpenLink }: Props = $props();
   const busy = $derived(['checking', 'downloading', 'installing'].includes(status.kind));
   const progress = $derived(status.totalBytes ? Math.min(100, Math.floor((status.downloadedBytes ?? 0) / status.totalBytes * 100)) : undefined);
+  /**
+   * 挂载时渲染一次，候选更新变化时整体替换内容；渲染产物是安全 DOM，不经过 innerHTML。
+   * 点击代理到应用的外链通道：说明文本来自远端，href 已在渲染时做过协议白名单。
+   */
+  const renderMarkdown: Action<HTMLDivElement, string> = (node, body) => {
+    const render = (source: string) => node.replaceChildren(renderReleaseNotes(source));
+    const click = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest('a[href]');
+      if (!link) return;
+      event.preventDefault();
+      onOpenLink(link.getAttribute('href')!);
+    };
+    node.addEventListener('click', click);
+    render(body);
+    return { update: render, destroy: () => node.removeEventListener('click', click) };
+  };
 </script>
 
 <p class="update-version">{$t('当前版本')} <span>{currentVersion}</span></p>
@@ -48,7 +67,12 @@
     {:else if status.kind === 'installing'}<p>{$t('正在保存文档并安装更新，请稍候…')}</p>
     {:else if status.kind === 'error'}<p class="dialog-error">{$t('更新未完成：{message}', { message: status.message ?? '' })}</p>{/if}
   </div>
-  {#if status.body}<details><summary>{$t('更新说明')}</summary><pre class="release-notes">{status.body}</pre></details>{/if}
+  {#if status.body}
+    <details class="release-notes">
+      <summary class="release-notes-summary"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg>{$t('更新说明')}</summary>
+      <div class="release-notes-body" use:renderMarkdown={status.body}></div>
+    </details>
+  {/if}
   <div class="modal-actions update-actions">
     {#if ['idle', 'current', 'checking'].includes(status.kind)}<button class="primary" disabled={busy} onclick={onCheck}>{$t('检查更新')}</button>{/if}
     {#if status.kind === 'available'}<button class="primary" onclick={onDownload}>{$t('下载更新')}</button>{/if}
@@ -81,5 +105,34 @@
   .update-status:empty {display:none}
   .update-actions {margin-top:20px}
   progress {width:100%;accent-color:var(--accent)}
-  .release-notes {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:200px;overflow:auto}
+  /* 折叠行沿用设置面板的摘要模式：箭头随展开旋转，悬停与展开态转强调色。 */
+  .release-notes {margin-top:18px;border-top:1px solid var(--divider-color,var(--line))}
+  .release-notes-summary {display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;list-style:none;font-size:12px;color:var(--muted);user-select:none;transition:color .15s}
+  .release-notes-summary::-webkit-details-marker {display:none}
+  .release-notes-summary:hover,.release-notes[open] .release-notes-summary {color:var(--accent)}
+  .release-notes-summary:focus-visible {outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--control-radius,5px)}
+  .release-notes-summary>svg {flex-shrink:0;transition:transform .15s}
+  .release-notes[open] .release-notes-summary>svg {transform:rotate(90deg)}
+  /* 说明区按输入框容器呈现，限高滚动，排版消费通用语义变量。 */
+  .release-notes-body {margin:0 0 16px;padding:12px 14px;border:1px solid var(--field-border,var(--line));border-radius:var(--field-radius,8px);background:var(--field-background,var(--surface));box-shadow:var(--field-shadow,none);max-height:260px;overflow:auto;overscroll-behavior:contain;color:var(--muted);font-size:12px;line-height:1.7}
+  .release-notes-body :global(:is(h1,h2,h3,h4,h5,h6)) {margin:14px 0 6px;font-size:12px;font-weight:600;color:var(--ink);line-height:1.5}
+  .release-notes-body :global(h1) {font-size:13px}
+  .release-notes-body :global(:is(h1,h2,h3,h4,h5,h6):first-child) {margin-top:0}
+  .release-notes-body :global(p) {margin:0 0 8px}
+  .release-notes-body :global(:is(ul,ol)) {margin:0 0 8px;padding-left:18px}
+  .release-notes-body :global(li) {margin:2px 0}
+  .release-notes-body :global(a) {color:var(--accent);text-decoration:none}
+  .release-notes-body :global(a:hover) {text-decoration:underline;text-underline-offset:3px}
+  .release-notes-body :global(:is(strong,em)) {color:var(--ink)}
+  .release-notes-body :global(code) {font-family:ui-monospace,Consolas,monospace;font-size:11px;background:var(--surface-alt);border-radius:4px;padding:1px 4px}
+  .release-notes-body :global(pre) {margin:0 0 8px;padding:10px 12px;overflow:auto;background:var(--surface-alt);border-radius:var(--control-radius,6px)}
+  .release-notes-body :global(pre code) {padding:0;background:none}
+  .release-notes-body :global(blockquote) {margin:0 0 8px;padding-left:10px;border-left:2px solid var(--line)}
+  .release-notes-body :global(hr) {border:0;border-top:1px solid var(--line);margin:12px 0}
+  .release-notes-body :global(img) {display:block;max-width:100%;margin:8px 0;border-radius:5px}
+  .release-notes-body :global(input[type=checkbox]) {margin:0 6px 0 0;accent-color:var(--accent);vertical-align:-1px}
+  .release-notes-body :global(table) {border-collapse:collapse;margin:0 0 8px}
+  .release-notes-body :global(:is(th,td)) {border:1px solid var(--line);padding:4px 8px}
+  .release-notes-body :global(th) {font-weight:600;color:var(--ink)}
+  .release-notes-body :global(:is(p,ul,ol,blockquote,pre,table,hr,h1,h2,h3,h4,h5,h6):last-child) {margin-bottom:0}
 </style>
