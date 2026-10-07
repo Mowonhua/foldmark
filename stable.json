@@ -1,11 +1,11 @@
 {
-  "version": "0.5.0",
-  "notes": "# Foldmark v0.5.0\r\n\r\n相较于 v0.4.0：\r\n\r\n- 新增标题悬停新增任务（默认关闭）：在设置的界面分区开启后，各级标题文字后悬停或键盘聚焦时淡入「新增任务」按钮，点击在该标题下插入新任务并移入光标，可一次撤销。\r\n- 修复侧边栏大纲标题较多时条目被弹性布局压缩的问题，条目高度固定，超出侧栏后滚动查看。\r\n- 修复在弹窗内拖动选择后移出窗口松开鼠标导致弹窗误关闭的问题，改为按下时不在弹窗内才关闭。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-10-07T04:56:50.025Z",
+  "version": "0.5.1",
+  "notes": "# Foldmark v0.5.1\r\n\r\n相较于 v0.5.0：\r\n\r\n- 更新说明支持 Markdown 渲染：标题、列表、任务勾选框、行内代码、代码块、表格、引用与链接按排版显示；原始 HTML 不再显示，链接仅允许网页与邮件地址，点击后经系统浏览器打开。\r\n- 重新设计更新说明的折叠控件与排版：展开箭头随开合旋转、悬停转强调色，内容在限高圆角容器内滚动。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.1_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
+  "pub_date": "2026-10-07T06:18:18.345Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTA4QUowRkRuNEFoZDJFWWp6a2NUZ2NobCtqUURhMTV2TFlLdEYxN2FKd2pvMnI1RDBsR1dXVUNrS1lra0t0YWEyamlFbVJaeEF5SnRNV1I1T09xbXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzQ5MDA5CWZpbGU6Rm9sZG1hcmtfMC41LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4wClpoZW5uL2VpY0N3aXJlNkl2YVlQL3FBQUU5Ykw3NFJJU1FKQ2poSVBjeXlYVUh4V01RZEg4N1N1eTNGRDMzeXBDQ012eE1FdHA4NDFUR0hRRk5iRkRBPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.0/Foldmark_0.5.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NStldEtES3BoTnREVzB4TmRTYlE1cmJ5ZmJCUlZyVDZwTmtic3R2S001NEU4U293eEpGcExPNEhHelpUMy9sNjFCQUpnckhkcWsyWGRtZVNMM0dCY1FnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzUzODk3CWZpbGU6Rm9sZG1hcmtfMC41LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4xCnBXZEUrUDZvOGlIdUphNDZybW1xWlJtWjk0dFRNSllzWFc3SmhaSEN6b1FDalhxR0RnNlk2eGJoUkpFY0pXMGdXWnpROFVxbmppeTRKZEt3SkJXRURnPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.1/Foldmark_0.5.1_x64-setup.exe"
     }
   }
 }
