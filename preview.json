@@ -1,11 +1,11 @@
 {
-  "version": "0.5.1",
-  "notes": "# Foldmark v0.5.1\r\n\r\n相较于 v0.5.0：\r\n\r\n- 更新说明支持 Markdown 渲染：标题、列表、任务勾选框、行内代码、代码块、表格、引用与链接按排版显示；原始 HTML 不再显示，链接仅允许网页与邮件地址，点击后经系统浏览器打开。\r\n- 重新设计更新说明的折叠控件与排版：展开箭头随开合旋转、悬停转强调色，内容在限高圆角容器内滚动。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.1_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-10-07T06:18:18.345Z",
+  "version": "0.5.2",
+  "notes": "# Foldmark v0.5.2\r\n\r\n相较于 v0.5.1：\r\n\r\n- 任务折叠后只保留父任务行，将「展开内容」入口移到行末，不再留下独立摘要行或空白占位。\r\n- 「展开内容」复用「新增任务」的按钮样式与淡入动画，鼠标移到父任务行附近或键盘聚焦时显示，离开后隐藏。\r\n- 收起任务时正文短暂淡出，后续行平滑上移；普通鼠标移动不再打断动画。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.2_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
+  "pub_date": "2026-10-11T02:53:58.298Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NStldEtES3BoTnREVzB4TmRTYlE1cmJ5ZmJCUlZyVDZwTmtic3R2S001NEU4U293eEpGcExPNEhHelpUMy9sNjFCQUpnckhkcWsyWGRtZVNMM0dCY1FnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzUzODk3CWZpbGU6Rm9sZG1hcmtfMC41LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4xCnBXZEUrUDZvOGlIdUphNDZybW1xWlJtWjk0dFRNSllzWFc3SmhaSEN6b1FDalhxR0RnNlk2eGJoUkpFY0pXMGdXWnpROFVxbmppeTRKZEt3SkJXRURnPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.1/Foldmark_0.5.1_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NXdNWTRBcExmdGtuS2l3KzAveU8rUlFZWmk5TjlEenhlc0NKYmFWa2ZOa2l0cWd1c1AwRStRejR3Z0N6SlhXRTY2V2huN1dNeFRlNzF5THI3WnR4Rmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNjg3MjM3CWZpbGU6Rm9sZG1hcmtfMC41LjJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4yCjdHT1RBak5QR09VS083U3AyWUJ4RzA4aXI5T2RnekFvaGdRR1RldDNGV1FlVGtlYVc2emNiYXVUaTJ4UXhFMlhhNUNlL2YvendzTmNELzNFME04QUFnPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.2/Foldmark_0.5.2_x64-setup.exe"
     }
   }
 }
