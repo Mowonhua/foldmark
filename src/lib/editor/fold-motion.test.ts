@@ -85,7 +85,29 @@ describe('折叠行位移动画', () => {
     expect(f.animate).not.toHaveBeenCalled();
   });
 
-  it.each(['pointermove', 'pointerdown', 'keydown', 'beforeinput', 'scroll', 'wheel'])('%s 取消活动动画，并使旧测量失效', eventName => {
+  it('收起文末正文也淡出，副本不参与交互，完成后清理', async () => {
+    const f = fixture(); f.line(0, 10); const body = f.line(2, 40);
+    f.motion.run(() => body.remove(), { from: 2, to: 3 });
+    f.flush();
+    const layer = f.view.dom.querySelector<HTMLElement>('.fm-fold-outgoing')!;
+    expect(layer.getAttribute('aria-hidden')).toBe('true');
+    expect(layer.style.pointerEvents).toBe('none');
+    expect(f.animate.mock.calls[0][0]).toEqual([{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-6px)' }]);
+    f.view.dom.dispatchEvent(new Event('pointermove'));
+    expect(f.animations[0].cancel).not.toHaveBeenCalled();
+    f.animations[0].finish(); await Promise.resolve();
+    expect(layer.isConnected).toBe(false);
+  });
+
+  it('再次操作会立即清理收起正文的视觉副本', () => {
+    const f = fixture(); const body = f.line(2, 40);
+    f.motion.run(() => body.remove(), { from: 2, to: 3 }); f.flush();
+    f.view.dom.dispatchEvent(new Event('pointerdown'));
+    expect(f.view.dom.querySelector('.fm-fold-outgoing')).toBeNull();
+    expect(f.animations[0].cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['pointerdown', 'keydown', 'beforeinput', 'scroll', 'wheel'])('%s 取消活动动画，并使旧测量失效', eventName => {
     const f = fixture(); const line = f.line(0, 100);
     f.motion.run(() => { line.getBoundingClientRect = () => new DOMRect(0, 40, 400, 20); });
     f.flush();

@@ -285,12 +285,16 @@ describe('唯一文档编辑事务', () => {
     expect(instance.text).toBe(source);
     expect(instance.undo()).toBe(false);
   });
-  it('折叠摘要的块替换吞掉末行换行，不在摘要下方残留空文本行', () => {
+  it('折叠入口位于父行末尾，后续任务保持独立一行', () => {
     const instance = editor('- [ ] 父\n  正文\n- [ ] 后');
     instance.toggleFold(0);
     const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
     expect(summary.textContent).toBe('展开内容');
-    const following = summary.nextElementSibling as HTMLElement | null;
+    const parentLine = summary.closest('.cm-line')!;
+    expect(parentLine.textContent).toBe('父展开内容');
+    expect(Array.from(parentLine.children).filter(element => !element.classList.contains('cm-widgetBuffer')).at(-1)).toBe(summary.parentElement);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+    const following = parentLine.nextElementSibling as HTMLElement | null;
     expect(following?.classList.contains('cm-line')).toBe(true);
     expect(following?.textContent).toBe('后');
     expect(instance.text).toBe('- [ ] 父\n  正文\n- [ ] 后');
@@ -300,7 +304,10 @@ describe('唯一文档编辑事务', () => {
     instance.toggleFold(0);
     const summary = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-summary')!;
     expect(summary.textContent).toBe('展开内容');
-    const following = summary.nextElementSibling as HTMLElement | null;
+    const parentLine = summary.closest('.cm-line')!;
+    expect(parentLine.textContent).toBe('父展开内容');
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+    const following = parentLine.nextElementSibling as HTMLElement | null;
     expect(following?.classList.contains('cm-line')).toBe(true);
     expect(following?.textContent).toBe('后');
     expect(instance.text).toBe('- [ ] 父\n  正文\n\n- [ ] 后');

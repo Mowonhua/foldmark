@@ -10,15 +10,15 @@
 .cm-editor .fm-heading { color: var(--text); font-weight: 650; letter-spacing: -.025em; padding-top: 1.3em; padding-bottom: .55em; line-height: 1.45; }
 .cm-editor .fm-heading span { text-decoration: none; }
 .fm-h1 { font-size: 1.8em; }.fm-h2 { font-size: 1.45em; }.fm-h3 { font-size: 1.18em; }
-/* 标题后的新增入口：控件是挂在标题文字末尾的零尺寸内联元素（宽高均为 0，不参与行盒高度），
-   按钮绝对定位在文字右侧，悬停标题或键盘聚焦时淡入。显示与隐藏都不改变标题行的任何布局
-   尺寸，隐藏态与关闭开关时的排版逐像素一致。 */
-.fm-heading-add { position: relative; display: inline-block; width: 0; height: 0; vertical-align: middle; white-space: nowrap; }
-.fm-heading-add-button { position: absolute; left: calc(var(--editor-font-size, 16px) * .5); top: 0; transform: translateY(-50%) translateX(-4px); display: flex; width: fit-content; align-items: center; gap: 5px; height: calc(var(--editor-font-size, 16px) * 1.25); padding: 0 9px 0 6px; border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); font: inherit; font-size: calc(var(--editor-font-size, 16px) * .75); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; user-select: none; opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease, background-color 120ms, color 120ms; }
-.fm-heading-add.is-open .fm-heading-add-button, .fm-heading-add:focus-within .fm-heading-add-button { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
-.fm-heading-add-button:hover, .fm-heading-add-button:focus-visible { color: var(--accent); background: var(--control-hover-background, var(--hover)); }
-.fm-heading-add-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.fm-heading-add-button:active { background: var(--selection); color: var(--selection-ink); }
+/* 行末入口共用淡入和横移动画；按钮绝对定位，显示与隐藏不改变文字换行和行高。
+   标题新增入口使用零尺寸锚点；任务展开入口采用与左侧任务控件相同的行内高度与垂直对齐。 */
+.fm-line-action { position: relative; display: inline-block; width: 0; height: 0; vertical-align: middle; white-space: nowrap; }
+.fm-line-action-button { position: absolute; left: calc(var(--editor-font-size, 16px) * .5); top: 0; transform: translateY(-50%) translateX(-4px); display: flex; width: fit-content; align-items: center; gap: 5px; height: calc(var(--editor-font-size, 16px) * 1.25); padding: 0 9px 0 6px; border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); font: inherit; font-size: calc(var(--editor-font-size, 16px) * .75); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; user-select: none; opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease, background-color 120ms, color 120ms; }
+.fm-line-action.is-open .fm-line-action-button, .fm-line-action:focus-within .fm-line-action-button { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+.fm-line-action-button:hover, .fm-line-action-button:focus-visible { color: var(--accent); background: var(--control-hover-background, var(--hover)); }
+.fm-line-action-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fm-line-action-button:active { background: var(--selection); color: var(--selection-ink); }
+.fm-line-action-button svg { width: 12px; height: 12px; }
 .fm-heading-add-icon { flex: none; }
 .fm-em { font-style: italic; }.fm-strong { font-weight: 650; }.fm-strike { text-decoration: line-through; }
 .fm-code { font-family: ui-monospace, Consolas, monospace; font-size: .88em; background: var(--surface-alt); border-radius: 4px; padding: 2px 3px; }
@@ -54,9 +54,12 @@
 .fm-list-marker { border: none; background: transparent; min-width: 15px; height: 20px; font-size: 1em; }
 .fm-item-controls button:focus-visible, .fm-hidden-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fm-hidden-note { font: inherit; font-size: .8em; color: var(--muted); background: transparent; border: 0; padding: 3px 8px; cursor: pointer; }
-/* 两种摘要共用层级、标记列和整行热区；只改变控件布局，不改写任务或正文坐标。 */
+/* 摘要共用箭头和交互状态；完成组占独立行，正文展开入口接在父行末尾。 */
 .fm-disclosure-row { display: flex; align-items: center; inline-size: calc(100% - var(--fm-disclosure-indent)); margin-inline-start: var(--fm-disclosure-indent); min-block-size: max(28px, calc(var(--editor-font-size, 16px) * 1.8)); padding: 0 2px 0 6px; box-sizing: border-box; border: 0; border-radius: var(--control-radius, 4px); background: transparent; color: var(--muted); font: inherit; font-size: .875em; line-height: 1.45; text-align: start; cursor: pointer; transition: background-color 120ms, color 120ms; }
 .fm-disclosure-marker { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 calc(var(--editor-font-size, 16px) * 1.5); align-self: flex-start; block-size: calc(var(--editor-font-size, 16px) * 1.75); }
+.fm-fold-expand { height: 1.35em; vertical-align: text-bottom; }
+.fm-fold-summary.fm-line-action-button { top: 50%; }
+.fm-fold-summary .fm-disclosure-marker { flex-basis: auto; align-self: center; block-size: auto; }
 .fm-disclosure-chevron { flex: none; transform-origin: center; transition: transform 140ms; }
 :is(.fm-disclosure-row, .fm-fold-button)[aria-expanded=true] .fm-disclosure-chevron { transform: rotate(90deg); }
 .fm-disclosure-label { min-inline-size: 0; overflow-wrap: anywhere; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -96,7 +99,7 @@
   }
 }
 .fm-group-prompt { max-width: 90%; white-space: normal; flex-wrap: wrap; }
-@media (prefers-reduced-motion: reduce) { .fm-item-controls .fm-fold-button, .fm-disclosure-row, .fm-disclosure-chevron, .fm-heading-add-button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fm-item-controls .fm-fold-button, .fm-disclosure-row, .fm-disclosure-chevron, .fm-line-action-button { transition: none; } }
 
 /* 无源码空行的相邻块保留默认节奏，独立控件不改变代码框内的行距。 */
 .fm-block-gap { height: calc(var(--editor-font-size, 16px) * .75); pointer-events: none; }

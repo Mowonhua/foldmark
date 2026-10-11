@@ -15,6 +15,24 @@ function summary(instance: EditorController): HTMLButtonElement {
 }
 afterEach(() => { editors.splice(0).forEach(instance => instance.destroy()); document.body.replaceChildren(); });
 
+it('行末展开入口复用新增任务悬停逻辑，移到父行及按钮时显示，离开后隐藏', () => {
+  const instance = editor('- [ ] 父\n  正文\n- [ ] 后');
+  instance.toggleFold(0);
+  const wrap = instance.view.dom.querySelector<HTMLElement>('.fm-fold-expand')!;
+  const line = wrap.closest('.cm-line')!;
+  expect(wrap.classList.contains('fm-line-action')).toBe(true);
+  expect(wrap.classList.contains('is-open')).toBe(false);
+  line.dispatchEvent(new Event('pointerover', { bubbles: true }));
+  expect(wrap.classList.contains('is-open')).toBe(true);
+  wrap.querySelector('button')!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+  expect(wrap.classList.contains('is-open')).toBe(true);
+  line.nextElementSibling!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+  expect(wrap.classList.contains('is-open')).toBe(false);
+  line.dispatchEvent(new Event('pointerover', { bubbles: true }));
+  line.dispatchEvent(new Event('pointerout', { bubbles: true }));
+  expect(wrap.classList.contains('is-open')).toBe(false);
+});
+
 it('任务自身折叠保留同一按钮的键盘焦点，展开入口恢复完整正文', () => {
   const instance = editor('- [ ] 任务\n  正文\n  - [ ] 子任务\n');
   const trigger = instance.view.dom.querySelector<HTMLButtonElement>('.fm-fold-button')!;

@@ -418,7 +418,7 @@ export class EditorController {
     const intersects = selection.to > item.firstLineTo && selection.from < item.to;
     const change = () => this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
     const motion = this.view.plugin(foldMotion);
-    if (motion) motion.run(change); else change();
+    if (motion) motion.run(change, willFold ? { from: item.firstLineTo + 1, to: item.to } : undefined); else change();
   }
   /**
    * 函数职责：切换父项下已完成子任务组的展开状态。

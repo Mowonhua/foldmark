@@ -155,16 +155,23 @@ class NoteWidget extends WidgetType {
   ignoreEvent(): boolean { return true; }
 }
 
-/** 任务正文收起后使用共享摘要行展示展开入口，标题仍留在原位置并保持可编辑。 */
+/** 任务正文收起后在首行末尾展示展开入口，标题仍留在原位置并保持可编辑。 */
 class FoldedContentWidget extends WidgetType {
   private readonly uiLocale = get(locale);
   constructor(readonly item: ListItem) { super(); }
   eq(other: FoldedContentWidget): boolean { return this.uiLocale === other.uiLocale && this.item.from === other.item.from && this.item.depth === other.item.depth; }
   toDOM(view: EditorView): HTMLElement {
-    const element = disclosureRow(view, 'fm-fold-summary', 'toggleFold'); this.updateDOM(element); return element;
+    const wrap = document.createElement('span');
+    wrap.className = 'fm-fold-expand fm-line-action';
+    const button = disclosureRow(view, 'fm-fold-summary fm-line-action-button', 'toggleFold');
+    button.classList.remove('fm-disclosure-row');
+    wrap.append(button);
+    this.updateDOM(wrap); return wrap;
   }
-  updateDOM(element: HTMLElement): boolean {
-    updateDisclosureRow(element, this.item.from, this.item.depth + 1, translate('展开内容'), false, translate('展开折叠内容'));
+  updateDOM(wrap: HTMLElement): boolean {
+    wrap.dataset.foldExpand = String(this.item.from);
+    const element = wrap.querySelector<HTMLElement>('button')!;
+    updateDisclosureRow(element, this.item.from, 0, translate('展开内容'), false, translate('展开折叠内容'));
     return true;
   }
   ignoreEvent(): boolean { return true; }
@@ -235,11 +242,11 @@ class HeadingAddWidget extends WidgetType {
   eq(other: HeadingAddWidget): boolean { return this.uiLocale === other.uiLocale && this.headingFrom === other.headingFrom && this.anchor === other.anchor; }
   toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement('span');
-    wrap.className = 'fm-heading-add';
+    wrap.className = 'fm-heading-add fm-line-action';
     wrap.dataset.headingAdd = String(this.headingFrom);
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'fm-heading-add-button';
+    button.className = 'fm-heading-add-button fm-line-action-button';
     const label = document.createElement('span');
     label.textContent = translate('新增任务');
     button.append(plusGlyph(), label);
@@ -251,14 +258,14 @@ class HeadingAddWidget extends WidgetType {
 }
 
 /**
- * 标题行与其后新增按钮共享一个悬停目标：进入标题行或按钮时展开对应按钮，
+ * 标题新增入口和任务展开入口共用悬停逻辑：进入所属行或按钮时显示对应入口，
  * 移入其他内容即收起。开合只切换 DOM 类名，不派发事务，也不改变任何布局尺寸。
  */
 const headingAddHovered = new WeakMap<EditorView, HTMLElement | null>();
 export const headingAddHover = EditorView.domEventHandlers({
   pointerover(event, view) {
     if (!(event.target instanceof Element)) return;
-    setOpenHeadingAdd(view, event.target.closest<HTMLElement>('[data-heading-line], .fm-heading-add'));
+    setOpenHeadingAdd(view, event.target.closest<HTMLElement>('[data-heading-line], [data-fold-line], .fm-line-action'));
   },
   pointerout(event, view) {
     // 视图内部的移动交给随后的 pointerover 处理；真正离开编辑器 DOM 时才收起。
@@ -271,7 +278,9 @@ function setOpenHeadingAdd(view: EditorView, zone: HTMLElement | null): void {
   const previous = headingAddHovered.get(view) ?? null;
   if (!zone && !previous) return;
   const heading = zone?.dataset.headingLine ?? zone?.dataset.headingAdd;
-  const next = heading ? view.dom.querySelector<HTMLElement>(`.fm-heading-add[data-heading-add="${heading}"]`) : null;
+  const fold = zone?.dataset.foldLine ?? zone?.dataset.foldExpand;
+  const next = heading !== undefined ? view.dom.querySelector<HTMLElement>(`.fm-heading-add[data-heading-add="${heading}"]`)
+    : fold !== undefined ? view.dom.querySelector<HTMLElement>(`.fm-fold-expand[data-fold-expand="${fold}"]`) : null;
   if (previous === next) return;
   previous?.classList.remove('is-open');
   next?.classList.add('is-open');
@@ -596,10 +605,15 @@ function buildPreview(state: EditorState): DecorationSet {
       const widget = range.kind === 'completed-group' && parent ? new CompletedGroupWidget(parent, range.count, false)
         : range.kind === 'fold' && parent ? new FoldedContentWidget(parent)
         : range.itemFrom !== null && range.count ? new NoteWidget(translate('已完成 {count} 项', { count: range.count })) : undefined;
-      merged.push({ from: range.from, to: range.to, widget, block: true });
+      merged.push({ from: range.from, to: range.to, widget, block: range.kind !== 'fold' });
     }
     // 过滤范围右端是下一条可见行的起点；块替换不能吞掉该行的缩进、标题等行装饰。
-    for (const range of merged) ranges.push(Decoration.replace({ widget: range.widget, block: range.block, inclusiveEnd: false }).range(range.from, range.to));
+    for (const range of merged) {
+      // 折叠正文用行内替换把入口接在父行末尾；保留下一可见行前的换行，避免两条任务并行。
+      // 装饰过滤仍采用完整隐藏范围，与键盘保护保持一致；文末没有后续行时全部吞掉。
+      const to = !range.block && range.to < state.doc.length ? range.to - 1 : range.to;
+      ranges.push(Decoration.replace({ widget: range.widget, block: range.block, inclusiveEnd: false }).range(range.from, to));
+    }
   }
   // 隐藏区间已排序且不重叠，二分定位避免大清单装饰与已完成项形成平方级扫描。
   const overlappingRange = (from: number, to: number): typeof merged[number] | undefined => {
@@ -633,6 +647,7 @@ function buildPreview(state: EditorState): DecorationSet {
       if (item.firstLineTo < window.from || overlapsHidden(item.from, item.firstLineTo)) continue;
       ranges.push(Decoration.replace({ widget: new ItemWidget(item, folds.has(item.from), label) }).range(item.markerFrom, item.task ? item.contentFrom : item.markerTo));
       lineStyle(item.from, `fm-list-line${item.task?.checked ? ' fm-completed-line' : ''}`);
+      if (folds.has(item.from)) ranges.push(Decoration.line({ attributes: { 'data-fold-line': String(item.from) } }).range(state.doc.lineAt(item.from).from));
     }
     cached = { mode, language: get(locale), folds, expandedGroups, window, hidden: merged, decorations: Decoration.set(ranges, true) };
     structureCache.set(model, cached);
