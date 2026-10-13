@@ -328,8 +328,9 @@ export class EditorController {
       const current = this.state.selection.main;
       const anchorInside = current.from >= item.from && current.to <= item.to;
       const next = model.tasks.find(candidate => candidate.from > item.to && !candidate.task?.checked);
-      // 只在被隐藏范围包含现有选区时迁移光标；鼠标完成其他项不得抢走编辑位置。
-      const selection = !item.task.checked && anchorInside ? { anchor: next?.contentFrom ?? model.text.length } : undefined;
+      const mapping = this.state.changes(changes);
+      // 控件操作结束文本选择；隐藏当前任务时迁移光标，否则保留原选区活动端的编辑位置。
+      const selection = { anchor: mapping.mapPos(!item.task.checked && anchorInside ? next?.contentFrom ?? model.text.length : current.head) };
       const completing = group || !item.task.checked;
       const expanded = new Set<number>();
       if (!completing) {
@@ -337,13 +338,16 @@ export class EditorController {
         const byFrom = new Map(model.items.map(entry => [entry.from, entry]));
         for (let ancestor: number | null = item.from; ancestor !== null; ancestor = byFrom.get(ancestor)!.parentFrom) expanded.add(ancestor);
       }
-      const mapping = this.state.changes(changes);
       const effects = expanded.size ? setFolds.of([...this.state.field(foldsField)].filter(from => !expanded.has(from)).map(from => mapping.mapPos(from, 1))) : undefined;
       this.view.dispatch({ changes, selection, effects, annotations: isolateHistory.of('full'), userEvent: 'input.complete' });
       this.closeGroupPrompt();
       this.options.onStatus?.(this.archiveLayoutWarning() ?? (completing ? group ? translate('整组已完成，可撤销') : translate('任务已完成，可撤销') : translate('任务已恢复，可撤销')));
     } catch (error) {
-      if (error instanceof Error && error.message.includes('TASK_GROUP_REQUIRED')) { this.showGroupPrompt(itemFrom); return; }
+      if (error instanceof Error && error.message.includes('TASK_GROUP_REQUIRED')) {
+        // 尚未完成整组也已激活任务控件；只清除选区，正文和撤销历史保持不变。
+        this.view.dispatch({ selection: { anchor: this.state.selection.main.head }, annotations: Transaction.addToHistory.of(false) });
+        this.showGroupPrompt(itemFrom); return;
+      }
       this.options.onStatus?.(error instanceof Error ? error.message : translate('任务操作失败'));
     }
   }
@@ -416,14 +420,15 @@ export class EditorController {
     if (willFold) folds.add(itemFrom); else folds.delete(itemFrom);
     const selection = this.state.selection.main;
     const intersects = selection.to > item.firstLineTo && selection.from < item.to;
-    const change = () => this.view.dispatch({ effects: setFolds.of([...folds]), selection: willFold && intersects ? { anchor: item.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
+    // 展开与收起都结束文本选择；收起遮住原选区时才把光标移到父行末尾。
+    const change = () => this.view.dispatch({ effects: setFolds.of([...folds]), selection: { anchor: willFold && intersects ? item.firstLineTo : selection.head }, annotations: Transaction.addToHistory.of(false) });
     const motion = this.view.plugin(foldMotion);
     if (motion) motion.run(change, willFold ? { from: item.firstLineTo + 1, to: item.to } : undefined); else change();
   }
   /**
    * 函数职责：切换父项下已完成子任务组的展开状态。
    * 输入说明：parentFrom 属于当前模型，源码模式使用完整可见源文，不响应组折叠。
-   * 输出说明：只影响界面，收起时将位于组内的选区移到可见边界，不写文本历史。
+   * 输出说明：只影响界面并清除文本选择，收起时将位于组内的选区移到可见边界，不写文本历史。
    * 实现思路：使用独立完成组字段，复用共享范围投影和条目内容身份。
    */
   toggleCompletedGroup(parentFrom: number): void {
@@ -436,7 +441,7 @@ export class EditorController {
     const selected = this.state.selection.main;
     const hidden = collapsing ? groups.find(group => selected.to > group.from && selected.from < group.to) : undefined;
     const parent = this.model.items.find(item => item.from === parentFrom)!;
-    this.view.dispatch({ effects: setExpandedCompletedGroups.of([...expanded]), selection: hidden ? { anchor: parent.firstLineTo } : undefined, annotations: Transaction.addToHistory.of(false) });
+    this.view.dispatch({ effects: setExpandedCompletedGroups.of([...expanded]), selection: { anchor: hidden ? parent.firstLineTo : selected.head }, annotations: Transaction.addToHistory.of(false) });
   }
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
