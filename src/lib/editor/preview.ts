@@ -775,7 +775,11 @@ function buildPreview(state: EditorState): DecorationSet {
     if (/^(?:ATXHeading|SetextHeading)[1-6]$/.test(name)) addHeadingWidget(node, contained);
     if (name === 'Emphasis' || name === 'StrongEmphasis' || name === 'Strikethrough' || name === 'InlineCode') {
       addMark(node.from, node.to, ({ Emphasis: 'fm-em', StrongEmphasis: 'fm-strong', Strikethrough: 'fm-strike', InlineCode: 'fm-code' } as Record<string, string>)[name]);
-      if (!editing) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
+      // 行内标记在光标所在物理行保持展开，离开该行后再隐藏。
+      // 输入法可将闭标记和新字符放在同一个文本节点中；首个字符使光标越过语法节点末端，
+      // 此时立即隐藏标记会拆坏尚未提交的输入节点，导致后续提交误删正文并滞留组合输入状态。
+      const editingLine = active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.to).to);
+      if (!editingLine) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
     }
     if (name === 'LinkReference') {
       if (!editing && !overlapsHidden(node.from, node.to)) {
