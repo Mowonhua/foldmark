@@ -162,6 +162,29 @@ describe('唯一文档编辑事务', () => {
     instance.undo();
     expect(instance.text).toBe('- [ ] 甲\n  说明\n- [ ] 乙\n');
   });
+  it.each(['up', 'down'] as const)('拖动任务向 %s 移动后保留滚动位置并静默完成', direction => {
+    const onStatus = vi.fn();
+    const original = '- [ ] 甲\n- [ ] 乙\n- [ ] 丙\n';
+    const instance = editor(original, { onStatus });
+    const from = direction === 'up' ? instance.model.tasks[1].from : 0;
+    const marker = instance.view.dom.querySelector<HTMLElement>(`[data-list-marker="${from}"]`)!;
+    // jsdom 不计算布局；按当前任务顺序提供坐标，使测试经过真实指针排序和移动入口。
+    vi.spyOn(instance.view.scrollDOM, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 600));
+    vi.spyOn(instance.view, 'coordsAtPos').mockImplementation(position => {
+      const index = instance.model.tasks.findIndex(item => position >= item.from && position <= item.to);
+      return new DOMRect(40, 120 + index * 40, 200, 30);
+    });
+    const scrollTop = 240;
+    instance.view.scrollDOM.scrollTop = scrollTop;
+    marker.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: direction === 'up' ? 160 : 120 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, cancelable: true, clientX: 40, clientY: direction === 'up' ? 118 : 198 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { button: 0 }));
+    expect(instance.text).toBe('- [ ] 乙\n- [ ] 甲\n- [ ] 丙\n');
+    expect.soft(instance.view.scrollDOM.scrollTop).toBe(scrollTop);
+    expect.soft(onStatus).not.toHaveBeenCalled();
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(original);
+  });
   it('切换项目保存不同历史，源码模式完整显示', () => {
     const instance = editor('- [ ] 甲');
     instance.toggleTask(0);

@@ -390,7 +390,7 @@ export class EditorController {
     }
   }
 
-  /** 移动的选区与折叠使用原条目内部位移；其他坐标使用标准事务映射。 */
+  /** 移动的选区与折叠使用原条目内部位移；其他坐标使用标准事务映射，视图不跟随条目滚动。 */
   private moveTo(from: number, boundary: number | null): void {
     if (this.state.facet(modeFacet) !== 'todo') return;
     const model = this.state.field(documentField);
@@ -403,12 +403,7 @@ export class EditorController {
       const selection = EditorSelection.create(this.state.selection.ranges.map(range => EditorSelection.range(map(range.anchor), map(range.head))), this.state.selection.mainIndex);
       const folds = [...this.state.field(foldsField)].map(map);
       const expandedGroups = [...this.state.field(expandedCompletedGroupsField)].map(map);
-      const coords = this.view.coordsAtPos(item.from);
-      const scroll = this.view.scrollDOM.scrollTop;
       this.view.dispatch({ changes, selection, effects: [setFolds.of(folds), setExpandedCompletedGroups.of(expandedGroups)], annotations: isolateHistory.of('full'), userEvent: 'move' });
-      const moved = this.view.coordsAtPos(map(item.from));
-      if (coords && moved) this.view.scrollDOM.scrollTop = scroll + moved.top - coords.top;
-      this.options.onStatus?.(translate('条目已移动，可撤销'));
     } catch (error) { this.options.onStatus?.(error instanceof Error ? error.message : translate('无法移动条目')); }
   }
 
