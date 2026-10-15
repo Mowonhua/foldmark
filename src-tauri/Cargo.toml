@@ -1,6 +1,6 @@
 [package]
 name = "foldmark"
-version = "0.5.2"
+version = "0.5.3"
 description = "Markdown task editor"
 license = "MIT"
 edition = "2021"
