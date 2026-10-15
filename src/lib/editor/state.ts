@@ -5,7 +5,8 @@
 import { Facet, MapMode, StateEffect, StateField, type ChangeDesc, type ChangeSet, type EditorState } from '@codemirror/state';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { invertedEffects } from '@codemirror/commands';
-import { parseDocument, type DocumentModel } from '../markdown';
+import { Tree, type SyntaxNode } from '@lezer/common';
+import { archiveSections, parseDocument, type DocumentModel } from '../markdown';
 import type { EditorActions, EditorOptions, ViewMode } from './types';
 import { tryMapTaskTextEdit } from './incremental-model';
 
@@ -95,6 +96,38 @@ export const softBreakHistory = invertedEffects.of(transaction => transaction.do
 function modelFor(state: EditorState, previous?: DocumentModel, changes?: ChangeSet): DocumentModel {
   const text = state.doc.toString();
   const tree = ensureSyntaxTree(state, state.doc.length, 40);
+  if (previous && changes) {
+    const boundaries = archiveSections(previous).flatMap(section => {
+      const from = changes.mapPos(section.from, 1, MapMode.TrackAfter);
+      const to = changes.mapPos(section.headingTo, -1);
+      // 仅保留未被修改、仍独占物理行的既有章节；全文重载或显式修改标题必须采用新语义。
+      return from !== null && (from === 0 || text[from - 1] === '\n')
+        && text.slice(from, to) === previous.text.slice(section.from, section.headingTo) ? [from] : [];
+    });
+    if (boundaries.length) {
+      const parsed = tree ?? parseDocument(text).tree;
+      const swallowed = boundaries.some(from => {
+        for (let node: SyntaxNode | null = parsed.resolveInner(from, 1); node; node = node.parent) {
+          if (node.from < from && (node.name === 'FencedCode' || node.name === 'MathBlock')) return true;
+        }
+        return false;
+      });
+      if (swallowed) {
+        // 待确认围栏不能跨入已存在的归档。分区独立解析但保留绝对坐标，
+        // 使任务模型、草稿补全和隐藏范围共享同一边界；不提前补写闭围栏或改动原文。
+        const children: Tree[] = [], positions: number[] = [];
+        const offsets = [0, ...boundaries.filter(from => from > 0), text.length];
+        for (let index = 0; index < offsets.length - 1; index++) {
+          const start = offsets[index];
+          const part = parseDocument(text.slice(start, offsets[index + 1])).tree;
+          for (let node = part.topNode.firstChild; node; node = node.nextSibling) {
+            children.push(node.toTree()); positions.push(start + node.from);
+          }
+        }
+        return parseDocument(text, new Tree(parsed.type, children, positions, text.length));
+      }
+    }
+  }
   if (tree && previous && changes) {
     const mapped = tryMapTaskTextEdit(previous,changes,text,tree);
     if (mapped) return mapped;

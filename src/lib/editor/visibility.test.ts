@@ -20,6 +20,35 @@ function key(instance: EditorController, name: string): void {
 afterEach(() => { instances.splice(0).forEach(instance => instance.destroy()); document.body.replaceChildren(); });
 
 describe('隐藏正文的导航与删除', () => {
+  it.each(['```', '~~~', '$$'])('待办末尾键入未闭合围栏 %s 时归档仍保持隐藏，确认和撤销不破坏归档', marker => {
+    const active = '待办正文\n\n';
+    const archive = '\n\n# 归档\n\n- [x] 完成项\n  归档正文\n\n  ```js\n  归档代码\n  ```\n';
+    const instance = editor(active + archive);
+    instance.focusAt(active.length);
+    for (const character of marker) {
+      const from = instance.state.selection.main.head;
+      instance.view.dispatch({ changes: { from, insert: character }, selection: { anchor: from + 1 }, userEvent: 'input.type' });
+    }
+    const draft = active + marker + archive;
+    expect(instance.text).toBe(draft);
+    expect(instance.view.contentDOM.textContent).not.toContain('归档');
+    expect(instance.view.contentDOM.textContent).not.toContain('完成项');
+    expect(instance.model.tasks).toHaveLength(1);
+    instance.setMode('source');
+    expect(instance.view.contentDOM.textContent).not.toContain('归档');
+    instance.setMode('todo');
+    key(instance, 'Enter');
+    expect(instance.text).toBe(active + marker + '\n\n' + marker + '\n\n' + archive);
+    expect(instance.view.contentDOM.textContent).not.toContain('归档');
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(draft);
+    expect(instance.view.contentDOM.textContent).not.toContain('归档');
+    expect(instance.redo()).toBe(true);
+    expect(editor(instance.text).view.contentDOM.textContent).not.toContain('归档');
+    instance.setMode('archive');
+    expect(instance.view.contentDOM.textContent).toContain('归档正文');
+    expect(instance.view.contentDOM.textContent).toContain('归档代码');
+  });
   it.each(['待办正文', '- [ ] 最后一项', '- [ ] 最后一项\n  任务正文'])('待办末尾连续 Delete 不带出归档标题：%s', active => {
     const source = active + '\n\n# 归档\n\n- [x] 完成项\n  归档正文\n';
     const instance = editor(source);
