@@ -24,7 +24,9 @@ p{line-height:1.85}
 button svg{flex-shrink:0}
 /* 品牌区与工具栏共用高度，确保折叠按钮在桌面及窄屏布局中始终同轴。 */
 /* 窗口变窄只减少内容可用宽度；保持控件字号与留白稳定，避免跨断点时整片界面跳动。 */
-.app-shell{--topbar-height:67px;display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden;transition:grid-template-columns .18s cubic-bezier(.215,.61,.355,1)}
+.app-shell{--topbar-height:67px;display:grid;grid-template-columns:232px minmax(0,1fr);height:100dvh;overflow:hidden;opacity:0;transition:grid-template-columns .18s cubic-bezier(.215,.61,.355,1)}
+/* 启动解析完成前整体透明，booted 置位后一次性淡入，掩盖加载期间各处内容跳变；结束后常驻不影响后续布局动画。 */
+.app-shell.booted{opacity:1;transition:opacity .18s ease-out,grid-template-columns .18s cubic-bezier(.215,.61,.355,1)}
 .app-shell.sidebar-hidden{grid-template-columns:0px minmax(0,1fr)}
 .app-shell.card-transitioning{transition:none}
 .sidebar-slot{grid-area:1 / 1;min-width:0;overflow:hidden}
