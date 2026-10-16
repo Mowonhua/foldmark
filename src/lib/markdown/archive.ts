@@ -200,7 +200,8 @@ function promote(text: string, item: ListItem, source: string): string {
 }
 
 /**
- * 将完整完成的最外层任务树按原二级至六级标题路径前插到末尾归档；恢复时复用或重建路径。
+ * 将完整完成的最外层任务树按原二级至六级标题路径前插到末尾归档；恢复时复用或重建路径，
+ * 无标题路径的任务回到顶层一级标题直下，没有一级标题时放在待办区最前面。
  * 任务内部的同级列表稳定分为未完成、已完成；completedFrom 是本次新完成项的源文坐标，
  * 仅将这些项放到已完成同级前面，不记录时间，也不重排已有归档章节。
  * 普通列表桥接不截断任务祖先约束；正文、子树、缩进和换行风格随完整条目保留。
@@ -249,7 +250,22 @@ export function normalizeArchiveChanges(model: DocumentModel, completedFrom: rea
     if (path.length) placeInHeadingGroup(activeGroups, path, promote(body, item, model.text), model, false, restoredGroups);
     else unheadedRestored = append(unheadedRestored, promote(body, item, model.text));
   }
-  active = append(renderHeadingGroups(activeGroups, newline), unheadedRestored);
+  // 无标题路径的恢复任务没有原位记录，回到顶层一级标题的正文开头；没有一级标题时放在待办区最前面。
+  const project = unheadedRestored ? activeGroups.children.find(child => child.heading!.level === 1) : undefined;
+  if (project) {
+    const leading = project.body.match(/^(?:[ \t]*\r?\n)*/)?.[0] ?? '';
+    const existing = project.body.slice(leading.length);
+    // 后接列表时并入为首项；后接其他块时用空行分隔，防止正文被吞进任务。
+    const separator = !existing ? '' : /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/.test(existing)
+      ? (unheadedRestored.endsWith('\n') ? '' : newline)
+      : blockSeparator(unheadedRestored, existing, newline);
+    project.body = leading + unheadedRestored + separator + existing;
+    project.changed = true;
+    active = renderHeadingGroups(activeGroups, newline);
+  } else {
+    const renderedActive = renderHeadingGroups(activeGroups, newline);
+    active = unheadedRestored + blockSeparator(unheadedRestored, renderedActive, newline) + renderedActive;
+  }
   const archivedGroups = headingGroups('');
   // 既有归档及备注保留源文顺序，新完成的完整根树随后前插到各自标题路径。
   for (const section of sections) {

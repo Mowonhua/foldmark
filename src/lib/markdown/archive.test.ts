@@ -179,11 +179,33 @@ describe('managed archive layout', () => {
     expect(parseDocument(result).tasks[2].parentFrom).toBe(0);
     expect(normalize(result)).toBe(result);
   });
+  it('无标题路径的恢复任务回到顶层一级标题直下，并入后续任务列表', () => {
+    const result = normalize('# 项目\n\n- [ ] open\n\n## 章节\n\n- [ ] other\n\n# 归档\n\n- [ ] restored\n');
+    expect(result).toContain('# 项目\n\n- [ ] restored\n- [ ] open\n\n## 章节');
+    expect(normalize(result)).toBe(result);
+  });
+  it('顶层一级标题后接正文时恢复任务用空行分隔，不吞并正文', () => {
+    const result = normalize('# 项目\n\n项目描述\n\n# 归档\n\n- [ ] restored\n');
+    expect(result).toContain('# 项目\n\n- [ ] restored\n\n项目描述');
+    const model = parseDocument(result);
+    const restored = model.tasks.find(item => model.text.slice(item.contentFrom, item.firstLineTo) === 'restored')!;
+    expect(model.text.slice(restored.from, restored.to)).not.toContain('项目描述');
+    expect(normalize(result)).toBe(result);
+  });
+  it('无标题路径的恢复任务回到待办区顶部，块分隔防止后接正文被吞进任务', () => {
+    const result = normalize('前言正文\n\n## 章节\n\n- [ ] open\n\n# 归档\n\n- [ ] restored\n');
+    expect(result.indexOf('- [ ] restored')).toBeLessThan(result.indexOf('前言正文'));
+    expect(result).toContain('- [ ] restored\n\n前言正文');
+    const model = parseDocument(result);
+    const restored = model.tasks.find(item => model.text.slice(item.contentFrom, item.firstLineTo) === 'restored')!;
+    expect(model.text.slice(restored.from, restored.to)).not.toContain('前言正文');
+    expect(normalize(result)).toBe(result);
+  });
   it('restores an incomplete archive group with all completed children still attached', () => {
     const result = normalize('- [ ] work\n\n# 归档\n\n- [x] parent\n  - [ ] restored\n  - [x] finished\n');
     expect(result.indexOf('- [x] parent')).toBeLessThan(result.indexOf('# 归档'));
     expect(result.indexOf('  - [ ] restored')).toBeLessThan(result.indexOf('# 归档'));
-    expect(result).toContain('- [x] parent\n  - [ ] restored\n  - [x] finished\n\n# 归档');
+    expect(result).toContain('- [x] parent\n  - [ ] restored\n  - [x] finished\n\n- [ ] work\n\n# 归档');
     expect(result).not.toContain('# 归档\n\n- [x] finished');
     expect(normalize(result)).toBe(result);
   });
