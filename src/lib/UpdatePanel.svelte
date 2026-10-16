@@ -7,6 +7,7 @@
   import type { Action } from 'svelte/action';
   import type { UpdateStatus } from './updater/contracts';
   import { renderReleaseNotes } from './updater/release-notes';
+  import { formatBytes } from './updater/format-bytes';
   /**
    * 结构职责：绑定应用持有的更新状态与持久化偏好。
    * 字段说明：操作回调由更新协调器提供，偏好修改由应用保存；onOpenLink 走应用统一外链通道。
@@ -22,6 +23,8 @@
   let { desktop, currentVersion, status, autoCheck, autoDownload, onCheck, onDownload, onInstall, onRetry, onPreferences, onOpenLink }: Props = $props();
   const busy = $derived(['checking', 'downloading', 'installing'].includes(status.kind));
   const progress = $derived(status.totalBytes ? Math.min(100, Math.floor((status.downloadedBytes ?? 0) / status.totalBytes * 100)) : undefined);
+  const downloadSize = $derived(status.downloadedBytes === undefined ? '' : status.totalBytes ? `${formatBytes(status.downloadedBytes)} / ${formatBytes(status.totalBytes)}` : formatBytes(status.downloadedBytes));
+  const downloadSpeed = $derived(status.bytesPerSecond === undefined ? '' : `${formatBytes(status.bytesPerSecond)}/s`);
   /**
    * 挂载时渲染一次，候选更新变化时整体替换内容；渲染产物是安全 DOM，不经过 innerHTML。
    * 点击代理到应用的外链通道：说明文本来自远端，href 已在渲染时做过协议白名单。
@@ -62,7 +65,17 @@
     {#if status.kind === 'checking'}<p>{$t('正在检查更新…')}</p>
     {:else if status.kind === 'current'}<p>{$t('当前已是最新版本。')}</p>
     {:else if status.kind === 'available'}<p>{$t('发现新版本 {version}', { version: status.version ?? '' })}</p>
-    {:else if status.kind === 'downloading'}<p>{$t('正在下载 {version}…', { version: status.version ?? '' })}{progress === undefined ? '' : ` ${progress}%`}</p><progress aria-label={$t('更新下载进度')} max="100" value={progress}></progress>
+    {:else if status.kind === 'downloading'}
+      <div class="download-progress">
+        <div class="download-stats">
+          <span class="download-label">{$t('正在下载 {version}…', { version: status.version ?? '' })}</span>
+          {#if downloadSize}<span class="download-size">{downloadSize}</span>{/if}
+          {#if downloadSpeed}<span class="download-speed">{downloadSpeed}</span>{/if}
+        </div>
+        <div class="download-bar" role="progressbar" aria-label={$t('更新下载进度')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress ?? 0}>
+          <span class="download-bar-fill" class:download-bar-pending={progress === undefined} style:width={progress === undefined ? '40%' : `${progress}%`}></span>
+        </div>
+      </div>
     {:else if status.kind === 'ready'}<p>{$t('新版本 {version} 已准备好安装。', { version: status.version ?? '' })}</p>
     {:else if status.kind === 'installing'}<p>{$t('正在保存文档并安装更新，请稍候…')}</p>
     {:else if status.kind === 'error'}<p class="dialog-error">{$t('更新未完成：{message}', { message: status.message ?? '' })}</p>{/if}
@@ -104,7 +117,17 @@
   .update-status p {margin:0}
   .update-status:empty {display:none}
   .update-actions {margin-top:20px}
-  progress {width:100%;accent-color:var(--accent)}
+  /* 下载区：首行标签与体积/速度两端对齐，数值等宽避免进度跳动时宽度抖动。 */
+  .download-stats {display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+  .download-label {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .download-size {color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .download-speed {color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .download-bar {height:6px;border-radius:var(--control-radius,6px);background:var(--field-background,var(--surface-alt));box-shadow:var(--field-shadow,none);overflow:hidden}
+  .download-bar-fill {display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .2s ease}
+  /* 服务器未给出总大小时进度不可定量，用往返滑动表达进行中状态。 */
+  .download-bar-pending {animation:download-pending 1.2s ease-in-out infinite alternate}
+  @keyframes download-pending {from {transform:translateX(-40%)}to {transform:translateX(190%)}}
+  @media (prefers-reduced-motion:reduce) {.download-bar-pending {animation:none}}
   /* 折叠行沿用设置面板的摘要模式：箭头随展开旋转，悬停与展开态转强调色。 */
   .release-notes {margin-top:18px;border-top:1px solid var(--divider-color,var(--line))}
   .release-notes-summary {display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;list-style:none;font-size:12px;color:var(--muted);user-select:none;transition:color .15s}

@@ -80,6 +80,26 @@ describe('更新检查与后台下载', () => {
     expect(f.coordinator.status.kind).toBe('ready');
   });
 
+  it('下载期间按滑动窗口估算速度，样本不足时不发布速度', async () => {
+    const f = fixture();
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1000);
+    f.candidate.download.mockImplementation(async progress => {
+      progress({ downloadedBytes: 100, totalBytes: 1000 });
+      expect(f.coordinator.status.bytesPerSecond).toBeUndefined();
+      now.mockReturnValue(2000);
+      progress({ downloadedBytes: 600, totalBytes: 1000 });
+      expect(f.coordinator.status).toMatchObject({ kind: 'downloading', bytesPerSecond: 500 });
+      // 旧样本滑出窗口后没有可比较基准，速度重新缺省而不是沿用旧值。
+      now.mockReturnValue(5000);
+      progress({ downloadedBytes: 1600, totalBytes: 1000 });
+      expect(f.coordinator.status.bytesPerSecond).toBeUndefined();
+    });
+    await f.coordinator.check();
+    expect(f.coordinator.status.kind).toBe('ready');
+    now.mockRestore();
+  });
+
   it.each(['连接中断', 'signature verification failed'])('下载失败可重试：%s', async message => {
     const f = fixture();
     f.candidate.download.mockImplementationOnce(async progress => {

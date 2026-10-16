@@ -28,7 +28,8 @@ export interface UpdateProgress { downloadedBytes: number; totalBytes?: number }
 
 /**
  * 结构职责：承载单次更新操作的可展示状态快照。
- * 字段说明：版本和发布说明来自当前候选；message 保留可辨识错误；retry 表示安全重试入口。
+ * 字段说明：版本和发布说明来自当前候选；message 保留可辨识错误；retry 表示安全重试入口；
+ * bytesPerSecond 是协调器按进度事件估算的平滑下载速度，样本不足时缺省。
  * 约束条件：无候选时不包含版本元数据；下载进度仅由正在执行的候选更新。
  */
 export interface UpdateStatus {
@@ -38,6 +39,7 @@ export interface UpdateStatus {
   body?: string;
   downloadedBytes?: number;
   totalBytes?: number;
+  bytesPerSecond?: number;
   message?: string;
   retry?: UpdateAction;
 }

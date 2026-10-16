@@ -20,6 +20,7 @@ export class UpdateCoordinator {
   private autoDownload: boolean;
   private disposed = false;
   private pending: Promise<void> | null = null;
+  private speedSamples: { time: number; bytes: number }[] = [];
 
   constructor(private readonly options: UpdateOptions) { this.autoDownload = options.autoDownload ?? true; }
 
@@ -135,10 +136,15 @@ export class UpdateCoordinator {
     this.publish({ kind: 'downloading', downloadedBytes: 0 });
     if (this.disposed) return;
     let active = true;
+    // 每次下载重置采样；重试时旧字节数会让速度估算出现尖峰。
+    this.speedSamples = [];
     try {
       await candidate.download(progress => {
         // IPC 事件可能晚于请求失败；上一轮回调不能覆盖新一轮下载的进度。
-        if (active) this.publish({ kind: 'downloading', ...progress });
+        if (active) {
+          const bytesPerSecond = this.sampleSpeed(progress.downloadedBytes);
+          this.publish({ kind: 'downloading', ...progress, ...(bytesPerSecond === undefined ? {} : { bytesPerSecond }) });
+        }
       });
       if (this.disposed) return;
       this.downloaded = true;
@@ -162,6 +168,20 @@ export class UpdateCoordinator {
       this.options.afterInstallFailure?.();
       this.publish({ kind: 'error', message: errorMessage(error), retry: 'install' });
     }
+  }
+
+  /**
+   * 按滑动窗口内的累计字节估算下载速度；窗口过短会随 IPC 事件抖动，过长则跟不上带宽变化。
+   * 样本不足一个有效时间间隔时返回 undefined，由界面隐藏速度而不是显示错误数值。
+   */
+  private sampleSpeed(downloadedBytes: number): number | undefined {
+    const now = Date.now();
+    const samples = this.speedSamples;
+    samples.push({ time: now, bytes: downloadedBytes });
+    while (samples.length > 1 && now - samples[0].time > 2000) samples.shift();
+    const elapsed = now - samples[0].time;
+    if (elapsed <= 0) return undefined;
+    return Math.max(0, (downloadedBytes - samples[0].bytes) / elapsed * 1000);
   }
 
   /** 每次只发布当前阶段字段，防止上一轮错误或进度残留到新的检查。 */

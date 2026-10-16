@@ -10,6 +10,7 @@
   import SettingsPanel from './lib/SettingsPanel.svelte';
   import { UpdateCoordinator } from './lib/updater/update-coordinator';
   import type { UpdateStatus } from './lib/updater/contracts';
+  import { formatBytes } from './lib/updater/format-bytes';
   import packageInfo from '../package.json';
   import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
@@ -51,6 +52,10 @@
   let configError = $state('');
   let updater: UpdateCoordinator | undefined;
   let updateStatus = $state<UpdateStatus>({ kind: 'idle' });
+  /** 底部栏下载提示只追加已下载/总大小；服务器未给总大小时仅显示已下载部分。 */
+  const updateDownloadSize = $derived(updateStatus.kind === 'downloading' && updateStatus.downloadedBytes !== undefined
+    ? ` ${formatBytes(updateStatus.downloadedBytes)}${updateStatus.totalBytes ? ` / ${formatBytes(updateStatus.totalBytes)}` : ''}`
+    : '');
   let updateInstalling = $state(false);
   let switching = false;
   let openGeneration = 0;
@@ -1216,7 +1221,7 @@
           <button class="outline-button" class:outline-active={outlineVisible} aria-label={outlineVisible ? $t("返回导航") : $t("大纲目录")} title={outlineVisible ? $t("返回导航") : $t("大纲目录")} aria-pressed={outlineVisible} disabled={screen !== 'project' || !active} onclick={toggleOutlineView}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01M8 5.5h8.5M8 10h8.5M8 14.5h8.5"/></svg></button>
           <button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
         </div>
-        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? $t("正在下载更新…") : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
+        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? `${$t("正在下载更新…")}${updateDownloadSize}` : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
       </footer>
     </div>
   </main>
