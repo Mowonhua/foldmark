@@ -37,6 +37,7 @@ export const platformMessages: Readonly<Record<string, string>> = {
   "创建 Markdown 清单": "Create Markdown list",
   "关联 Markdown 清单": "Link Markdown list",
   "清单.md": "List.md",
+  "浏览器": "Browser",
   "文件无法读取，请重新定位": "Cannot read the file. Please locate it again.",
   "文件已更改": "The file has changed",
   "文件已存在": "The file already exists",

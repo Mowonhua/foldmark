@@ -84,9 +84,9 @@
 
   /** 托管灵感文件的默认位置；桌面在应用数据目录，浏览器预览保存在本地沙盒目录。 */
   async function defaultInspirationPath(): Promise<string> {
-    if (!desktop) return '浏览器/灵感.md';
+    if (!desktop) return `${$t('浏览器')}/${$t('灵感')}.md`;
     const { appDataDir, join } = await import('@tauri-apps/api/path');
-    return join(await appDataDir(), '灵感.md');
+    return join(await appDataDir(), $t('灵感.md'));
   }
 
   /**
@@ -1033,10 +1033,15 @@
         files = desktop ? new (await import('./lib/files/tauri')).TauriFilePort() : new BrowserFilePort();
         const loaded = validateAppConfig(await files.loadConfig());
         if (loaded) config = { ...loaded, preferences: { ...defaultPreferences, ...loaded.preferences }, projectViews: loaded.projectViews ?? {} };
-        else if (!desktop) {
-          const path = '浏览器/开始.md';
-          try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
-          config.projects = [{ id: 'welcome', name: '开始', path }]; config.activeProjectId = 'welcome';
+        else {
+          // 首次启动没有历史配置：立即按系统语言初始化，保证随后的初始文件以界面语言命名；缺省偏好的旧配置仍为简体中文。
+          config.preferences.locale = 'system';
+          setLocalePreference('system');
+          if (!desktop) {
+            const path = `${$t('浏览器')}/${$t('开始')}.md`;
+            try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
+            config.projects = [{ id: 'welcome', name: $t('开始'), path }]; config.activeProjectId = 'welcome';
+          }
         }
         sidebar = config.preferences.sidebarOpen ?? true;
         sidebarView = config.preferences.sidebarView ?? 'nav';

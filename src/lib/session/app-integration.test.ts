@@ -197,6 +197,8 @@ let container: HTMLDivElement;
 /** jsdom 没有排版引擎；只补充几何 API，不替换真实编辑器、保存器或 App 行为。 */
 beforeEach(() => {
   setLocalePreference('zh-CN');
+  // 首次启动按 navigator.languages 决定界面语言；测试环境固定中文，与断言文案保持一致。
+  Object.defineProperty(window.navigator, 'languages', { configurable: true, value: ['zh-CN'] });
   desktopBoundary.enabled = false; desktopBoundary.close = null; desktopBoundary.destroy.mockClear();
   desktopBoundary.resized = null; desktopBoundary.focused = null; desktopBoundary.maximized = false;
   desktopBoundary.invoke.mockReset().mockResolvedValue(true);

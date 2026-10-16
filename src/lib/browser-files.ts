@@ -42,7 +42,7 @@ export class BrowserFilePort implements FilePort {
   async saveRecovery(draft: RecoveryDraft): Promise<void> { localStorage.setItem(`foldmark:recovery:${draft.path}`, JSON.stringify(draft)); }
   async clearRecovery(path: string): Promise<void> { localStorage.removeItem(`foldmark:recovery:${path}`); }
   async chooseFile(create: boolean): Promise<string | null> {
-    if (create) return `浏览器/清单-${Date.now()}.md`;
+    if (create) return `${translate('浏览器')}/${translate('清单')}-${Date.now()}.md`;
     return new Promise(resolve => {
       const input = document.createElement('input'); input.type = 'file'; input.accept = '.md,.markdown,.txt';
       input.oncancel = () => resolve(null);
