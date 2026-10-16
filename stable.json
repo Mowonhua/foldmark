@@ -1,11 +1,11 @@
 {
-  "version": "0.5.3",
-  "notes": "# Foldmark v0.5.3\r\n\r\n相较于 v0.5.2：\r\n\r\n- 修复点击展开、折叠和任务控件后文本选区残留的问题。\r\n- 修复在行内格式末尾使用输入法时正文被误删的问题。\r\n- 修复在待办视图输入未闭合代码围栏时，归档内容意外显示的问题。\r\n- 移动任务后保持当前滚动位置，并取消成功通知。\r\n- 修复拖选文本时行间留白被高亮的问题。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.5.3_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-10-15T07:40:21.690Z",
+  "version": "0.6.0",
+  "notes": "# Foldmark v0.6.0\r\n\r\n相较于 v0.5.3：\r\n\r\n- 更新下载显示已下载体积、总大小和实时速度，下载进度更明确。\r\n- 启动时等待项目解析和首帧主题就绪后再显示窗口，界面整体淡入，避免启动内容闪现。\r\n- 首次启动跟随系统语言，初始文件名随界面语言翻译。\r\n- 任务拖动移动支持跨越标题进入其他章节。\r\n- 取消完成松散任务时，任务恢复到一级标题直下；移除完成含未完成子任务父任务时的重复状态提示。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.6.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
+  "pub_date": "2026-10-16T10:05:15.141Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NXpPV2ZWTzNXajRTNFZjK29MM2tlT3Z0SGhnQ0cvT3BEb0NZRjkwV29TTk5LZ2grakwzRC8yT3RVaXpyV2xSOTBLYVdrQTEwTlpNTE5sNkZpd0QwRGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDUwMDIxCWZpbGU6Rm9sZG1hcmtfMC41LjNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNS4zCjhUbHg0ZmdId0ZzVEk2SHlvQmZ6ZVl3ZHJXbm4rcHBGWGJrZUhhenV1SzVMQVd2SGZvU1grMFpOMTBpSW1FSjlzeitFM3RhU3NLekZkZXZJSmlWaUFBPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.5.3/Foldmark_0.5.3_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTQzOUpnVmcreWdhQzZDL2xhbis2MUxwQUJDTDR5MW9lUllKS3J0ZnAzcjYyd1daZVo3dERXcmFueUJ4WEs1Z2NpU0xDTVZzV0N6T2QrTlFyY29CL3dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTQ1MTE0CWZpbGU6Rm9sZG1hcmtfMC42LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNi4wCmxXLzNKU0s2dzJWMi85UC9kYUdYNXRLMERsY0M2aXJDRE8zeW13K2ZlYWIxQWtuZmprNHlSNkdUdXB5V1dzVkVPMnQ0U2RRQjEvc1Y1UGN6VjlqTURRPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.6.0/Foldmark_0.6.0_x64-setup.exe"
     }
   }
 }
