@@ -13,6 +13,8 @@ import { translate } from './i18n';
 
 /** 结构职责：区分明暗模式与系统偏好；主题身份独立保存，不随模式变化。 */
 export type ThemeMode = 'light' | 'dark' | 'system';
+/** 启动首帧配色的本地缓存键；main.ts 同步读取，App 在主题生效时回写。 */
+export const bootThemeKey = 'foldmark:boot-theme';
 export const paletteKeys = ['canvas', 'sidebar', 'surface', 'ink', 'muted', 'line', 'accent', 'accent-soft', 'hover', 'danger', 'code', 'selection', 'selection-ink'] as const;
 /** 结构职责：覆盖应用和编辑器共用的语义颜色；所有值必须是六位十六进制不透明颜色。 */
 export type ThemePalette = Record<typeof paletteKeys[number], string>;

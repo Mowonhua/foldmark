@@ -24,7 +24,7 @@
   import { activeOutlineFrom, outlineEntries } from './lib/markdown/outline';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
-  import { applyTheme, builtInThemes, parseTheme } from './lib/themes';
+  import { applyTheme, bootThemeKey, builtInThemes, parseTheme } from './lib/themes';
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
   import { createCardWindowController } from './lib/card-window';
 
@@ -229,6 +229,8 @@
   $effect(() => {
     const p = config.preferences;
     applyTheme(document.documentElement, selectedTheme, p.theme, systemDark);
+    // 回写启动首帧缓存，供 main.ts 下次同步取色；写入失败只让下次首帧回退默认主题。
+    try { localStorage.setItem(bootThemeKey, JSON.stringify({ definition: selectedTheme, mode: p.theme })); } catch { /* 存储不可用时忽略。 */ }
     document.documentElement.style.setProperty('--document-font', p.fontFamily);
     document.documentElement.style.setProperty('--document-size', `${p.fontSize}px`);
     document.documentElement.style.setProperty('--document-width', `${p.contentWidth}px`);
