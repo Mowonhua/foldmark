@@ -46,6 +46,8 @@
   let config = $state<AppConfig>({ projects: [], activeProjectId: null, preferences: { ...defaultPreferences }, projectViews: {} });
   let ready = $state(false);
   let configReady = $state(false);
+  /** 启动项目解析完成前保持 false；欢迎页以此推迟渲染，避免首帧闪现无项目界面。 */
+  let booted = $state(false);
   let configError = $state('');
   let updater: UpdateCoordinator | undefined;
   let updateStatus = $state<UpdateStatus>({ kind: 'idle' });
@@ -1033,9 +1035,14 @@
         sidebarView = config.preferences.sidebarView ?? 'nav';
         if (disposed) return; configReady = true; ready = true;
         const project = availableProjects.find(item => item.id === config.activeProjectId) ?? availableProjects[0];
-        if (config.inspiration?.active) await openInspiration();
-        else if (project) await openProject(project);
-        else config.activeProjectId = null;
+        // openProject/openInspiration 内部已把读取失败转为 fatal 横幅；finally 只保证 booted 必置位。
+        try {
+          if (config.inspiration?.active) await openInspiration();
+          else if (project) await openProject(project);
+          else config.activeProjectId = null;
+        } finally {
+          if (!disposed) booted = true;
+        }
         if (desktop) {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
           unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
@@ -1062,7 +1069,7 @@
           });
           if (config.preferences.autoCheckUpdates ?? true) void updater.check();
         }
-      } catch (error) { fatal = errorMessage(error); ready = true; }
+      } catch (error) { fatal = errorMessage(error); ready = true; booted = true; }
     };
     void initialize();
     const beforeUnload = () => { captureUI(); void persistConfig(); for (const session of sessions.values()) void session.saver.flush(); };
@@ -1174,7 +1181,7 @@
     {#if saveStatus?.kind === 'error'}<div class="error-banner" role="alert">{$t('保存失败：{error}', { error: saveStatus.message })}<button onclick={save}>{$t("重试保存")}</button><button onclick={() => exportMarkdown()}>{$t("另存副本")}</button><button onclick={relocate}>{$t("重新定位文件")}</button></div>{/if}
 
     <div class="editor-region" class:offscreen={screen !== 'project' || !active || !!missing} bind:this={editorHost}></div>
-    {#if !active && screen === 'project' && !fatal}
+    {#if booted && !active && screen === 'project' && !fatal}
       <section class="empty-state"><div class="empty-mark">F<span>↳</span></div><p class="eyebrow">{$t("为想法留白")}</p><h1>{$t("从一份清单开始。")}</h1><p>{$t("写下要做的事，完成后收进归档。")}<br/>{$t("你的 Markdown 文件，始终由你掌握。")}</p><button class="primary" onclick={() => openDialog('project')} disabled={!ready}>{$t("关联或新建项目")}</button><button class="text-button" onclick={() => openDialog('help')}>{$t("查看快捷键")} <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h14m-5-5 5 5-5 5"/></svg></button></section>
     {/if}
     {#if screen === 'all'}
