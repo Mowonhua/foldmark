@@ -13,6 +13,15 @@ describe('配置边界', () => {
       expect(config.preferences.keepTransparentOnBlur).toBe(keepTransparentOnBlur);
     }
   });
+  it('窗口几何兼容旧配置缺省，拒绝非有限坐标与错误形状', () => {
+    for (const window of [undefined, {}, { maximized: true }, { x: -80, y: 120, width: 1440, height: 900, maximized: false }]) {
+      const config = { projects: [], window };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+    for (const window of [null, [], 'main', { x: Number.NaN }, { width: 0 }, { height: -1 }, { maximized: 'true' }]) {
+      expect(() => validateAppConfig({ projects: [], window })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('语言偏好兼容旧配置和未来语言，拒绝错误字段形状', () => {
     for (const locale of [undefined, 'zh-CN', 'en', 'system', 'fr']) {
       const config = { projects: [], preferences: { locale } };

@@ -39,8 +39,14 @@ export interface InspirationDoc {
   /** 缺省为 false；true 表示上次停留在灵感簿，启动时直接恢复。 */
   active?: boolean;
 }
+/** 结构职责：记录上次关闭时普通模式的窗口几何；坐标与尺寸为物理像素，坐标允许多显示器的负值。 */
+export interface WindowPlacement {
+  x?: number; y?: number; width?: number; height?: number;
+  /** 单独出现表示上次最大化关闭，只恢复最大化，普通几何沿用既有记录。 */
+  maximized?: boolean;
+}
 /** 结构职责：保存独立于 Markdown 的配置；正文及编辑历史不属于配置。 */
-export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[]; /** 灵感簿；缺省表示从未打开，首次进入时在托管位置创建。 */ inspiration?: InspirationDoc }
+export interface AppConfig { projects: Project[]; activeProjectId: string | null; preferences: Preferences; projectViews: Record<string, ProjectView>; /** 完整保存已导入主题，不依赖原 JSON 文件路径。 */ customThemes?: ThemeDefinition[]; /** 灵感簿；缺省表示从未打开，首次进入时在托管位置创建。 */ inspiration?: InspirationDoc; /** 启动恢复的窗口几何；缺省使用配置默认居中。 */ window?: WindowPlacement }
 /** 结构职责：保存可可靠恢复的界面定位；折叠键失配时默认展开。 */
 export interface ProjectView {
   mode: ViewMode; cursor: number; scrollTop: number; folded: string[];

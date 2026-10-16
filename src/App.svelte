@@ -341,6 +341,7 @@
     toast = ''; toastUndo = false; clearTimeout(toastTimer);
     await tick();
     captureUI(); clearTimeout(configTimer);
+    await captureWindowPlacement();
     const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
     const configured = await persistConfig();
     return saved.every(Boolean) && configured;
@@ -413,6 +414,27 @@
     configQueue = configQueue.catch(() => {}).then(() => files.saveConfig(snapshot));
     try { await configQueue; configError = ''; return true; }
     catch (error) { configError = $t("配置保存失败：{error}", { error: errorMessage(error) }); notify(configError); return false; }
+  }
+  /**
+   * 函数职责：把普通模式的窗口几何写入配置，供下次启动恢复。
+   * 输入说明：仅桌面环境由关闭与更新安装流程调用，必须在 persistConfig 前完成。
+   * 输出说明：卡片模式先还原普通几何再读取；最大化时读不到普通几何，保留既有记录只更新 maximized 标记。
+   * 实现思路：几何读取失败不阻止关闭流程，下次启动沿用既有记录或默认居中。
+   */
+  async function captureWindowPlacement(): Promise<void> {
+    if (!desktop) return;
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const appWindow = getCurrentWindow();
+      // 关闭请求一旦发出即还原卡片几何；随后保存失败取消关闭时窗口保持普通模式。
+      if (cardMode) { await cardWindow?.exit({ animate: false }); cardMode = false; }
+      if (await appWindow.isMaximized()) {
+        config.window = { ...(config.window ?? {}), maximized: true };
+        return;
+      }
+      const [position, size] = await Promise.all([appWindow.outerPosition(), appWindow.innerSize()]);
+      config.window = { x: position.x, y: position.y, width: size.width, height: size.height, maximized: false };
+    } catch { /* 读取失败时 config.window 保持原值。 */ }
   }
   function captureUI(): void {
     if (!active || !editor || switching) return;
@@ -1061,6 +1083,7 @@
             event.preventDefault();
             if (updateInstalling) return;
             captureUI();
+            await captureWindowPlacement();
             const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
             const configured = await persistConfig();
             // 关闭保存可能早于安装请求开始；安装已接管退出时，旧关闭请求不能销毁窗口。

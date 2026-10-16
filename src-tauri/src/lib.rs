@@ -7,6 +7,7 @@ mod single_instance;
 mod storage;
 mod system_fonts;
 mod window_material;
+mod window_state;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
 use std::{
@@ -275,16 +276,16 @@ pub fn run() {
         .expect("更新配置缺失")["endpoints"] = serde_json::json!([format!(
         "https://raw.githubusercontent.com/Mowonhua/foldmark/updates/{channel}.json"
     )]);
-    let builder = tauri::Builder::default();
     #[cfg(target_os = "windows")]
-    let builder = {
-        let window_key = _instance.window_key();
-        // setup 只发布主窗口；互斥锁已先于 Tauri 初始化获取，并保持到事件循环退出。
-        builder.setup(move |app| {
-            single_instance::mark_window(app, &window_key)?;
-            Ok(())
-        })
-    };
+    let window_key = _instance.window_key();
+    // 互斥锁已先于 Tauri 初始化获取，并保持到事件循环退出。
+    let builder = tauri::Builder::default().setup(move |app| {
+        #[cfg(target_os = "windows")]
+        single_instance::mark_window(app, &window_key)?;
+        // 窗口此时尚未显示，恢复上次几何不会露出移动过程。
+        window_state::restore(app);
+        Ok(())
+    });
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())

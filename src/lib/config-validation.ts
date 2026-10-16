@@ -48,6 +48,14 @@ export function validateAppConfig(value: unknown): AppConfig | null {
     if (p.fontFamily !== undefined && typeof p.fontFamily !== 'string') return fail();
     for (const number of [p.fontSize, p.contentWidth]) if (number !== undefined && (typeof number !== 'number' || !Number.isFinite(number) || number <= 0)) return fail();
   }
+  // 窗口几何为物理像素；坐标允许多显示器负值，尺寸必须为正。
+  if (value.window !== undefined) {
+    if (!record(value.window)) return fail();
+    const w = value.window;
+    for (const coordinate of [w.x, w.y]) if (coordinate !== undefined && !Number.isFinite(coordinate)) return fail();
+    for (const length of [w.width, w.height]) if (length !== undefined && (typeof length !== 'number' || !Number.isFinite(length) || length <= 0)) return fail();
+    if (w.maximized !== undefined && typeof w.maximized !== 'boolean') return fail();
+  }
   if (value.projectViews !== undefined) {
     if (!record(value.projectViews)) return fail();
     for (const view of Object.values(value.projectViews)) if (!validView(view)) return fail();
