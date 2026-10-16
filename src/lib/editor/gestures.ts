@@ -1,6 +1,6 @@
 /**
  * 文件职责：管理列表标记手势及正文右侧、空任务、空段落的指针定位。
- * 定义范围：指针状态机、正文焦点、末尾空段落分隔和同列表可见插入边界。
+ * 定义范围：指针状态机、正文焦点、末尾空段落分隔和同父级可见插入边界（顶层可跨列表跨越标题）。
  */
 import { locale, translate } from '../i18n';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
@@ -223,18 +223,28 @@ class MarkerGestures {
     const source = model.items.find(item => item.from === session.from);
     if (!source) return;
     const hidden = getHiddenRanges(model, 'todo');
-    const siblings = model.items.filter(item => item.listFrom === source.listFrom && item.parentFrom === source.parentFrom);
-    const visible = siblings.filter(item => !hidden.some(range => item.from >= range.from && item.from < range.to));
+    const visible = (item: (typeof model.items)[number]): boolean =>
+      !hidden.some(range => item.from >= range.from && item.from < range.to);
+    // 同父级候选不限于源列表：顶层任务因此可以拖过标题、段落到其他章节。
+    const candidates = model.items.filter(item => item.parentFrom === source.parentFrom);
     const boundaries: { before: number | null; y: number }[] = [];
-    for (const item of visible) {
+    for (const item of candidates) {
+      if (!visible(item)) continue;
       const coords = this.view.coordsAtPos(item.from);
       if (coords) boundaries.push({ before: item.from, y: coords.top - 2 });
     }
-    const last = visible.at(-1);
-    if (last) {
-      const coords = this.view.coordsAtPos(last.to);
-      const next = siblings[siblings.indexOf(last) + 1];
-      if (coords) boundaries.push({ before: next?.from ?? null, y: coords.bottom + 2 });
+    // 每个同父级列表的可见末项下方提供追加落点：源列表传 null，其他列表传末项 moveTo 供内核跨列表追加。
+    const lists = new Map<number, (typeof candidates)[number][]>();
+    for (const item of candidates) {
+      const group = lists.get(item.listFrom);
+      if (group) group.push(item); else lists.set(item.listFrom, [item]);
+    }
+    for (const [listFrom, group] of lists) {
+      const lastVisible = group.filter(visible).at(-1);
+      const coords = lastVisible && this.view.coordsAtPos(lastVisible.to);
+      if (!lastVisible || !coords) continue;
+      const next = group[group.indexOf(lastVisible) + 1];
+      boundaries.push({ before: next ? next.from : listFrom === source.listFrom ? null : lastVisible.moveTo, y: coords.bottom + 2 });
     }
     const nearest = boundaries.sort((a, b) => Math.abs(a.y - session.y) - Math.abs(b.y - session.y))[0];
     if (!nearest || Math.abs(nearest.y - session.y) > 30 || nearest.before === source.from) return;

@@ -35,15 +35,35 @@ export function taskToggleChanges(model: DocumentModel, itemFrom: number, comple
   }
   return targets.map(target => ({ from: target.task!.from + 1, to: target.task!.from + 2, insert: checked ? 'x' : ' ' })).sort((a,b)=>a.from-b.from);
 }
-/** 校验同列表同父级落点，返回未删除源项之前的插入位置。 */
-function moveTarget(model: DocumentModel, source: ListItem, beforeFrom: number | null): number {
-  const siblings = model.items.filter(item => item.listFrom === source.listFrom && item.parentFrom === source.parentFrom);
+/** 返回去掉尾部空白的行首引用与缩进前缀，用于比较跨列表落点的容器一致性。 */
+function containerPrefix(prefix: string): string { return prefix.replace(/[ \t]+$/, ''); }
+/** 校验同父级落点，返回插入位置及所属列表。顶层条目允许跨列表移动，从而跨越标题或段落进入其他章节；
+ * beforeFrom 为目标条目 from 时插到其行前，为某个列表末项的 moveTo 时追加到该列表末尾，null 仍表示源条目所在列表末尾。
+ * 跨列表落点要求行首引用前缀与源条目一致，避免把条目移进或移出引用等容器。 */
+function moveTarget(model: DocumentModel, source: ListItem, beforeFrom: number | null): { position: number; listFrom: number } {
   // 引用前缀随完整行保留；同一行中的父级列表标记不能随子项一起移动。
-  if (!/^[ \t>]*$/.test(model.text.slice(source.moveFrom, source.from))) throw new Error('INVALID_MOVE');
-  if (beforeFrom === null) return siblings.at(-1)!.moveTo;
-  const target = siblings.find(item => item.from === beforeFrom);
-  if (!target || !/^[ \t>]*$/.test(model.text.slice(target.moveFrom, target.from))) throw new Error('INVALID_MOVE');
-  return target.moveFrom;
+  const sourcePrefix = model.text.slice(source.moveFrom, source.from);
+  if (!/^[ \t>]*$/.test(sourcePrefix)) throw new Error('INVALID_MOVE');
+  if (beforeFrom === null) {
+    const own = model.items.filter(item => item.listFrom === source.listFrom && item.parentFrom === source.parentFrom);
+    return { position: own.at(-1)!.moveTo, listFrom: source.listFrom };
+  }
+  const candidates = model.items.filter(item => item.parentFrom === source.parentFrom);
+  const before = candidates.find(item => item.from === beforeFrom);
+  if (before) {
+    const prefix = model.text.slice(before.moveFrom, before.from);
+    if (!/^[ \t>]*$/.test(prefix)) throw new Error('INVALID_MOVE');
+    if (before.listFrom !== source.listFrom && containerPrefix(prefix) !== containerPrefix(sourcePrefix)) throw new Error('INVALID_MOVE');
+    return { position: before.moveFrom, listFrom: before.listFrom };
+  }
+  const after = candidates.find(item => item.moveTo === beforeFrom);
+  // 追加落点只对同父级列表的末项成立；中间项的 moveTo 是下一同级项的行首，必须改用 before 表达。
+  if (!after || candidates.filter(item => item.listFrom === after.listFrom).at(-1) !== after) throw new Error('INVALID_MOVE');
+  if (after.listFrom !== source.listFrom) {
+    const prefix = /^[ \t>]*/.exec(model.text.slice(lineStart(model.text, after.moveTo)))![0];
+    if (containerPrefix(prefix) !== containerPrefix(sourcePrefix)) throw new Error('INVALID_MOVE');
+  }
+  return { position: after.moveTo, listFrom: after.listFrom };
 }
 /**
  * 函数职责：移动完整列表项且保持其它字符原样。
@@ -54,16 +74,17 @@ function moveTarget(model: DocumentModel, source: ListItem, beforeFrom: number |
 export function moveItemChanges(model: DocumentModel, sourceFrom: number, beforeFrom: number | null): TextChange[] {
   const source = requireItem(model, sourceFrom);
   const target = moveTarget(model, source, beforeFrom);
-  if (target === source.moveFrom || target === source.moveTo) return [];
+  if (target.position === source.moveFrom || target.position === source.moveTo) return [];
   const newline = model.text.includes('\r\n') ? '\r\n' : '\n';
   let insert = model.text.slice(source.moveFrom, source.moveTo);
   if (!insert.endsWith('\n')) insert += newline;
-  // 松散列表末项没有后续分隔；移到列表内部时需补回已有的空行语义。
-  const loose = model.items.some(item => item.listFrom === source.listFrom && /\r?\n[ \t]*\r?\n/.test(model.text.slice(item.to, item.moveTo)));
+  // 松散列表末项没有后续分隔；移回同列表时需补回已有的空行语义，跨列表则保持目标列表自身的松紧。
+  const loose = target.listFrom === source.listFrom
+    && model.items.some(item => item.listFrom === source.listFrom && /\r?\n[ \t]*\r?\n/.test(model.text.slice(item.to, item.moveTo)));
   if (loose && !/\r?\n[ \t]*\r?\n$/.test(insert)) insert += newline;
   // 目标可位于没有末尾换行的文档末端，此时先结束存活条目的最后一行。
-  if (target > 0 && model.text[target - 1] !== '\n') insert = newline + insert;
-  return [{ from: source.moveFrom, to: source.moveTo, insert: '' }, { from: target, to: target, insert }].sort((a,b)=>a.from-b.from);
+  if (target.position > 0 && model.text[target.position - 1] !== '\n') insert = newline + insert;
+  return [{ from: source.moveFrom, to: source.moveTo, insert: '' }, { from: target.position, to: target.position, insert }].sort((a,b)=>a.from-b.from);
 }
 /**
  * 函数职责：映射排序条目内部的光标与后代折叠位置。
@@ -74,7 +95,7 @@ export function moveItemChanges(model: DocumentModel, sourceFrom: number, before
 export function moveItemPosition(model: DocumentModel, sourceFrom: number, beforeFrom: number | null, position: number): number {
   const source = requireItem(model, sourceFrom);
   if (position < source.moveFrom || position > source.moveTo) return position;
-  const target = moveTarget(model, source, beforeFrom);
+  const target = moveTarget(model, source, beforeFrom).position;
   if (target === source.moveFrom || target === source.moveTo) return position;
   const prefix = target > 0 && model.text[target - 1] !== '\n' ? (model.text.includes('\r\n') ? 2 : 1) : 0;
   return target - (target > source.moveFrom ? source.moveTo - source.moveFrom : 0) + prefix + position - source.moveFrom;

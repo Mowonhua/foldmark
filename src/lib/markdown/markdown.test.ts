@@ -56,9 +56,23 @@ describe('structure edits', () => {
     const mapped=moveItemPosition(m,first.from,null,first.contentFrom);expect(moved.slice(mapped,mapped+5)).toBe('first');expect(parseDocument(moved).tasks).toHaveLength(3);
     expect(()=>moveItemChanges(m,first.from,m.tasks[1].from)).toThrow('INVALID_MOVE');expect(second.parentFrom).toBe(null);
   });
-  it('handles moving EOF without newline and rejects separate lists', () => {
+  it('handles moving EOF without newline and crossing headings between top-level lists', () => {
     const m=parseDocument('- one\n- two');expect(apply(m.text,moveItemChanges(m,m.items[1].from,0))).toBe('- two\n- one\n');
-    const separate=parseDocument('- one\n\n# section\n\n- other');expect(()=>moveItemChanges(separate,0,separate.items[1].from)).toThrow('INVALID_MOVE');
+    const separate=parseDocument('- one\n\n# section\n\n- other');
+    expect(apply(separate.text,moveItemChanges(separate,0,separate.items[1].from))).toBe('\n# section\n\n- one\n- other');
+  });
+  it('appends to another list across a heading via the last item move position', () => {
+    const m=parseDocument('- one\n\n# S\n\n- two\n');const two=m.items[1];
+    expect(apply(m.text,moveItemChanges(m,m.items[0].from,two.moveTo))).toBe('\n# S\n\n- two\n- one\n');
+    const mapped=moveItemPosition(m,m.items[0].from,two.moveTo,m.items[0].contentFrom);
+    expect(apply(m.text,moveItemChanges(m,m.items[0].from,two.moveTo)).slice(mapped,mapped+3)).toBe('one');
+  });
+  it('rejects cross-list moves that would break quote containers or nested ownership', () => {
+    const quoted=parseDocument('> - one\n\n- two\n');
+    expect(()=>moveItemChanges(quoted,quoted.items[0].from,quoted.items[1].from)).toThrow('INVALID_MOVE');
+    expect(()=>moveItemChanges(quoted,quoted.items[1].from,quoted.items[0].from)).toThrow('INVALID_MOVE');
+    const nested=parseDocument('- [ ] first\n  - [ ] inner\n- [ ] second\n');
+    expect(()=>moveItemChanges(nested,nested.tasks[0].from,nested.tasks[1].from)).toThrow('INVALID_MOVE');
   });
   it('moves nested siblings without losing indentation', () => {
     const m=parseDocument('- root\n  - one\n    continuation\n  - two\n- next\n');expect(apply(m.text,moveItemChanges(m,m.items[2].from,m.items[1].from))).toBe('- root\n  - two\n  - one\n    continuation\n- next\n');

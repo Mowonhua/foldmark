@@ -185,6 +185,24 @@ describe('唯一文档编辑事务', () => {
     expect(instance.undo()).toBe(true);
     expect(instance.text).toBe(original);
   });
+  it('拖动任务跨越标题移入其他章节并整体撤销', () => {
+    const original = '# A\n\n- [ ] 甲\n- [ ] 乙\n\n## B\n\n- [ ] 丙\n';
+    const instance = editor(original);
+    const from = instance.model.tasks[0].from;
+    const marker = instance.view.dom.querySelector<HTMLElement>(`[data-list-marker="${from}"]`)!;
+    vi.spyOn(instance.view.scrollDOM, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 600));
+    vi.spyOn(instance.view, 'coordsAtPos').mockImplementation(position => {
+      const index = instance.model.tasks.findIndex(item => position >= item.from && position <= item.to);
+      return new DOMRect(40, 120 + index * 40, 200, 30);
+    });
+    marker.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 120 }));
+    // 丙项底部下方 20px 处松开，命中其他列表的追加落点，甲排在丙之后。
+    window.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, cancelable: true, clientX: 40, clientY: 252 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { button: 0 }));
+    expect(instance.text).toBe('# A\n\n- [ ] 乙\n\n## B\n\n- [ ] 丙\n- [ ] 甲\n');
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(original);
+  });
   it('切换项目保存不同历史，源码模式完整显示', () => {
     const instance = editor('- [ ] 甲');
     instance.toggleTask(0);
