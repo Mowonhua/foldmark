@@ -45,7 +45,6 @@ export const editorMessages: Record<string, string> = {
   "还有未完成子任务": "Some subtasks are incomplete",
   "完成整组": "Complete group",
   "取消": "Cancel",
-  "还有未完成子任务，请选择“完成整组”": "Some subtasks are incomplete. Choose “Complete group”.",
   "条目已移动，可撤销": "Item moved · Undo available",
   "无法移动条目": "Unable to move item",
   "展开条目": "Expand item",

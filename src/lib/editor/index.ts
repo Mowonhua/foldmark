@@ -361,7 +361,6 @@ export class EditorController {
     prompt.append(label, complete, cancel); this.view.dom.append(prompt); this.groupPrompt = prompt;
     // 捕获下一次按下，避免被触发本提示的 click 立即关闭，也避免正文阻止冒泡后漏掉外部操作。
     window.addEventListener('pointerdown', this.dismissGroupPrompt, true);
-    this.options.onStatus?.(translate('还有未完成子任务，请选择“完成整组”'));
   }
 
   private dismissGroupPrompt = (event: Event): void => {
