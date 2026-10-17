@@ -10,10 +10,10 @@ import { test } from 'node:test';
 import { prepareRelease, readReleaseVersion } from './release.mjs';
 import { verifyReleaseFiles } from './release-policy.mjs';
 
-test('发布整理产生可校验的四项资源，清单与 lockfile 漂移立即失败', async (context) => {
+test('发布整理要求同版本 APK 并产生可校验的五项资源，清单与 lockfile 漂移立即失败', async (context) => {
   const root = await mkdtemp(join(tmpdir(), 'foldmark-release-'));
   context.after(() => rm(root, { recursive: true, force: true }));
-  const version = '0.1.0-alpha.1';
+  const version = '0.7.1';
   const bundle = join(root, 'src-tauri/target/release/bundle/nsis');
   await mkdir(bundle, { recursive: true });
   await mkdir(join(root, 'docs/releases'), { recursive: true });
@@ -27,8 +27,12 @@ test('发布整理产生可校验的四项资源，清单与 lockfile 漂移立�
   await writeFile(join(bundle, `Foldmark_${version}_x64-setup.exe.sig`), 'signature');
   assert.equal((await readReleaseVersion(root, `v${version}`)).version, version);
   const output = join(root, 'output');
+  await assert.rejects(prepareRelease({ root, output, repository: 'Mowonhua/foldmark', tag: `v${version}` }), /ENOENT/);
+  await mkdir(join(root, 'dist-android'));
+  await writeFile(join(root, `dist-android/Foldmark-${version}-arm64.apk`), 'signed APK');
   await prepareRelease({ root, output, repository: 'Mowonhua/foldmark', tag: `v${version}` });
   const files = new Map(await Promise.all((await readdir(output)).map(async (name) => [name, await readFile(join(output, name))])));
+  assert.equal(files.size, 5);
   assert.equal(verifyReleaseFiles(files, 'Mowonhua/foldmark', version).notes, '首个预发布版本。\n');
   await writeFile(join(root, 'src-tauri/Cargo.lock'), '[[package]]\nname = "foldmark"\nversion = "0.1.0"\n');
   await assert.rejects(readReleaseVersion(root), /Cargo.lock/);

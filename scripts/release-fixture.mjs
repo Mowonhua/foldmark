@@ -1,9 +1,9 @@
 /**
  * 文件职责：为发布测试构造带真实 SHA-256 摘要的内存资源包。
- * 定义范围：仅用于测试的 Windows 安装包字节、签名占位和更新清单。
+ * 定义范围：仅用于测试的 Windows 安装包、Android APK 字节、签名占位和更新清单。
  */
 import { createHash } from 'node:crypto';
-import { createUpdateManifest } from './release-policy.mjs';
+import { compareVersions, createUpdateManifest } from './release-policy.mjs';
 
 /** 生成指定版本的完整资源集合；安装包和签名为测试字节，不可作为实际安装产物。 */
 export function releaseFixture(version = '0.1.0-alpha.1') {
@@ -16,6 +16,7 @@ export function releaseFixture(version = '0.1.0-alpha.1') {
     [`${installerName}.sig`, Buffer.from(signature)],
     ['latest.json', Buffer.from(JSON.stringify(manifest))],
   ]);
+  if (compareVersions(version, '0.7.1-0') >= 0) files.set(`Foldmark-${version}-arm64.apk`, Buffer.from('test signed APK bytes'));
   const sums = [...files].map(([name, bytes]) => `${createHash('sha256').update(bytes).digest('hex')}  ${name}`).join('\n');
   files.set('SHA256SUMS', Buffer.from(`${sums}\n`));
   return { repository, version, manifest, files, installerName };

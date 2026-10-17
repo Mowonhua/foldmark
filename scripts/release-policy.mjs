@@ -1,6 +1,6 @@
 /**
  * 文件职责：定义发布版本、更新清单及频道晋升的纯校验规则。
- * 定义范围：版本一致性、SemVer 顺序、Windows 发布资源和频道更新决策。
+ * 定义范围：版本一致性、SemVer 顺序、跨平台发布资源和频道更新决策。
  */
 import { createHash } from 'node:crypto';
 
@@ -88,14 +88,15 @@ export function createUpdateManifest({ repository, version, installerName, signa
 
 /**
  * 函数职责：验证下载到的发布资源能组成完整且一致的更新包。
- * 输入说明：files 为资源名到 Buffer 的映射，必须包含安装包、签名、latest.json 和 SHA256SUMS。
+ * 输入说明：files 为资源名到 Buffer 的映射，必须包含 Windows 安装包、签名、latest.json 和 SHA256SUMS；v0.7.1（含预发布）起还必须包含同版本 arm64 APK。
  * 输出说明：返回已验证清单；缺失、重名、摘要不符或清单指向其他版本时抛错。
- * 实现思路：先验证资源集合和摘要，再对照清单中的版本、下载地址及签名。
+ * 实现思路：按版本确定完整资源集合，保留旧版四项资源兼容，再验证摘要，再对照清单中的版本、下载地址及签名。
  */
 export function verifyReleaseFiles(files, repository, version) {
   const installerName = `Foldmark_${version}_x64-setup.exe`;
   const names = [installerName, `${installerName}.sig`, 'latest.json'];
-  if (files.size !== 4 || [...names, 'SHA256SUMS'].some((name) => !files.get(name)?.length)) throw new Error('发布资源缺失或包含意外文件');
+  if (compareVersions(version, '0.7.1-0') >= 0) names.push(`Foldmark-${version}-arm64.apk`);
+  if (files.size !== names.length + 1 || [...names, 'SHA256SUMS'].some((name) => !files.get(name)?.length)) throw new Error('发布资源缺失或包含意外文件');
   const rows = files.get('SHA256SUMS').toString('utf8').trim().split(/\r?\n/);
   if (rows.length !== names.length) throw new Error('资源摘要数量不正确');
   const checksums = new Map(rows.map((row) => {

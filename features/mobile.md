@@ -49,6 +49,8 @@
 | 关键实现 | src/lib/updater/update-coordinator.ts::UpdateCoordinator |
 | 关键实现 | src-tauri/plugins/mobile/android/src/main/java/AndroidUpdater.kt::AndroidUpdater |
 | 关键实现 | src-tauri/plugins/mobile/android/src/main/java/AndroidUpdater.kt::AndroidUpdateRules |
+| 关键实现 | scripts/release.mjs::prepareRelease |
+| 关键实现 | scripts/release-policy.mjs::verifyReleaseFiles |
 
 ### 行为场景
 
@@ -60,3 +62,5 @@
 | S-04 | 正常 | 未授权安装时打开系统授权页，返回应用后可重试；系统安装器接管后解除编辑锁并保留候选 | src/lib/updater/android.test.ts::未知来源授权不足时保留候选允许重试\，系统安装器接管后应用继续运行, src/lib/updater/update-coordinator.test.ts::系统安装器接管后解除保存锁并保留安装包\，取消安装后可重新发起 |
 | S-05 | 异常 | 文档或配置保存失败时不调用系统安装器 | src/lib/updater/update-coordinator.test.ts::保存未成功时保留安装包并禁止原生安装：refused |
 | S-06 | 正常 | 没有可安装的新版本时结束检查且不创建候选 | src/lib/updater/android.test.ts::原生没有新版本时不创建下载会话 |
+
+| S-07 | 约束 | v0.7.1 起标签发布必须包含同版本签名 arm64 APK，缺失或摘要不符时禁止公开版本；重跑不覆盖已公开资源 | scripts/release.test.mjs::<module>, scripts/release-policy.test.mjs::<module>, scripts/release-github.test.mjs::<module> |

@@ -10,8 +10,8 @@ import { test } from 'node:test';
 import { publishRelease } from './release-github.mjs';
 import { releaseFixture } from './release-fixture.mjs';
 
-async function githubFixture(context, { published = false, corrupt = false, failChannel = false, existingChannel = false } = {}) {
-  const fixture = releaseFixture();
+async function githubFixture(context, { published = false, corrupt = false, failChannel = false, existingChannel = false, version = '0.1.0-alpha.1' } = {}) {
+  const fixture = releaseFixture(version);
   const directory = await mkdtemp(join(tmpdir(), 'foldmark-github-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
   await Promise.all([...fixture.files].map(([name, bytes]) => writeFile(join(directory, name), bytes)));
@@ -106,4 +106,18 @@ test('已有频道以同一 commit 为基准读取与提交，只允许非强制
   await publishRelease({ ...fake, tag: `v${fake.version}`, token: 'test' });
   assert.ok(fake.events.includes('PATCH /repos/Mowonhua/foldmark/git/refs/heads/updates'));
   assert.ok(!fake.events.includes('POST /repos/Mowonhua/foldmark/git/refs'));
+});
+
+test('包含 Android 的发布先下载验证五项资源，公开后重跑不覆盖 APK', async (context) => {
+  for (const published of [false, true]) {
+    const fake = await githubFixture(context, { version: '0.7.1-rc.1', published });
+    await publishRelease({ ...fake, tag: `v${fake.version}`, token: 'test' });
+    assert.equal(fake.release().assets.length, 5);
+    assert.ok(fake.release().assets.some((asset) => asset.name === 'Foldmark-0.7.1-rc.1-arm64.apk'));
+    const fifth = fake.events.indexOf('GET /assets/5');
+    const promotion = fake.events.findIndex((event) => event.endsWith('/git/trees'));
+    assert.ok(fifth >= 0 && promotion > fifth);
+    if (published) assert.ok(!fake.events.some((event) => /^(POST|PATCH|DELETE).*releases/.test(event)));
+    else assert.ok(fake.events.indexOf('PATCH /repos/Mowonhua/foldmark/releases/1') > fifth);
+  }
 });
