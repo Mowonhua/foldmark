@@ -3,7 +3,7 @@
  * 定义范围：项目关联、界面偏好、文件快照和异步文件端口。
  */
 
-/** 结构职责：承载持久化项目关联；路径只指向原文件，移除关联不得删除文件。 */
+/** 结构职责：承载本机项目关联；桌面路径指向用户原文件，Android 路径指向可由应用删除的私有副本。 */
 export interface Project {
   id: string; name: string; path: string;
   /** 缺省为未归档；归档保留关联及阅读状态，但不参与导航、聚合和搜索。 */
@@ -83,4 +83,6 @@ export interface FilePort {
   clearRecovery(path: string): Promise<void>;
   chooseFile(create: boolean): Promise<string | null>;
   watch(path: string, onChange: () => void): Promise<() => void>;
+  /** 仅应用私有文件端口提供。调用前须停止同步并结束保存；删除正文及恢复草稿，缺失文件视为已删除。 */
+  removeOwned?(path: string): Promise<void>;
 }

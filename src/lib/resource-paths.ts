@@ -14,7 +14,7 @@ export function resolveDocumentResource(documentPath: string, resource: string, 
   if (resource.startsWith('//')) return `https:${resource}`;
   const document = documentPath.replace(/\\/g, '/');
   const target = resource.replace(/\\/g, '/');
-  const base = document.startsWith('//') ? `file:${document}` : `file:///${document}`;
+  const base = document.startsWith('//') ? `file:${document}` : document.startsWith('/') ? `file://${document}` : `file:///${document}`;
   const relative = /^[a-z]:\//i.test(target) ? `file:///${target}` : target;
   const url = new URL(relative, encodeURI(base).replace(/#/g, '%23').replace(/\?/g, '%3F'));
   // 单独保留损坏的百分号序列，避免一个无效资源地址使整份编辑器预览抛错。

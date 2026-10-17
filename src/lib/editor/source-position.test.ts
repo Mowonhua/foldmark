@@ -8,6 +8,12 @@ function editor() {
   editors.push(instance); return instance;
 }
 afterEach(() => { editors.splice(0).forEach(instance => instance.destroy()); document.body.replaceChildren(); });
+it('同步在光标前插入正文时光标仍定位原任务且不能撤销远端版本', () => {
+  const instance = editor(); const cursor = instance.text.indexOf('当前任务'); instance.focusAt(cursor);
+  instance.setSynchronizedText('新增段落\n\n' + instance.text);
+  expect(instance.state.selection.main.head).toBe(cursor + '新增段落\n\n'.length);
+  expect(instance.undo()).toBe(false);
+});
 it('待办源码只显示待办，返回进入前的光标位置，切换不进入文本历史', () => {
   const instance = editor();
   const cursor = instance.text.indexOf('当前任务');

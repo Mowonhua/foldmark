@@ -1,6 +1,6 @@
 /** 文件职责：挂载桌面与浏览器共享的应用界面，并在首帧样式就绪后显示桌面窗口。 */
 import { mount } from 'svelte';
-import { isTauri } from '@tauri-apps/api/core';
+import { platformCapabilities } from './lib/platform';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import App from './App.svelte';
 import './app.css';
@@ -28,4 +28,4 @@ mount(App, { target: document.getElementById('app')! });
 
 // 桌面窗口以 visible:false 创建，避免 webview 首帧前露出透明空窗。
 // 隐藏窗口可能暂停 rAF，不能用它等待绘制完成；短延时后直接显示，由系统合成首帧。
-if (isTauri()) setTimeout(() => { void getCurrentWindow().show().then(() => getCurrentWindow().setFocus()); }, 50);
+if (platformCapabilities().desktop) setTimeout(() => { void getCurrentWindow().show().then(() => getCurrentWindow().setFocus()); }, 50);

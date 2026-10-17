@@ -15,7 +15,9 @@ export interface SaveOptions {
    * accepted 表示用户明确选用磁盘版本，调用方必须保留该文本，避免整理覆盖被替换的恢复草稿。
    * 回调同步更新 getText 对应的唯一正文；自动加载后的保存状态以回调完成后的正文为准。
    */
-  reload: (text: string, reason: 'external' | 'accepted') => void;
+  reload: (text: string, reason: 'external' | 'accepted' | 'sync') => void;
+  /** 组合输入期间推迟外部替换；磁盘版本仍在下次检查时读取。 */
+  canReload?: () => boolean;
   onStatus: (status: SaveStatus) => void; delay?: number;
   /** 已有草稿尚未恢复或用户选用了磁盘版本时，无编辑的保存/关闭不能删除草稿。 */
   preserveRecovery?: boolean;
@@ -112,11 +114,13 @@ export class SaveCoordinator {
   /** 监听事件仅触发检查；真实写入仍必须独立校验磁盘基线。 */
   async checkExternal(): Promise<void> {
     if (this.disposed) return;
+    if (this.options.canReload?.() === false) return;
     if (this.pending) { this.externalCheckPending = true; return; }
     const generation = ++this.externalGeneration;
     const baseline = this.baseline;
     try {
       const external = await this.options.files.read(this.baseline.path);
+      if (this.options.canReload?.() === false) return;
       if (generation !== this.externalGeneration || this.pending || baseline !== this.baseline || this.disposed || external.revision === this.baseline.revision) return;
       if (this.options.getText() === this.baseline.text && !this.conflict) {
         this.baseline = external;
@@ -132,6 +136,31 @@ export class SaveCoordinator {
       if (generation !== this.externalGeneration || this.disposed) return;
       this.options.onStatus({ kind: 'conflict', message: translate('文件在其他应用中已更改'), external });
     } catch (error) { if (generation === this.externalGeneration && !this.disposed) this.reportError(error); }
+  }
+
+  /** 同步提交必须穿过本地保存屏障；写入期间的新输入保留为草稿，不能被远端替换。 */
+  async applySynchronized(expected: string, text: string): Promise<void> {
+    if (this.preserveRecovery || this.options.canReload?.() === false || !await this.flush()) throw new Error('SYNC_BUSY: 请先完成输入或处理本机草稿');
+    if (this.options.getText() !== expected) throw new Error('SYNC_CHANGED: 本机内容已变化');
+    const disk = await this.options.files.read(this.baseline.path);
+    if (disk.text !== expected || this.options.getText() !== expected || this.options.canReload?.() === false) throw new Error('SYNC_CHANGED: 文件内容已变化');
+    this.externalGeneration += 1;
+    const operation = (async () => {
+      const saved = await this.options.files.write(disk.path, text, disk.revision);
+      if (this.options.getText() !== expected || this.options.canReload?.() === false) {
+        this.conflict = true;
+        await this.persistRecovery();
+        this.options.onStatus({ kind: 'conflict', message: translate('文件在其他应用中已更改'), external: saved });
+        throw new Error('SYNC_CHANGED: 同步期间产生了新输入，双方内容已保留');
+      }
+      this.baseline = saved;
+      this.options.reload(text, 'sync');
+      this.options.onStatus({ kind: 'saved', message: translate('所有更改已保存') });
+      return true;
+    })();
+    // 普通自动保存调用只消费布尔结果，错误仍由当前同步调用向上传递。
+    this.pending = operation.catch(() => false);
+    try { await operation; } finally { this.pending = null; }
   }
 
   /** 用户选用磁盘版本时先保留本地恢复快照，再替换编辑器文本。 */

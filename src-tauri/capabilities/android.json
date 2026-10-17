@@ -1,0 +1,34 @@
+{
+  "identifier": "android",
+  "description": "手机私有文档、用户选择的导入导出与扫码配对",
+  "platforms": [
+    "android"
+  ],
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-mkdir",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
+    },
+    "foldmark-mobile:allow-scan",
+    "foldmark-mobile:allow-prepare",
+    "foldmark-mobile:allow-activate",
+    "core:app:allow-register-listener",
+    "core:app:allow-remove-listener",
+    "core:app:allow-exit"
+  ]
+}

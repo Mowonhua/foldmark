@@ -5,8 +5,10 @@ mod recovery;
 #[cfg(target_os = "windows")]
 mod single_instance;
 mod storage;
+mod sync;
 mod system_fonts;
 mod window_material;
+#[cfg(not(target_os = "android"))]
 mod window_state;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
@@ -197,6 +199,36 @@ async fn clear_recovery(
     .await
 }
 
+/// 删除仅限应用私有 documents 目录中的 Markdown 副本；必须先结束编辑保存与同步写入。
+/// 路径核验先于草稿清理，拒绝符号链接和越界路径；重复删除视为成功。
+fn delete_managed_document(path: &Path, root: &Path, draft: &Path) -> Result<(), FileError> {
+    let root = std::fs::canonicalize(root).map_err(FileError::io)?;
+    let parent = path.parent().ok_or_else(|| FileError::new("FILE_PATH", "私有文档路径无效。"))?;
+    if std::fs::canonicalize(parent).map_err(FileError::io)? != root || path.extension().and_then(|part| part.to_str()) != Some("md") {
+        return Err(FileError::new("FILE_PATH", "只能删除应用私有目录中的 Markdown 副本。"));
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => return Err(FileError::new("FILE_PATH", "不能删除目录或链接文件。")),
+        Ok(_) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(FileError::io(error)),
+    }
+    recovery::clear(draft, &path.to_string_lossy())?;
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(FileError::io(error)),
+    }
+}
+
+#[tauri::command]
+async fn delete_managed_file(path: String, app: tauri::AppHandle, state: State<'_, FileState>) -> Result<(), FileError> {
+    if !cfg!(target_os = "android") { return Err(FileError::new("FILE_UNSUPPORTED", "桌面端只移除文件关联。")); }
+    let root = state_path(&app, "documents")?;
+    let draft = recovery_path(&app, &path)?;
+    disk(state.gate.clone(), move || delete_managed_document(Path::new(&path), &root, &draft)).await
+}
+
 #[tauri::command]
 fn watch_file(
     path: String,
@@ -255,6 +287,7 @@ fn unwatch_file(watch_id: u64, state: State<'_, FileState>) -> Result<(), FileEr
     Ok(())
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "windows")]
     let _instance = match single_instance::acquire().expect("无法仲裁 Foldmark 启动实例") {
@@ -283,16 +316,22 @@ pub fn run() {
         #[cfg(target_os = "windows")]
         single_instance::mark_window(app, &window_key)?;
         // 窗口此时尚未显示，恢复上次几何不会露出移动过程。
+        #[cfg(not(target_os = "android"))]
         window_state::restore(app);
+        #[cfg(target_os = "android")]
+        app.handle().plugin(tauri_plugin_foldmark_mobile::init())?;
         Ok(())
     });
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
         .manage(FileState::default())
+        .manage(sync::SyncState::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
             canonical_file_path,
@@ -305,8 +344,13 @@ pub fn run() {
             load_recovery,
             save_recovery,
             clear_recovery,
+            delete_managed_file,
             watch_file,
             unwatch_file,
+            sync::sync_status, sync::sync_offer, sync::sync_pair, sync::sync_approve,
+            sync::sync_unpair, sync::sync_address, sync::sync_exchange, sync::sync_respond,
+            sync::sync_probe,
+            sync::sync_load_state, sync::sync_save_state,
             system_fonts::list_system_fonts,
             window_material::set_window_material
         ])
@@ -317,6 +361,20 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn managed_delete_removes_private_document_and_draft_but_rejects_external_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("documents"); std::fs::create_dir(&root).unwrap();
+        let path = root.join("owned.md"); let external = directory.path().join("original.md");
+        let draft = directory.path().join("recovery.json");
+        storage::create(&path, "副本").unwrap(); storage::create(&external, "原文").unwrap();
+        recovery::save(&draft, &recovery::RecoveryDraft { path: path.to_string_lossy().into_owned(), text: "副本".into(), base_revision: "base".into(), saved_at: 1 }).unwrap();
+        assert!(delete_managed_document(&external, &root, &draft).is_err());
+        assert!(draft.exists()); assert_eq!(storage::read(&external).unwrap().text, "原文");
+        delete_managed_document(&path, &root, &draft).unwrap();
+        assert!(!path.exists()); assert!(!draft.exists());
+        delete_managed_document(&path, &root, &draft).unwrap();
+    }
     #[test]
     fn concurrent_saves_from_same_revision_accept_only_one() {
         let directory = tempfile::tempdir().unwrap();

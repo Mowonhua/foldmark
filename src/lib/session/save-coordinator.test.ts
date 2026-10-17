@@ -22,6 +22,28 @@ function fixture(preserveRecovery = false) {
 }
 
 describe('单文档保存协调', () => {
+  it('同步通过保存协调器更新正文且拒绝陈旧基线', async () => {
+    const f = fixture();
+    await f.saver.applySynchronized('base', 'remote');
+    expect(f.getText()).toBe('remote'); expect(f.disk().text).toBe('remote');
+    expect(f.reload).toHaveBeenCalledWith('remote', 'sync');
+    await expect(f.saver.applySynchronized('base', 'stale')).rejects.toThrow('SYNC_CHANGED');
+    expect(f.disk().text).toBe('remote'); f.saver.dispose();
+  });
+  it('同步写入期间的新输入保留为草稿而不替换编辑器', async () => {
+    const f = fixture();
+    vi.mocked(f.files.write).mockImplementation(async (_path, text) => {
+      f.setText('new typing'); return { path: 'a.md', text, revision: '2' };
+    });
+    await expect(f.saver.applySynchronized('base', 'remote')).rejects.toThrow('SYNC_CHANGED');
+    expect(f.getText()).toBe('new typing'); expect(f.reload).not.toHaveBeenCalled();
+    expect(f.files.saveRecovery).toHaveBeenCalledWith(expect.objectContaining({ text: 'new typing' }));
+    f.saver.dispose();
+  });
+  it('受保护草稿阻止同步覆盖', async () => {
+    const f = fixture(true); await expect(f.saver.applySynchronized('base', 'remote')).rejects.toThrow('SYNC_BUSY');
+    expect(f.files.write).not.toHaveBeenCalled(); f.saver.dispose();
+  });
   it('暂不恢复已有草稿时，无编辑保存不会删除该草稿', async () => {
     const f = fixture(true);
     expect(await f.saver.flush()).toBe(true);

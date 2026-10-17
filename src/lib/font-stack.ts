@@ -2,7 +2,8 @@
  * 文件职责：解析与组合 CSS 字体栈，探测字体可用性并提供字体列表。
  * 定义范围：fontFamily 字符串与选择器槽位的映射、canvas 探测、浏览器降级清单；不触碰持久化或编辑器。
  */
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
+import { platformCapabilities } from './platform';
 
 /** 结构职责：CSS 中无需引号的通用字体族关键字；约束条件：与 font-family 规范关键字保持一致。 */
 export const GENERIC_FAMILIES = ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui'] as const;
@@ -163,7 +164,7 @@ let systemFontsPromise: Promise<string[]> | null = null;
  * 输出说明：排序去重的族名；原生枚举失败时抛出可显示错误，本次结果不缓存以便重试。
  */
 export function loadSystemFontFamilies(): Promise<string[]> {
-  systemFontsPromise ??= isTauri()
+  systemFontsPromise ??= platformCapabilities().desktop
     ? invoke<string[]>('list_system_fonts').catch((error) => {
         systemFontsPromise = null;
         throw error;

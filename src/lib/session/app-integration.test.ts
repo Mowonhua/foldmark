@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, tick, unmount } from 'svelte';
 import App from '../../App.svelte';
 import { BrowserFilePort, defaultPreferences } from '../browser-files';
+import { AndroidFilePort } from '../files/android';
 import { builtInThemes, paletteKeys, parseTheme, type ThemeDefinition } from '../themes';
 import type { AppConfig, Project, ProjectView } from '../contracts';
 import { setLocalePreference } from '../i18n';
@@ -29,6 +30,8 @@ const desktopBoundary = vi.hoisted(() => ({
   enterCard: vi.fn<() => Promise<void>>(async () => {}),
   exitCard: vi.fn<() => Promise<void>>(async () => {}),
 }));
+vi.mock('../sync/native', () => ({ nativeSyncStore: { load: async () => null, save: async () => {} }, nativeSyncTransport: { status: async () => ({ paired: false, listening: false }) } }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('../card-window', () => ({ createCardWindowController: () => ({ enter: desktopBoundary.enterCard, exit: desktopBoundary.exitCard }) }));
 vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
@@ -1640,6 +1643,31 @@ describe('App 真实编辑与文件闭环', () => {
 
 
 describe('项目操作失败与聚合视图边界', () => {
+  it.each([false, true])('Android 删除私有副本，失败时保留项目和正文（失败=%s）', async fail => {
+    desktopBoundary.enabled = true;
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Android');
+    const remove = vi.spyOn(AndroidFilePort.prototype, 'removeOwned').mockImplementation(async path => {
+      if (fail) throw new Error('私有文件删除失败');
+      localStorage.removeItem(`foldmark:file:${path}`);
+      await files.clearRecovery(path);
+    });
+    await start(['甲正文', '乙正文']);
+    button('更多操作').click(); await tick(); button('删除项目').click(); await tick();
+    expect(document.querySelector('.modal')?.textContent).toContain('将删除手机上的文档和恢复草稿');
+    button('删除项目').click();
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(firstProject.path));
+    if (fail) {
+      await vi.waitFor(() => expect(document.querySelector('.modal')?.textContent).toContain('私有文件删除失败'));
+      expect((await files.loadConfig())?.projects.some(project => project.id === firstProject.id)).toBe(true);
+      expect((await files.read(firstProject.path)).text).toBe('甲正文');
+    } else {
+      await vi.waitFor(async () => expect((await files.loadConfig())?.projects.some(project => project.id === firstProject.id)).toBe(false));
+      expect(localStorage.getItem(`foldmark:file:${firstProject.path}`)).toBeNull();
+      expect(await files.loadRecovery(firstProject.path)).toBeNull();
+    }
+    expect((await files.read(secondProject.path)).text).toBe('乙正文');
+  });
+
   it('恢复数据与正文无法保存时，移除关联仍保留唯一内存草稿', async () => {
     const original = '# 甲清单\n\n- [ ] 原始任务\n';
     await start([original]);

@@ -1,0 +1,7 @@
+{
+  "identifier": "app.foldmark.mobile",
+  "app": {
+    "windows": [{ "label": "main", "title": "Foldmark", "fullscreen": false, "visible": true, "transparent": false, "decorations": true }]
+  },
+  "bundle": { "targets": "all", "createUpdaterArtifacts": false, "android": { "minSdkVersion": 26 } }
+}

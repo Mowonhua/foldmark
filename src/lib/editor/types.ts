@@ -11,6 +11,8 @@ import type { ClipboardPort } from '../clipboard';
  * 约束条件：回调不得同步替换正在提交的编辑器状态。
  */
 export interface EditorOptions {
+  /** 手机使用系统选字菜单；触摸滚动不启动桌面列表拖动。 */
+  nativeSelection?: boolean;
   text: string;
   mode: ViewMode;
   onChange: (text: string) => void;

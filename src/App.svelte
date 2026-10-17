@@ -4,6 +4,12 @@
   import { t, setLocalePreference } from './lib/i18n';
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import { platformCapabilities } from './lib/platform';
+  import SyncPanel from './lib/SyncPanel.svelte';
+  import { SyncEngine } from './lib/sync/engine';
+  import { SyncController } from './lib/sync/controller';
+  import { SessionSyncDocuments } from './lib/session/sync-documents';
+  import { nativeSyncStore, nativeSyncTransport } from './lib/sync/native';
   import appIcon from '../src-tauri/icons/icon.png';
   import WindowControls from './lib/WindowControls.svelte';
   import UpdatePanel from './lib/UpdatePanel.svelte';
@@ -12,7 +18,7 @@
   import type { UpdateStatus } from './lib/updater/contracts';
   import { formatBytes } from './lib/updater/format-bytes';
   import packageInfo from '../package.json';
-  import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+  import { convertFileSrc, invoke } from '@tauri-apps/api/core';
   import { EditorController, getDocumentModel } from './lib/editor';
   import { renderTaskTitle } from './lib/editor/preview';
   import { sourceVisibleRanges } from './lib/editor/source-scope';
@@ -29,7 +35,13 @@
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
   import { createCardWindowController } from './lib/card-window';
 
-  const desktop = isTauri();
+  const { native, android, desktop } = platformCapabilities();
+  const mobile = android || import.meta.env.DEV && new URLSearchParams(location.search).has('mobile-preview');
+  let syncController = $state.raw<SyncController>();
+  let syncRevision = $state(0);
+  let syncOpen = $state(false);
+  let syncError = $state('');
+  const syncLabel = $derived.by(() => { void syncRevision; return syncController?.status ?? '设备同步'; });
   const TOAST_DURATION_MS = 3000;
   // 灵感簿使用伪项目身份复用会话与搜索机制；不写入 projects 列表，避免污染项目语义与聚合视图。
   const INSPIRATION_ID = 'inspiration';
@@ -84,7 +96,7 @@
 
   /** 托管灵感文件的默认位置；桌面在应用数据目录，浏览器预览保存在本地沙盒目录。 */
   async function defaultInspirationPath(): Promise<string> {
-    if (!desktop) return `${$t('浏览器')}/${$t('灵感')}.md`;
+    if (!native) return `${$t('浏览器')}/${$t('灵感')}.md`;
     const { appDataDir, join } = await import('@tauri-apps/api/path');
     return join(await appDataDir(), $t('灵感.md'));
   }
@@ -170,6 +182,7 @@
   let crumbMenu = $state<{ x: number; y: number } | null>(null);
   let removeTarget = $state<Project | null>(null);
   let projectActionBusy = $state(false);
+  let addingProject = $state(false);
   let dialog = $state<'project' | 'rename' | 'settings' | 'help' | 'conflict' | 'recovery' | 'remove' | 'archived-projects' | 'updates' | null>(null);
   let projectName = $state('');
   let projectPath = $state('');
@@ -385,6 +398,7 @@
     const template = { ...selectedTheme, id: `custom-${selectedTheme.id}`.slice(0, 64), name: $t("{name}（自制）", { name: selectedTheme.name }).slice(0, 80) };
     try {
       const text = JSON.stringify(template, null, 2);
+      if (mobile && native) { await (files as import('./lib/files/android').AndroidFilePort).exportText(text, `${template.id}.json`); return; }
       if (desktop) {
         const { save } = await import('@tauri-apps/plugin-dialog');
         const path = await save({ title: $t("保存主题模板"), defaultPath: `${template.id}.json`, filters: [{ name: $t("JSON 主题"), extensions: ['json'] }] });
@@ -444,6 +458,7 @@
     else config.projectViews[active.project.id] = active.ui;
   }
   function documentChanged(): void {
+    syncController?.markDirty(active?.project.id);
     if (switching || !active || !editor) return;
     active.state = editor.state; active.ui = editor.getUIState();
     active.saver.changed(); version += 1;
@@ -465,6 +480,7 @@
    * 归档整理必须在当前会话与保存器就绪后执行；查询坐标属于整理前快照，须先定位再让事务映射选区。
    */
   async function openProject(project: Project, position?: number, targetMode?: ViewMode): Promise<void> {
+    if (mobile) sidebar = false;
     if (project.archived || projectActionBusy) return;
     const generation = ++openGeneration;
     captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = '';
@@ -500,6 +516,7 @@
    * 实现思路：与 openProject 共用会话构建；仅对文件创建和配置字段分流做差异处理。
    */
   async function openInspiration(position?: number, targetMode?: ViewMode): Promise<void> {
+    if (mobile) sidebar = false;
     if (projectActionBusy) return;
     const generation = ++openGeneration;
     captureUI(); screen = 'project'; missing = null; fatal = ''; menuOpen = false; toast = ''; dialog = null;
@@ -586,9 +603,9 @@
     if (!editor) editor = new EditorController(editorHost, {
       text: disk.text, mode: ui.mode, onChange: documentChanged, onUIChange: editorUIChanged,
       onStatus: message => notify(message, message.includes($t("可撤销"))),
-      resolveResource: url => desktop ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
+      resolveResource: url => native ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
       openLink: openDocumentLink,
-      headingAddEnabled: config.preferences.headingAdd ?? false,
+      headingAddEnabled: config.preferences.headingAdd ?? false, nativeSelection: mobile,
     });
     else editor.restoreState(editor.createState(disk.text, ui.mode));
     editor.setUIState(ui);
@@ -598,9 +615,10 @@
     };
     current.saver = new SaveCoordinator({
       files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
+      canReload: () => active?.project.id !== project.id || !editor?.view.composing,
       reload: (text, reason) => {
         if (active?.project.id === project.id && editor) {
-          switching = true; editor.setText(text, true); current.state = editor.state; switching = false;
+          switching = true; if (reason === 'sync') editor.setSynchronizedText(text); else editor.setText(text, true); current.state = editor.state; switching = false;
           if (reason === 'external' && !current.saver.hasProtectedRecovery) editor.normalizeArchive();
         } else if (editor) current.state = editor.createState(text, current.ui.mode);
         version += 1; scheduleIndex();
@@ -625,12 +643,12 @@
     editor.toggleSource(!active.saver.hasProtectedRecovery);
     captureUI(); version += 1; scheduleConfig();
   }
-  async function showAll(): Promise<void> { captureUI(); screen = 'all'; query = ''; searchOpen = false; toast = ''; await updateIndex(); }
+  async function showAll(): Promise<void> { if (mobile) sidebar = false; captureUI(); screen = 'all'; query = ''; searchOpen = false; toast = ''; await updateIndex(); }
   /** Svelte 只管理挂载点；内容由正文共享渲染器生成，更新时整体替换只读 DOM。 */
   function taskTitle(node: HTMLElement, result: AggregateResult): { update: (next: AggregateResult) => void } {
     const update = (next: AggregateResult): void => {
       node.replaceChildren(renderTaskTitle(next.model, next.item, {
-        resolveResource: url => resolveDocumentResource(next.path, url, path => desktop ? convertFileSrc(path) : path),
+        resolveResource: url => resolveDocumentResource(next.path, url, path => native ? convertFileSrc(path) : path),
       }));
     };
     update(result);
@@ -758,12 +776,16 @@
   async function choosePath(create: boolean): Promise<void> {
     try {
       const path = await files.chooseFile(create);
-      if (path) { projectPath = path; createFile = create; if (!projectName) projectName = path.split(/[\\/]/).pop()?.replace(/\.(md|markdown|txt)$/i, '') ?? $t("新项目"); }
+      if (path) { projectPath = path; createFile = create; if (!projectName) projectName = mobile ? $t('新项目') : path.split(/[\\/]/).pop()?.replace(/\.(md|markdown|txt)$/i, '') ?? $t("新项目"); }
     } catch (error) { dialogError = errorMessage(error); }
   }
   async function addProject(): Promise<void> {
-    if (!projectName.trim() || !projectPath) { dialogError = $t("填写项目名称并选择 Markdown 文件。"); return; }
+    if (!projectName.trim() || !mobile && !projectPath) { dialogError = mobile ? $t('填写项目名称。') : $t("填写项目名称并选择 Markdown 文件。"); return; }
+    if (addingProject) return;
+    addingProject = true;
     try {
+      // 手机新建直接使用应用私有目录；用户选择过导入副本时沿用该副本。
+      if (mobile && !projectPath) { await choosePath(true); if (!projectPath) return; }
       if (config.projects.some(item => samePath(item.path, projectPath))) throw new Error($t("这个文件已经关联到项目。"));
       if (config.inspiration && samePath(config.inspiration.path, projectPath)) throw new Error($t("这个文件已用作灵感簿。"));
       if (createFile) await files.create(projectPath, `# ${projectName.trim()}\n\n- [ ] \n`);
@@ -771,8 +793,10 @@
       const project = { id: crypto.randomUUID(), name: projectName.trim(), path: projectPath };
       config.projects = [...config.projects, project]; dialog = null; await openProject(project); scheduleConfig(); scheduleIndex();
     } catch (error) { dialogError = errorMessage(error); }
+    finally { addingProject = false; }
   }
   function renameProject(): void {
+    syncController?.markDirty(active?.project.id);
     if (!active || !projectName.trim()) return;
     const project = config.projects.find(item => item.id === active!.project.id)!;
     project.name = projectName.trim(); active.project = project; version += 1; dialog = null; scheduleConfig();
@@ -780,7 +804,7 @@
   /**
    * 函数职责：归档或解除指定项目的关联，统一维护会话生命周期。
    * 输入说明：目标来自项目菜单；archive 为 true 时保留配置和阅读位置。
-   * 输出说明：保存失败保留项目；成功后只在移走当前会话时选择替代项目，不删除文件。
+   * 输出说明：保存失败保留项目；归档保留正文，删除时只有 Android 清理私有文件，桌面仅移除关联。
    * 实现思路：先捕获并保存编辑状态，再停止目标监听、更新配置和刷新查询。
    */
   async function retireProject(project: Project, archive: boolean): Promise<void> {
@@ -794,11 +818,20 @@
         if (dialog) dialogError = message; else notify(message);
         return;
       }
+      if (!archive) {
+        const synced = Object.values(syncController?.engine.snapshot().records ?? {}).find(record => record.binding?.localId === project.id);
+        if (synced) await syncController!.engine.disable(synced.document.id);
+        // 同步队列完成暂停后才删除私有副本，防止已排队的远端写入重新创建文件。
+        if (android) {
+          if (!files.removeOwned) throw new Error('手机文件端口不支持删除私有文档');
+          await files.removeOwned(project.path);
+        }
+      }
       // 保存等待期间阻止编辑和项目切换；同时使此前尚未完成的文件读取失效。
       ++openGeneration;
       session?.stopWatch(); session?.saver.dispose(); sessions.delete(project.id);
       indexCache.delete(project.id);
-      if (archive) project.archived = true;
+      if (archive) { project.archived = true; syncController?.markDirty(project.id); }
       else {
         config.projects = config.projects.filter(item => item.id !== project.id);
         delete config.projectViews[project.id];
@@ -822,7 +855,11 @@
         // 最后一个项目被移走后落到灵感簿，避免只剩空白欢迎页。
         else if (config.inspiration || sessions.has(INSPIRATION_ID)) await openInspiration();
       }
-      scheduleConfig(); scheduleIndex();
+      if (android && !archive) await persistConfig(); else scheduleConfig();
+      scheduleIndex();
+      if (!archive) void syncController?.sync();
+    } catch (error) {
+      if (dialog) dialogError = errorMessage(error); else notify(errorMessage(error));
     } finally { projectActionBusy = false; }
   }
   async function removeProject(): Promise<void> {
@@ -830,7 +867,7 @@
   }
   /** 恢复仅改变关联状态；不读取文件，失效路径仍由正常打开流程处理。 */
   function restoreProject(project: Project): void {
-    project.archived = false; scheduleConfig(); scheduleIndex();
+    project.archived = false; syncController?.markDirty(project.id); scheduleConfig(); scheduleIndex();
   }
   function showProjectMenu(event: MouseEvent, project: Project): void {
     event.preventDefault();
@@ -879,6 +916,10 @@
   }
   async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify($t("已保存")); } }
   async function exportMarkdown(text = active?.state.doc.toString() ?? '', name = `${active?.project.name ?? $t("清单")}.md`): Promise<void> {
+    if (mobile && native) {
+      try { if (await (files as import('./lib/files/android').AndroidFilePort).exportText(text, name)) notify($t('副本已保存')); } catch (error) { notify(errorMessage(error)); }
+      return;
+    }
     if (desktop) {
       try { const path = await files.chooseFile(true); if (path) { await files.create(path, text); notify($t("副本已保存")); } }
       catch (error) { notify(errorMessage(error)); }
@@ -922,7 +963,7 @@
         else notify($t("未找到链接对应的章节"));
         return;
       }
-      if (desktop) {
+      if (native) {
         const platform = await import('./lib/files/tauri');
         if (/^(https?:|mailto:)/i.test(url) || url.startsWith('//')) { await platform.openExternalLink(url.startsWith('//') ? `https:${url}` : url); return; }
         const path = resolveDocumentResource(resourceDocumentPath, url, path => path);
@@ -975,7 +1016,7 @@
   function toggleOutlineView(): void {
     if (outlineVisible) {
       setSidebarView('nav');
-      sidebar = config.preferences.sidebarOpen ?? true;
+      sidebar = mobile ? false : config.preferences.sidebarOpen ?? true;
     } else {
       setSidebarView('outline');
       if (!sidebar) sidebar = true;
@@ -1041,7 +1082,32 @@
     if (event.key.toLowerCase() === 'f' && event.shiftKey) { event.preventDefault(); closeProjectSearch(); searchOpen = true; scheduleIndex(); void tick().then(() => document.getElementById('global-search')?.focus()); }
   }
 
+  /** 灵感同步首次启用时创建托管文件；已有失效路径不静默重建。 */
+  async function ensureSyncInspiration(): Promise<string> {
+    if (config.inspiration) { await files.read(config.inspiration.path); return config.inspiration.path; }
+    const path = await defaultInspirationPath();
+    try { await files.read(path); } catch { await files.create(path, INSPIRATION_TEXT); }
+    config.inspiration = { path };
+    if (!await persistConfig()) throw new Error('灵感配置保存失败');
+    return path;
+  }
+  async function initializeSync(): Promise<void> {
+    const documents = new SessionSyncDocuments({
+      files, config: () => config, session: id => sessions.get(id), capture: captureUI,
+      composing: id => active?.project.id === id && !!editor?.view.composing,
+      persist: persistConfig, changed: () => { version += 1; indexCache.clear(); scheduleIndex(); },
+      inspiration: ensureSyncInspiration,
+      receivePath: async name => mobile ? (files as import('./lib/files/android').AndroidFilePort).managedPath(name) : files.chooseFile(true),
+    });
+    const changed = () => { syncRevision += 1; };
+    const engine = new SyncEngine(documents, nativeSyncStore, changed);
+    syncController = new SyncController(engine, nativeSyncTransport, desktop, changed);
+    try { await syncController.start(); }
+    catch (error) { syncError = errorMessage(error); syncController.stop(); syncController = undefined; }
+  }
+
   onMount(() => {
+    document.documentElement.classList.toggle('mobile-platform', mobile);
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const updateMotionPreference = () => { reducedMotion = motionPreference.matches; };
     updateMotionPreference(); motionPreference.addEventListener('change', updateMotionPreference);
@@ -1049,23 +1115,24 @@
     const updateSystemTheme = () => { systemDark = colorPreference.matches; };
     updateSystemTheme(); colorPreference.addEventListener('change', updateSystemTheme);
     let unlistenClose = () => {};
+    let unlistenBack = () => {};
     let disposed = false;
     const initialize = async () => {
       try {
-        files = desktop ? new (await import('./lib/files/tauri')).TauriFilePort() : new BrowserFilePort();
+        files = native ? mobile ? new (await import('./lib/files/android')).AndroidFilePort() : new (await import('./lib/files/tauri')).TauriFilePort() : new BrowserFilePort();
         const loaded = validateAppConfig(await files.loadConfig());
         if (loaded) config = { ...loaded, preferences: { ...defaultPreferences, ...loaded.preferences }, projectViews: loaded.projectViews ?? {} };
         else {
           // 首次启动没有历史配置：立即按系统语言初始化，保证随后的初始文件以界面语言命名；缺省偏好的旧配置仍为简体中文。
           config.preferences.locale = 'system';
           setLocalePreference('system');
-          if (!desktop) {
+          if (!native) {
             const path = `${$t('浏览器')}/${$t('开始')}.md`;
             try { await files.create(path, welcomeText); } catch { /* 重新初始化配置时复用已有预览文件。 */ }
             config.projects = [{ id: 'welcome', name: $t('开始'), path }]; config.activeProjectId = 'welcome';
           }
         }
-        sidebar = config.preferences.sidebarOpen ?? true;
+        sidebar = mobile ? false : config.preferences.sidebarOpen ?? true;
         sidebarView = config.preferences.sidebarView ?? 'nav';
         if (disposed) return; configReady = true; ready = true;
         const project = availableProjects.find(item => item.id === config.activeProjectId) ?? availableProjects[0];
@@ -1076,6 +1143,23 @@
           else config.activeProjectId = null;
         } finally {
           if (!disposed) booted = true;
+        }
+        if (native) await initializeSync();
+        if (android) {
+          const { onBackButtonPress, exit } = await import('@tauri-apps/api/app');
+          const back = await onBackButtonPress(() => {
+            if (syncOpen) { syncOpen = false; return; }
+            if (dialog) { dialog = null; return; }
+            if (searchOpen) { searchOpen = false; return; }
+            if (sidebar) { sidebar = false; return; }
+            void (async () => {
+              captureUI();
+              const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
+              if (saved.every(Boolean) && await persistConfig()) await exit(0);
+              else notify($t('仍有正文或配置未保存，请处理保存失败后关闭。'));
+            })();
+          });
+          unlistenBack = () => { void back.unregister(); };
         }
         if (desktop) {
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -1109,13 +1193,18 @@
     void initialize();
     const beforeUnload = () => { captureUI(); void persistConfig(); for (const session of sessions.values()) void session.saver.flush(); };
     const focus = () => { for (const session of sessions.values()) void session.saver.checkExternal(); };
+    const visibility = () => { if (document.hidden) beforeUnload(); };
+    document.addEventListener('visibilitychange', visibility);
+    const viewport = () => { if (mobile) document.documentElement.style.setProperty('--mobile-height', `${window.visualViewport?.height ?? window.innerHeight}px`); };
+    viewport(); window.visualViewport?.addEventListener('resize', viewport);
     window.addEventListener('beforeunload', beforeUnload); window.addEventListener('focus', focus);
     return () => {
       motionPreference.removeEventListener('change', updateMotionPreference);
       colorPreference.removeEventListener('change', updateSystemTheme);
-      disposed = true; unlistenClose(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', visibility); window.visualViewport?.removeEventListener('resize', viewport);
+      disposed = true; unlistenClose(); unlistenBack(); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('focus', focus);
       clearTimeout(searchTimer); clearTimeout(configTimer); clearTimeout(toastTimer);
-      updater?.dispose();
+      updater?.dispose(); syncController?.stop();
       for (const session of sessions.values()) { session.stopWatch(); session.saver.dispose(); } editor?.destroy();
     };
   });
@@ -1123,8 +1212,9 @@
 
 <svelte:window onkeydown={keydown} onpointerdowncapture={dismissDialog} onclick={dismissPopovers} />
 
-<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy}>
+<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
 
+  {#if mobile && sidebar}<button class="drawer-scrim" aria-label="关闭项目导航" onclick={() => sidebar = false}></button>{/if}
   {#if sidebar && !cardMode}
     <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
     <div class="sidebar-slot">
@@ -1191,8 +1281,8 @@
         <button role="menuitem" onclick={() => currentItemAction('down')}>{$t("同级下移")}</button>
         <hr/>{#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>{/if}
         <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
-        {#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('remove')}>{$t("移除项目关联")}</button>{/if}
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button><button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>
+        {#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('remove')}>{$t(mobile ? '删除项目' : '移除项目关联')}</button>{/if}
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button>{#if !mobile}<button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button>{/if}{#if native}<button role="menuitem" onclick={() => { syncOpen = true; menuOpen = false; }}>设备同步</button>{/if}<button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>
       </div>{/if}
     </header>
     {/if}
@@ -1210,6 +1300,7 @@
     {/if}
 
     {#if fatal}<div class="error-banner" role="alert">{fatal}{#if missing}<button onclick={relocate}>{$t("重新定位文件")}</button>{/if}{#if missing?.id === INSPIRATION_ID}<button onclick={recreateInspiration}>{$t("新建空灵感簿")}</button>{/if}</div>{/if}
+    {#if syncError}<div class="error-banner" role="alert">{syncError}</div>{/if}
     {#if configError}<div class="error-banner" role="alert">{configError}<button onclick={() => persistConfig()}>{$t("重试配置保存")}</button></div>{/if}
     {#if active?.recoveryWarning}<div class="error-banner" role="alert">{active.recoveryWarning}{$t("。当前显示完好的 Markdown 原文件。")}</div>{/if}
     {#if saveStatus?.kind === 'conflict'}<div class="conflict-banner" role="status">{$t("磁盘文件有新的修改，你的编辑已保留。")}<button onclick={() => openDialog('conflict')}>{$t("比较并处理")}</button></div>{/if}
@@ -1242,18 +1333,39 @@
         {#if !aggregateResults.length}<p class="all-clear">{indexing ? $t("正在读取项目…") : $t("暂时没有待办。给自己留一点空闲。")}</p>{/if}
       </section>
     {/if}
+    {#if mobile && active && screen === 'project'}
+      <div class="mobile-edit-tools" role="toolbar" aria-label="编辑操作">
+        {#each [['task','新增任务'],['outdent','减少缩进'],['indent','增加缩进'],['up','上移'],['down','下移'],['undo','撤销'],['redo','重做']] as action}
+          <button aria-label={action[1]} title={action[1]} onpointerdown={event => event.preventDefault()} onclick={() => editor?.mobileCommand(action[0] as 'task' | 'indent' | 'outdent' | 'up' | 'down' | 'undo' | 'redo')}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              {#if action[0] === 'task'}<rect x="3" y="4" width="10" height="10" rx="2"/><path d="m5.5 9 2 2 3.5-4M17 14v7m-3.5-3.5h7M3 20h6"/>
+              {:else if action[0] === 'indent'}<path d="M3 4h18M11 9h10m-10 6h10M3 20h18m-18-12 4 4-4 4"/>
+              {:else if action[0] === 'outdent'}<path d="M3 4h18M11 9h10m-10 6h10M3 20h18M7 8l-4 4 4 4"/>
+              {:else if action[0] === 'up'}<path d="M5 4h14m-7 16V8m-5 5 5-5 5 5"/>
+              {:else if action[0] === 'down'}<path d="M5 20h14M12 4v12m-5-5 5 5 5-5"/>
+              {:else if action[0] === 'undo'}<path d="m8 5-5 5 5 5M3 10h11a6 6 0 0 1 0 12" transform="translate(0 -2)"/>
+              {:else}<path d="m16 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12" transform="translate(0 -2)"/>{/if}
+            </svg>
+          </button>
+        {/each}
+      </div>
+    {/if}
     <div class="statusbar-dock">
       <footer class="statusbar" data-tauri-drag-region={desktop && cardMode ? true : undefined}>
         <div class="statusbar-actions">
           <button class="source-button" class:source-active={screen === 'project' && mode === 'source'} aria-label={mode === 'source' ? $t("返回预览") : $t("查看源码")} title={mode === 'source' ? $t("返回预览") : $t("查看源码")} aria-pressed={screen === 'project' && mode === 'source'} disabled={screen !== 'project' || !active} onclick={toggleSource}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5M12 3 8 17"/></svg></button>
           <button class="outline-button" class:outline-active={outlineVisible} aria-label={outlineVisible ? $t("返回导航") : $t("大纲目录")} title={outlineVisible ? $t("返回导航") : $t("大纲目录")} aria-pressed={outlineVisible} disabled={screen !== 'project' || !active} onclick={toggleOutlineView}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01M8 5.5h8.5M8 10h8.5M8 14.5h8.5"/></svg></button>
-          <button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>
+          {#if !mobile}<button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>{/if}
         </div>
+        {#if native}<button class="sync-status" onclick={() => syncOpen = true}>{syncLabel}</button>{/if}
         {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? `${$t("正在下载更新…")}${updateDownloadSize}` : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
       </footer>
     </div>
   </main>
 </div>
+
+{#if syncOpen && syncController}<SyncPanel controller={syncController} revision={syncRevision} projects={config.projects} focus={modalFocus} ensureInspiration={async () => { await ensureSyncInspiration(); }} onClose={() => syncOpen = false}/>{/if}
+{#if syncOpen && !syncController}<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="设备同步" tabindex="-1"><p>{syncError || '同步尚未就绪'}</p><button onclick={() => syncOpen = false}>关闭</button></div></div>{/if}
 
 {#if projectMenu}
   <div class="dropdown project-context-menu" data-project-menu role="menu" tabindex="-1" aria-label={$t("项目操作")} style:left={`${projectMenu.x}px`} style:top={`${projectMenu.y}px`}
@@ -1296,16 +1408,16 @@
     <div class="modal" class:settings-modal={dialog === 'settings'} class:wide={dialog === 'conflict' || dialog === 'recovery'} role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:modalFocus>
       <button class="modal-close icon-button" aria-label={$t("关闭对话框")} disabled={updateInstalling || projectActionBusy} onclick={() => dialog = null}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
       {#if dialog === 'project'}
-        <p class="eyebrow">{$t("项目")}</p><h2 id="dialog-title">{$t("给一份清单一个位置")}</h2><p class="muted">{$t("关联已有 Markdown，或选择位置新建文件。")}</p>
+        {#if mobile}<h2 id="dialog-title">{$t('新建项目')}</h2>{:else}<p class="eyebrow">{$t("项目")}</p><h2 id="dialog-title">{$t("给一份清单一个位置")}</h2><p class="muted">{$t("关联已有 Markdown，或选择位置新建文件。")}</p>{/if}
         <label>{$t("项目名称")}<input placeholder={$t("例如：工作、阅读、生活")} bind:value={projectName}/></label>
-        <div class="file-buttons"><button onclick={() => choosePath(false)}>{$t("选择已有文件")}</button><button onclick={() => choosePath(true)}>{$t("新建清单文件")}</button></div>
-        {#if projectPath}<p class="file-path">{projectPath}</p>{/if}
-        {#if !desktop}<p class="small muted">{$t("浏览器模式会导入文件副本。桌面应用直接关联本地原文件。")}</p>{/if}
-        <button class="primary" onclick={addProject}>{$t("添加项目")}</button>
+        <div class="file-buttons"><button disabled={addingProject} onclick={() => choosePath(false)}>{mobile ? $t(projectPath && !createFile ? '重新选择导入文件' : '导入 Markdown') : $t("选择已有文件")}</button>{#if !mobile}<button disabled={addingProject} onclick={() => choosePath(true)}>{$t("新建清单文件")}</button>{/if}</div>
+        {#if projectPath && !mobile}<p class="file-path">{projectPath}</p>{/if}
+        {#if !native}<p class="small muted">{$t("浏览器模式会导入文件副本。桌面应用直接关联本地原文件。")}</p>{/if}
+        <button class="primary" disabled={addingProject} onclick={addProject}>{mobile && !projectPath ? $t('创建项目') : $t("添加项目")}</button>
       {:else if dialog === 'rename'}
         <h2 id="dialog-title">{$t("重命名项目")}</h2><label>{$t("项目名称")}<input bind:value={projectName}/></label><button class="primary" onclick={renameProject}>{$t("保存名称")}</button>
       {:else if dialog === 'remove'}
-        <h2 id="dialog-title">{$t('删除「{name}」项目？', { name: removeTarget?.name ?? '' })}</h2><p>{$t("Markdown 文件会保留在原位置。你可以随时重新关联。")}</p><div class="modal-actions"><button onclick={() => dialog = null}>{$t("取消")}</button><button class="primary" disabled={projectActionBusy} onclick={removeProject}>{$t("删除项目")}</button></div>
+        <h2 id="dialog-title">{$t('删除「{name}」项目？', { name: removeTarget?.name ?? '' })}</h2><p>{mobile ? $t('将删除手机上的文档和恢复草稿。导入来源及电脑上的文件不受影响。') : $t("Markdown 文件会保留在原位置。你可以随时重新关联。")}</p><div class="modal-actions"><button onclick={() => dialog = null}>{$t("取消")}</button><button class="primary" disabled={projectActionBusy} onclick={removeProject}>{$t("删除项目")}</button></div>
       {:else if dialog === 'archived-projects'}
         <h2 id="dialog-title">{$t("归档项目")}</h2><p class="muted">{$t("恢复后，项目会重新显示在左侧列表中。")}</p>
         <div class="archived-project-list">

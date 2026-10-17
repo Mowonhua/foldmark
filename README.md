@@ -4,9 +4,9 @@
 
 <h1 align="center">Foldmark</h1>
 
-<p align="center">Windows 上的多项目 Markdown 待办编辑器：一个项目就是一份普通 <code>.md</code> 文件。</p>
+<p align="center">多项目 Markdown 待办编辑器：一个项目就是一份普通 <code>.md</code> 文件。</p>
 
-<p align="center">Windows x64 · 本地文件 · MIT</p>
+<p align="center">Windows x64 · Android · 本地文件 · MIT</p>
 
 <p align="center">
   <a href="https://github.com/Mowonhua/foldmark/releases">下载</a> ·
@@ -30,6 +30,8 @@
 - **阅读方式可选**：预览与分区源码视图可切换。内置纸面、纯粹双色、新拟物、液态玻璃、磨砂玻璃五套主题，各有浅色和深色，可跟随系统，也可导入自制 JSON 主题。
 
 输入后自动保存。外部修改、文件冲突或保存失败时，应用保留未保存的内容并提供恢复入口。详见[保存与恢复规则](./docs/使用.md#保存外部编辑与恢复)。
+
+Android 版共用编辑与任务规则，使用手机内的 Markdown 副本。电脑与手机可在同一局域网内配对，同步选定项目和灵感簿。使用方式与构建说明见[手机版与同步](./docs/手机版与同步.md)。
 
 <details>
 <summary>任务文件仍然是普通 Markdown</summary>

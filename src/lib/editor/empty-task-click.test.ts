@@ -8,9 +8,19 @@ Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect = () => new DOMRect();
 let instance: EditorController;
 afterEach(() => { instance?.destroy(); document.body.replaceChildren(); });
-function editor(text: string) {
-  instance = new EditorController(document.body, { text, mode: 'todo', onChange: () => {} });
+function editor(text: string, nativeSelection = false) {
+  instance = new EditorController(document.body, { text, mode: 'todo', nativeSelection, onChange: () => {} });
 }
+
+it('手机轻触底部留白创建可见编辑出口，不把输入送入隐藏归档', () => {
+  const text = '- [ ] 任务\n\n# 归档\n\n- [x] 完成\n'; editor(text, true);
+  vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
+  instance.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
+  for (const type of ['pointerdown', 'pointerup', 'click']) instance.view.contentDOM.dispatchEvent(new MouseEvent(type, { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  instance.view.dispatch(instance.state.replaceSelection('手机正文'));
+  expect(instance.text).toContain('- [ ] 任务\n\n手机正文');
+  expect(instance.text.endsWith('# 归档\n\n- [x] 完成\n')).toBe(true);
+});
 
 it('从已创建空行本身起拖可选择前文，不重复创建段落', () => {
   const text = '正文\n\n';

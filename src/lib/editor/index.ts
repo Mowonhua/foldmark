@@ -3,9 +3,10 @@
  * 定义范围：编辑状态生命周期、公共编辑命令、界面状态恢复。
  */
 import { translate, locale } from '../i18n';
+import { diffChars } from 'diff';
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory, indentMore, indentLess } from '@codemirror/commands';
 import { bracketMatching, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
@@ -17,7 +18,7 @@ import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './so
 import { captureSourcePosition, restoreSourcePosition, setSourceReturn, sourcePositionHistory, sourceReturnField } from './source-position';
 import { markerGestures } from './gestures';
 import { draftFencedBlocksField, draftFencedBlockHistory } from './fenced-block-state';
-import { taskKeymap } from './commands';
+import { taskKeymap, indentTask } from './commands';
 import { paragraphAt, paragraphLayout } from './paragraphs';
 import { contentVisibility } from './visibility';
 import { foldMotion } from './fold-motion';
@@ -68,7 +69,7 @@ export class EditorController {
     // createState 读取开关初值，必须先于编辑器状态构建赋值。
     this.headingAddEnabled = options.headingAddEnabled ?? false;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
-    this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
+    if (!options.nativeSelection) this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
       undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus });
     this.unsubscribeLocale = locale.subscribe(() => this.refreshLanguage());
     this.view.dom.addEventListener('keydown', this.historyKey, true);
@@ -79,6 +80,23 @@ export class EditorController {
   get state(): EditorState { return this.view.state; }
   get text(): string { return this.state.doc.toString(); }
   get model(): DocumentModel { return getDocumentModel(this.state); }
+
+  /** 触屏辅助栏复用键盘命令；组合输入尚未结束时不提交结构变更。 */
+  mobileCommand(command: 'task' | 'indent' | 'outdent' | 'up' | 'down' | 'undo' | 'redo'): void {
+    if (this.view.composing) return;
+    if (command === 'task') this.insertTask();
+    else if (command === 'indent' || command === 'outdent') {
+      if (!indentTask(this.view, command === 'indent' ? 1 : -1)) (command === 'indent' ? indentMore : indentLess)(this.view);
+    }
+    else if (command === 'undo') this.undo();
+    else if (command === 'redo') this.redo();
+    else {
+      const position = this.state.selection.main.head;
+      const item = this.model.items.filter(item => position >= item.from && position <= item.to).at(-1);
+      if (item) this.moveItem(item.from, command);
+    }
+    this.view.focus();
+  }
 
   /**
    * 函数职责：为当前或后台项目生成不带旧历史的文档状态。
@@ -102,7 +120,8 @@ export class EditorController {
         const layout = archiveLayoutSpec(transaction.state, completedFrom);
         return layout ? [transaction, layout] : transaction;
       }),
-      history(), drawSelection(), codeSelection, bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
+      // Android 由系统维护选字手柄与操作菜单；桌面选区绘制会隐藏原生选区，导致长按菜单消失。
+      history(), this.options.nativeSelection ? [] : [drawSelection(), codeSelection], bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle),
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
@@ -194,6 +213,30 @@ export class EditorController {
     const sections = archiveSections(model);
     return model.tasks.some(item => taskIsArchived(model, item) && !sections.some(section => item.from >= section.headingTo && item.to <= section.to))
       ? translate('暂缓整理归档：请检查源码中的代码围栏或 HTML 是否完整。') : null;
+  }
+
+  /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
+  setSynchronizedText(text: string): void {
+    if (this.view.composing) throw new Error('SYNC_BUSY: 正在组合输入');
+    const ui = this.getUIState(); const viewport = captureSourcePosition(this.view);
+    const parts = diffChars(this.text, text, { timeout: 100, maxEditLength: 10000 });
+    const edits: { from: number; to: number; insert: string }[] = [];
+    let offset = 0;
+    for (const part of parts ?? []) {
+      if (part.removed) { edits.push({ from: offset, to: offset + part.value.length, insert: '' }); offset += part.value.length; }
+      else if (part.added) edits.push({ from: offset, to: offset, insert: part.value });
+      else offset += part.value.length;
+    }
+    const changes = this.state.changes(parts ? edits : [{ from: 0, to: this.text.length, insert: text }]);
+    const map = (position: number) => changes.mapPos(Math.min(position, this.text.length), 1);
+    const mapped = { ...viewport, cursor: map(viewport.cursor), anchor: map(viewport.anchor) };
+    ui.cursor = map(ui.cursor);
+    if (ui.sourceReturn) ui.sourceReturn = { ...ui.sourceReturn, cursor: map(ui.sourceReturn.cursor), anchor: map(ui.sourceReturn.anchor) };
+    this.contextMenu?.invalidate();
+    const generation = ++this.positionGeneration;
+    // 旧撤销栈不能把已经接收的版本整体回滚；阅读锚点则随差异映射。
+    this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui);
+    restoreSourcePosition(this.view, mapped, () => this.positionGeneration === generation);
   }
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */

@@ -6,7 +6,7 @@ import { locale, translate } from '../i18n';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { getHiddenRanges } from '../markdown';
-import { actionsFacet, documentField, modeFacet } from './state';
+import { actionsFacet, documentField, modeFacet, resourcesFacet } from './state';
 import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
 import { hiddenContentRanges } from './visibility';
 import { fencedBlocks } from './fenced-blocks';
@@ -24,8 +24,10 @@ class MarkerGestures {
   private frame = 0;
   private lastClick: { time: number; x: number; y: number; marker: HTMLElement } | null = null;
   private closeMenu: (() => void) | null = null;
+  private touchStart: { x: number; y: number; time: number } | null = null;
   constructor(private readonly view: EditorView) {
     view.dom.addEventListener('pointerdown', this.down, true);
+    view.dom.addEventListener('click', this.nativeBlankClick, true);
     view.scrollDOM.addEventListener('mousedown', this.forwardBottomMouseDown);
     view.dom.addEventListener('contextmenu', this.context, true);
     window.addEventListener('pointermove', this.move);
@@ -86,6 +88,7 @@ class MarkerGestures {
     this.cancel();
     this.closeMenu?.();
     this.view.dom.removeEventListener('pointerdown', this.down, true);
+    this.view.dom.removeEventListener('click', this.nativeBlankClick, true);
     this.view.scrollDOM.removeEventListener('mousedown', this.forwardBottomMouseDown);
     this.view.dom.removeEventListener('contextmenu', this.context, true);
     window.removeEventListener('pointermove', this.move);
@@ -96,6 +99,10 @@ class MarkerGestures {
   }
   private down = (event: PointerEvent): void => {
     this.paragraphAnchor = null;
+    if (this.view.state.facet(resourcesFacet).nativeSelection) {
+      this.touchStart = event.button === 0 ? { x: event.clientX, y: event.clientY, time: performance.now() } : null;
+      return;
+    }
     if (event.button !== 0) return;
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
     if (!marker) { this.focusEmptyContent(event); return; }
@@ -117,7 +124,7 @@ class MarkerGestures {
    * 每次从当前模型读取坐标，避免控件复用或任务移动后使用旧位置。
    */
   private focusEmptyContent(event: PointerEvent): void {
-    if (this.view.state.readOnly || this.view.state.facet(modeFacet) !== 'todo'
+    if (this.view.state.readOnly || this.view.composing || this.view.state.facet(modeFacet) !== 'todo'
       || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as Element;
     if (target.closest('button, a')) return;
@@ -194,6 +201,7 @@ class MarkerGestures {
     return true;
   }
   private move = (event: PointerEvent): void => {
+    if (this.touchStart && Math.hypot(event.clientX - this.touchStart.x, event.clientY - this.touchStart.y) > 8) this.touchStart = null;
     const session = this.session;
     if (!session || event.pointerId !== session.pointerId) return;
     if (event.isTrusted && event.buttons === 0) { this.cancel(); return; }
@@ -278,6 +286,7 @@ class MarkerGestures {
   };
   private key = (event: KeyboardEvent): void => { this.paragraphAnchor = null; if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
   private cancel = (): void => {
+    this.touchStart = null;
     this.paragraphAnchor = null;
     cancelAnimationFrame(this.frame);
     const session = this.session;
@@ -289,7 +298,17 @@ class MarkerGestures {
     }
     document.body.classList.remove('fm-dragging');
   };
+  /** 手机轻触结束后再纠正空白落点，避开系统原生选区；滚动、长按及正文点击不接管。 */
+  private nativeBlankClick = (event: MouseEvent): void => {
+    const start = this.touchStart; this.touchStart = null;
+    if (!this.view.state.facet(resourcesFacet).nativeSelection || !start || performance.now() - start.time > 450
+      || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) return;
+    this.paragraphAnchor = null;
+    this.focusEmptyContent(event as PointerEvent);
+    if (this.paragraphAnchor) { event.preventDefault(); event.stopPropagation(); this.paragraphAnchor = null; }
+  };
   private context = (event: MouseEvent): void => {
+    if (this.view.state.facet(resourcesFacet).nativeSelection) return;
     const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
     if (!marker) return;
     event.preventDefault();
