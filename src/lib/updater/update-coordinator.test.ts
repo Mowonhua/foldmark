@@ -28,6 +28,18 @@ function fixture(autoDownload?: boolean) {
 }
 
 describe('更新检查与后台下载', () => {
+  it('系统安装器接管后解除保存锁并保留安装包，取消安装后可重新发起', async () => {
+    const f = fixture();
+    Object.assign(f.candidate, { keepsAppRunning: true });
+    const handoff = vi.fn();
+    const coordinator = new UpdateCoordinator({ port: f.port, onStatus: f.onStatus, beforeInstall: f.beforeInstall, afterInstallHandoff: handoff });
+    await coordinator.check();
+    await coordinator.install();
+    expect(coordinator.status.kind).toBe('ready');
+    expect(handoff).toHaveBeenCalledOnce();
+    await coordinator.install();
+    expect(f.candidate.install).toHaveBeenCalledTimes(2);
+  });
   it('没有新版本时结束检查且不下载或安装', async () => {
     const f = fixture(); f.port.check.mockResolvedValue(null);
     expect(f.coordinator.status.kind).toBe('idle');

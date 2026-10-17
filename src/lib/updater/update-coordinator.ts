@@ -164,6 +164,11 @@ export class UpdateCoordinator {
       if (this.disposed) { this.options.afterInstallFailure?.(); return; }
       // Windows 原生安装成功后直接退出；所有会话和配置必须在此前完成保存。
       await candidate.install();
+      // Android 系统安装器可能被取消，交接后恢复编辑并保留已校验包供再次安装。
+      if (candidate.keepsAppRunning) {
+        this.options.afterInstallHandoff?.();
+        this.publish({ kind: 'ready' });
+      }
     } catch (error) {
       this.options.afterInstallFailure?.();
       this.publish({ kind: 'error', message: errorMessage(error), retry: 'install' });

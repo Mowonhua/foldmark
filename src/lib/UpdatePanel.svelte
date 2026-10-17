@@ -11,16 +11,16 @@
   /**
    * 结构职责：绑定应用持有的更新状态与持久化偏好。
    * 字段说明：操作回调由更新协调器提供，偏好修改由应用保存；onOpenLink 走应用统一外链通道。
-   * 约束条件：浏览器预览只显示桌面版说明，安装期间禁止重复操作。
+   * 约束条件：浏览器预览不调用原生更新，安装期间禁止重复操作。
    */
   interface Props {
-    desktop: boolean; currentVersion: string; status: UpdateStatus;
+    supported: boolean; mobile?: boolean; currentVersion: string; status: UpdateStatus;
     autoCheck: boolean; autoDownload: boolean;
     onCheck: () => void; onDownload: () => void; onInstall: () => void; onRetry: () => void;
     onPreferences: (autoCheck: boolean, autoDownload: boolean) => void;
     onOpenLink: (url: string) => void;
   }
-  let { desktop, currentVersion, status, autoCheck, autoDownload, onCheck, onDownload, onInstall, onRetry, onPreferences, onOpenLink }: Props = $props();
+  let { supported, mobile = false, currentVersion, status, autoCheck, autoDownload, onCheck, onDownload, onInstall, onRetry, onPreferences, onOpenLink }: Props = $props();
   const busy = $derived(['checking', 'downloading', 'installing'].includes(status.kind));
   const progress = $derived(status.totalBytes ? Math.min(100, Math.floor((status.downloadedBytes ?? 0) / status.totalBytes * 100)) : undefined);
   const downloadSize = $derived(status.downloadedBytes === undefined ? '' : status.totalBytes ? `${formatBytes(status.downloadedBytes)} / ${formatBytes(status.totalBytes)}` : formatBytes(status.downloadedBytes));
@@ -44,7 +44,7 @@
 </script>
 
 <p class="update-version">{$t('当前版本')} <span>{currentVersion}</span></p>
-{#if desktop}
+{#if supported}
   <div class="update-preferences">
     <label class="check-label update-option">
       {$t('启动时检查更新')}
@@ -89,11 +89,11 @@
   <div class="modal-actions update-actions">
     {#if ['idle', 'current', 'checking'].includes(status.kind)}<button class="primary" disabled={busy} onclick={onCheck}>{$t('检查更新')}</button>{/if}
     {#if status.kind === 'available'}<button class="primary" onclick={onDownload}>{$t('下载更新')}</button>{/if}
-    {#if status.kind === 'ready'}<button class="primary" onclick={onInstall}>{$t('安装并重启')}</button>{/if}
+    {#if status.kind === 'ready'}<button class="primary" onclick={onInstall}>{$t(mobile ? '安装更新' : '安装并重启')}</button>{/if}
     {#if status.kind === 'error'}<button class="primary" onclick={onRetry}>{$t('重试')}</button>{/if}
   </div>
 {:else}
-  <p>{$t('检测与自动更新仅在桌面版中可用。')}</p>
+  <p>{$t('检测与自动更新仅在应用中可用。')}</p>
 {/if}
 
 <style>

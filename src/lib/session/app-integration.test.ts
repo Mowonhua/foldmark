@@ -34,6 +34,8 @@ vi.mock('../sync/native', () => ({ nativeSyncStore: { load: async () => null, sa
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('../card-window', () => ({ createCardWindowController: () => ({ enter: desktopBoundary.enterCard, exit: desktopBoundary.exitCard }) }));
 vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));
+vi.mock('../updater/android', () => ({ AndroidUpdatePort: class { check = desktopBoundary.updateCheck; } }));
+vi.mock('@tauri-apps/api/app', () => ({ onBackButtonPress: async () => ({ unregister() {} }), exit: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: desktopBoundary.save }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => desktopBoundary.enabled, convertFileSrc: (path: string) => path, invoke: desktopBoundary.invoke }));
 // 仅替换桌面 IO 与窗口事件边界，退出决策仍运行生产 App 代码。
@@ -87,6 +89,26 @@ it('完成子任务经过自动保存、文件监听重载及重启仍保留父�
   expect(button(/^归档/).textContent?.replace(/\s/g, '')).toBe('归档1');
 });
 describe('应用更新', () => {
+  it('Android 启动检查并自动下载，安装交接后恢复编辑且隐藏快捷键入口', async () => {
+    desktopBoundary.enabled = true;
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Android 15');
+    const candidate = {
+      version: '0.8.0', currentVersion: '0.7.0', keepsAppRunning: true,
+      download: desktopBoundary.updateDownload, install: desktopBoundary.updateInstall, close: desktopBoundary.updateClose,
+    };
+    desktopBoundary.updateCheck.mockResolvedValue(candidate);
+    await start(['# 清单\n\n- [ ] 任务\n']);
+    await vi.waitFor(() => expect(desktopBoundary.updateDownload).toHaveBeenCalledOnce());
+    expect(desktopBoundary.close).toBeNull();
+    button('更多操作').click(); await tick();
+    expect([...document.querySelectorAll('[role="menuitem"]')].some(item => item.textContent === '快捷键')).toBe(false);
+    button('检查更新').click(); await tick();
+    button('安装更新').click();
+    await vi.waitFor(() => expect(desktopBoundary.updateInstall).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(document.querySelector('.app-shell')?.hasAttribute('inert')).toBe(false));
+    expect(button('安装更新')).not.toBeNull();
+    expect((await files.read(firstProject.path)).text).toBe('# 清单\n\n- [ ] 任务\n');
+  });
   it('后台下载完成后保存最新正文再安装，保存失败可以重试', async () => {
     desktopBoundary.enabled = true;
     desktopBoundary.updateCheck.mockResolvedValue({
@@ -332,6 +354,22 @@ async function savedText(project: Project, expected: string): Promise<void> {
 }
 
 describe('弹窗外部关闭', () => {
+  it.each([
+    ['更多操作', '[data-more-menu][role="menu"]'],
+    ['搜索', '.search-panel'],
+    ['切换项目', '.crumb-menu'],
+  ])('%s 在正文阻止冒泡时仍关闭，内部按下保留', async (label, selector) => {
+    await start(['# 清单\n\n- [ ] 任务\n']);
+    (label === '搜索' ? document.querySelector<HTMLButtonElement>('.search-button')! : button(label)).click(); await tick();
+    const popup = document.querySelector<HTMLElement>(selector)!;
+    expect(popup).not.toBeNull();
+    pointerDown(popup); await tick();
+    expect(document.querySelector(selector)).toBe(popup);
+    const content = documentInput();
+    content.addEventListener('pointerdown', event => event.stopPropagation(), { once: true });
+    pointerDown(content); await tick();
+    expect(document.querySelector(selector)).toBeNull();
+  });
   it('桌面标题栏未被遮罩覆盖的区域也能关闭弹窗并恢复焦点', async () => {
     desktopBoundary.enabled = true;
     await start(['# 清单\n']);

@@ -27,6 +27,12 @@
     "foldmark-mobile:allow-scan",
     "foldmark-mobile:allow-prepare",
     "foldmark-mobile:allow-activate",
+    "foldmark-mobile:allow-checkUpdate",
+    "foldmark-mobile:allow-downloadUpdate",
+    "foldmark-mobile:allow-installUpdate",
+    "foldmark-mobile:allow-closeUpdate",
+    "foldmark-mobile:allow-register-listener",
+    "foldmark-mobile:allow-remove-listener",
     "core:app:allow-register-listener",
     "core:app:allow-remove-listener",
     "core:app:allow-exit"

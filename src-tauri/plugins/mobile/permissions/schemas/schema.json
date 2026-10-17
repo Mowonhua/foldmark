@@ -307,6 +307,54 @@
           "markdownDescription": "Denies the activate command without any pre-configured scope."
         },
         {
+          "description": "Enables the checkUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-checkUpdate",
+          "markdownDescription": "Enables the checkUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the checkUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-checkUpdate",
+          "markdownDescription": "Denies the checkUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the closeUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-closeUpdate",
+          "markdownDescription": "Enables the closeUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the closeUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-closeUpdate",
+          "markdownDescription": "Denies the closeUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the downloadUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-downloadUpdate",
+          "markdownDescription": "Enables the downloadUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the downloadUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-downloadUpdate",
+          "markdownDescription": "Denies the downloadUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the installUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-installUpdate",
+          "markdownDescription": "Enables the installUpdate command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the installUpdate command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-installUpdate",
+          "markdownDescription": "Denies the installUpdate command without any pre-configured scope."
+        },
+        {
           "description": "Enables the prepare command without any pre-configured scope.",
           "type": "string",
           "const": "allow-prepare",
@@ -317,6 +365,30 @@
           "type": "string",
           "const": "deny-prepare",
           "markdownDescription": "Denies the prepare command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-register-listener",
+          "markdownDescription": "Enables the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the register_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-register-listener",
+          "markdownDescription": "Denies the register_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-listener",
+          "markdownDescription": "Enables the remove_listener command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_listener command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-listener",
+          "markdownDescription": "Denies the remove_listener command without any pre-configured scope."
         },
         {
           "description": "Enables the scan command without any pre-configured scope.",

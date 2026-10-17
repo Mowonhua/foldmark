@@ -7,7 +7,7 @@
 
 /**
  * 结构职责：标识更新生命周期中唯一有效的阶段。
- * 字段说明：ready 表示安装包下载和签名校验均已成功；installing 包含安装前保存。
+ * 字段说明：ready 表示安装包下载和签名校验均已成功；installing 包含安装前保存；Android 安装器接管后恢复 ready。
  * 约束条件：下载完成事件本身不能进入 ready，必须等待平台下载方法成功返回。
  */
 export type UpdateKind = 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
@@ -52,14 +52,16 @@ export interface UpdateStatus {
  * 实现要求：下载返回前验证签名；安装只接受已下载包；close 后不得继续调用资源。
  */
 export interface UpdateCandidate {
+  /** Android 交给系统安装器后应用仍可使用；用户可能取消安装。 */
+  readonly keepsAppRunning?: boolean;
   readonly version: string;
   readonly currentVersion: string;
   readonly body?: string;
   /** 下载和签名校验成功后才 resolve；失败允许在同一候选上重新下载。 */
   download(onProgress: (progress: UpdateProgress) => void): Promise<void>;
-  /** 安装已下载的包并按平台要求重启；调用方必须先完成全部保存。 */
+  /** 安装已下载包，或交给系统安装器确认；调用方必须先完成全部保存。 */
   install(): Promise<void>;
-  /** 释放原生更新和已下载包资源；由拥有者确保只调用一次。 */
+  /** 释放原生候选；系统安装器仍在使用的包由平台延迟清理。拥有者确保只调用一次。 */
   close(): Promise<void>;
 }
 
@@ -83,4 +85,6 @@ export interface UpdateOptions {
   beforeInstall: () => Promise<boolean>;
   /** 保存被拒绝、抛错或安装失败后解除应用编辑锁。 */
   afterInstallFailure?: () => void;
+  /** 系统安装器接管后解除编辑锁；仅 keepsAppRunning 候选调用。 */
+  afterInstallHandoff?: () => void;
 }

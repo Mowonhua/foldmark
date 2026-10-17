@@ -1,4 +1,4 @@
-param([switch]$Install, [string]$Device)
+param([switch]$Install, [string]$Device, [switch]$Publish)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 foreach ($taskVariable in @('JAVA_HOME', 'ANDROID_HOME', 'NDK_HOME', 'FOLDMARK_ANDROID_KEYSTORE', 'FOLDMARK_ANDROID_PASSWORD_FILE')) {
@@ -23,6 +23,11 @@ New-Item -ItemType Directory -Path 'dist-android' -Force | Out-Null
 $taskOutput = Join-Path (Get-Location) "dist-android/Foldmark-$taskVersion-arm64.apk"
 Copy-Item -LiteralPath $taskApk.FullName -Destination $taskOutput
 Write-Output "签名 APK：$taskOutput"
+if ($Publish) {
+    # 只向已有版本追加 APK，不替换已经公开的资源；手机从该 Release 检查更新。
+    & gh release upload "v$taskVersion" $taskOutput --repo Mowonhua/foldmark
+    if ($LASTEXITCODE -ne 0) { throw 'APK 发布失败，请检查对应 Release 是否存在及 GitHub 登录状态。' }
+}
 if ($Install) {
     if (-not $Device) { throw '安装时必须用 -Device 指定 adb 设备，避免写入错误设备。' }
     & "$env:ANDROID_HOME\platform-tools\adb.exe" -s $Device install -r $taskOutput

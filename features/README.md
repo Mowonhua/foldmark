@@ -4,5 +4,5 @@
 
 | 模块 | 文档 | 职责说明 |
 |---|---|---|
-| 移动编辑 | [mobile.md](mobile.md) | Android 平台隔离、托管文件和触屏编辑 |
+| 移动编辑 | [mobile.md](mobile.md) | Android 平台隔离、托管文件、触屏导航和应用更新 |
 | 局域网同步 | [sync.md](sync.md) | 配对、版本合并、持久化与文档接收 |

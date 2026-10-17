@@ -26,6 +26,12 @@ import com.journeyapps.barcodescanner.ScanOptions
 ])
 class MobilePlugin(private val activity: Activity) : Plugin(activity) {
     private var multicast: WifiManager.MulticastLock? = null
+    private val updater = AndroidUpdater(activity) { trigger("updateProgress", it) }
+
+    @Command fun checkUpdate(invoke: Invoke) { updater.check(invoke) }
+    @Command fun downloadUpdate(invoke: Invoke) { updater.download(invoke) }
+    @Command fun installUpdate(invoke: Invoke) { updater.install(invoke) }
+    @Command fun closeUpdate(invoke: Invoke) { updater.close(); invoke.resolve() }
     private fun needsNetworkPermission(): Boolean = Build.VERSION.SDK_INT >= 37 && activity.applicationInfo.targetSdkVersion >= 37
 
     @Command
@@ -83,4 +89,6 @@ class MobilePlugin(private val activity: Activity) : Plugin(activity) {
     override fun onPause(activity: AppCompatActivity) {
         if (multicast?.isHeld == true) multicast?.release()
     }
+
+    override fun onDestroy(activity: AppCompatActivity) { updater.destroy() }
 }

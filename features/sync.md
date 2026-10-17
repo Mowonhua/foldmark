@@ -26,7 +26,7 @@
 | S-07 | 约束 | 更换配对前保留待接收正文及冲突副本 | src-tauri/src/sync.rs::tests::detached_pairing_preserves_pending_and_conflicting_versions |
 | S-08 | 正常 | 重新配对可明确关联已有项目，不创建副本；不同正文先保留双方，重启后继续合并 | src/lib/sync/engine.test.ts::同步持久化 > 明确关联已有项目不创建副本且先保留双方内容\，重启后可合并 |
 | S-09 | 约束 | 一个本机项目只能关联一个同步文档，项目不能关联到灵感簿 | src/lib/sync/engine.test.ts::同步持久化 > 拒绝关联已被占用的本机项目或把项目关联到灵感簿 |
-| S-10 | 正常 | 取消选择撤回对端尚未接收的文档，重启及旧请求重传不能恢复提示，不删除已接收正文 | src/lib/sync/engine.test.ts::同步持久化 > 取消选择撤回尚未接收的文档，重启和旧请求重传不恢复接收提示, src/lib/sync/engine.test.ts::同步持久化 > 取消选择不删除对端已接收的正文和关联, scripts/test-mobile-native-fixes.mjs::<module> |
+| S-10 | 正常 | 取消选择撤回对端尚未接收的文档，重启及旧请求重传不能恢复提示，不删除已接收正文 | src/lib/sync/engine.test.ts::同步持久化 > 取消选择撤回尚未接收的文档\，重启和旧请求重传不恢复接收提示, src/lib/sync/engine.test.ts::同步持久化 > 取消选择不删除对端已接收的正文和关联, scripts/test-mobile-native-fixes.mjs::<module> |
 
 ## F-SYN-002 设备配对与加密连接
 

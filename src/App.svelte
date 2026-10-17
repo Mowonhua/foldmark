@@ -33,6 +33,7 @@
   import { validateAppConfig } from './lib/config-validation';
   import { applyTheme, bootThemeKey, builtInThemes, parseTheme } from './lib/themes';
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
+  import { registerDrawerGestures } from './lib/mobile-navigation';
   import { createCardWindowController } from './lib/card-window';
 
   const { native, android, desktop } = platformCapabilities();
@@ -747,6 +748,7 @@
   }
 
   function openDialog(next: typeof dialog): void {
+    if (mobile && next === 'help') return;
     menuOpen = false; projectMenu = null; dialogError = ''; dialog = next;
     if (next === 'remove') removeTarget = active?.project ?? null;
     if (next === 'project') { projectName = ''; projectPath = ''; createFile = false; }
@@ -998,6 +1000,16 @@
     if (config.preferences.sidebarView !== next) { config.preferences.sidebarView = next; scheduleConfig(); }
   }
 
+  /** 手势只在手机注册，状态通过回调即时读取，避免每次抽屉开关重新挂载监听。 */
+  $effect(() => {
+    if (!mobile) return;
+    return registerDrawerGestures({
+      isOpen: () => sidebar,
+      blocked: () => !booted || !!dialog || syncOpen || menuOpen || searchOpen || !!crumbMenu || updateInstalling || projectActionBusy,
+      setOpen: open => open ? expandSidebar() : closeSidebar(),
+    });
+  });
+
   /** 收起侧栏同时写入持久化展开意愿；大纲模式内手动收起在退出大纲后仍然生效。 */
   function closeSidebar(): void {
     sidebar = false;
@@ -1049,8 +1061,9 @@
     if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) dialog = null;
   }
 
-  /** 点击冒泡到窗口后再收起，确保菜单命令、项目选择和搜索结果定位先完成；触发按钮也属于弹窗内部。 */
+  /** 捕获按下事件，避免编辑器阻止 click 冒泡导致浮层不关闭；触发按钮和浮层内部保留原操作。 */
   function dismissPopovers(event: MouseEvent): void {
+    if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (!target.closest('[data-project-search]')) closeProjectSearch();
@@ -1175,12 +1188,15 @@
             if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
             else notify($t("仍有正文或配置未保存，请处理保存失败后关闭。"));
           });
+        }
+        if (native) {
           // 更新初始化独立于正文加载；检查失败只进入更新面板，不使编辑器变为不可用。
-          const { TauriUpdatePort } = await import('./lib/updater/tauri');
+          const port = android ? new (await import('./lib/updater/android')).AndroidUpdatePort() : new (await import('./lib/updater/tauri')).TauriUpdatePort();
           if (disposed) return;
           updater = new UpdateCoordinator({
-            port: new TauriUpdatePort(), autoDownload: config.preferences.autoDownloadUpdates ?? true,
+            port, autoDownload: config.preferences.autoDownloadUpdates ?? true,
             beforeInstall: prepareUpdateInstall, afterInstallFailure: () => { updateInstalling = false; },
+            afterInstallHandoff: () => { updateInstalling = false; },
             onStatus: status => {
               updateStatus = status;
               if (status.kind === 'ready') notify($t("Foldmark {version} 已下载，可在更新面板安装。", { version: status.version ?? packageInfo.version }));
@@ -1210,7 +1226,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onpointerdowncapture={dismissDialog} onclick={dismissPopovers} />
+<svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onclick={dismissPopovers} />
 
 <div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
 
@@ -1282,7 +1298,7 @@
         <hr/>{#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>{/if}
         <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
         {#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('remove')}>{$t(mobile ? '删除项目' : '移除项目关联')}</button>{/if}
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button>{#if !mobile}<button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button>{/if}{#if native}<button role="menuitem" onclick={() => { syncOpen = true; menuOpen = false; }}>设备同步</button>{/if}<button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>
+        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button>{#if native}<button role="menuitem" onclick={() => { syncOpen = true; menuOpen = false; }}>设备同步</button>{/if}{#if !mobile}<button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>{/if}
       </div>{/if}
     </header>
     {/if}
@@ -1431,7 +1447,7 @@
           onImport={importTheme} onExport={exportThemeTemplate} onRemove={removeTheme}/>
       {:else if dialog === 'updates'}
         <h2 id="dialog-title">{$t("应用更新")}</h2>
-        <UpdatePanel {desktop} currentVersion={packageInfo.version} status={updateStatus}
+        <UpdatePanel supported={native} {mobile} currentVersion={packageInfo.version} status={updateStatus}
           autoCheck={config.preferences.autoCheckUpdates ?? true} autoDownload={config.preferences.autoDownloadUpdates ?? true}
           onCheck={() => { void updater?.check(); }} onDownload={() => { void updater?.download(); }}
           onInstall={() => { void updater?.install(); }} onRetry={() => { void updater?.retry(); }} onPreferences={updatePreferences}
