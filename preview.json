@@ -1,11 +1,11 @@
 {
-  "version": "0.6.0",
-  "notes": "# Foldmark v0.6.0\r\n\r\n相较于 v0.5.3：\r\n\r\n- 更新下载显示已下载体积、总大小和实时速度，下载进度更明确。\r\n- 启动时等待项目解析和首帧主题就绪后再显示窗口，界面整体淡入，避免启动内容闪现。\r\n- 首次启动跟随系统语言，初始文件名随界面语言翻译。\r\n- 任务拖动移动支持跨越标题进入其他章节。\r\n- 取消完成松散任务时，任务恢复到一级标题直下；移除完成含未完成子任务父任务时的重复状态提示。\r\n\r\n可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.6.0_x64-setup.exe` 安装。本版本通过 stable 和 preview 频道分发。\r\n",
-  "pub_date": "2026-10-16T10:05:15.141Z",
+  "version": "0.7.0",
+  "notes": "# Foldmark v0.7.0\r\n\r\n相较于 v0.6.0：\r\n\r\n- 新增 Android 版，支持离线编辑、任务管理、归档、搜索和灵感簿。手机导入 Markdown 时创建私有副本，可通过系统文件选择器导出。\r\n- 新增 Windows 与 Android 局域网同步。扫码并经电脑确认后，两端同步选定项目的正文、名称、归档状态及灵感簿。\r\n- 同步使用共同版本合并独立修改；内容重叠或任务结构变化时保留双方版本，供用户合并。断线重连和重复传输不会静默覆盖本机修改。\r\n- 手机编辑辅助栏使用图标按钮。修复底部留白输入、系统选字与复制粘贴、滚动条占位和通知拥挤换行问题。\r\n- 同步复选框跟随正文主题，手机文档列表独立滚动，连接设置固定在页面底部。取消同步选择会撤回对端尚未接收的文档。\r\n- 手机删除项目时清理私有 Markdown 文件和恢复草稿，保留导入来源及电脑文件。电脑移除项目关联时仍保留原文件。\r\n- Windows 启动时恢复上次窗口位置。\r\n\r\nWindows 可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.7.0_x64-setup.exe` 安装。Windows 更新通过 stable 和 preview 频道分发。Android 的签名构建和安装方式见[手机版与同步](https://github.com/Mowonhua/foldmark/blob/v0.7.0/docs/手机版与同步.md)。\r\n\r\n同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。本版本不提供云端同步或手机后台持续同步，不传输本地图片和附件。预览版的旧同步协议需要两端一起升级。\r\n",
+  "pub_date": "2026-10-17T05:58:06.265Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTQzOUpnVmcreWdhQzZDL2xhbis2MUxwQUJDTDR5MW9lUllKS3J0ZnAzcjYyd1daZVo3dERXcmFueUJ4WEs1Z2NpU0xDTVZzV0N6T2QrTlFyY29CL3dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTQ1MTE0CWZpbGU6Rm9sZG1hcmtfMC42LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNi4wCmxXLzNKU0s2dzJWMi85UC9kYUdYNXRLMERsY0M2aXJDRE8zeW13K2ZlYWIxQWtuZmprNHlSNkdUdXB5V1dzVkVPMnQ0U2RRQjEvc1Y1UGN6VjlqTURRPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.6.0/Foldmark_0.6.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NXp4V05sUmpZODB2bWV5VDBTMk5aYTIyWjVIS0RhZTljL0hRSVczZDRJNzIydjN3NzExcmFQOUFPY3dWdDJhWExOZlBKK2ZoZ24xcGphNE52eE1EeVFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjE2Njg1CWZpbGU6Rm9sZG1hcmtfMC43LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNy4wCm1paCtVTGZQTW50RFhWU3FFMDhPeUZWVFhlVUNXVlpGL2xiWWRZV1RIYWVOblM1allXZzltVzVOQVNXQkozWGJLZHZTTHhkaGl0SFNDWkVHSkFVc0JBPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.7.0/Foldmark_0.7.0_x64-setup.exe"
     }
   }
 }
