@@ -30,7 +30,7 @@ const desktopBoundary = vi.hoisted(() => ({
   enterCard: vi.fn<() => Promise<void>>(async () => {}),
   exitCard: vi.fn<() => Promise<void>>(async () => {}),
 }));
-vi.mock('../sync/native', () => ({ nativeSyncStore: { load: async () => null, save: async () => {} }, nativeSyncTransport: { status: async () => ({ paired: false, listening: false }) } }));
+vi.mock('../sync/native', () => ({ nativeSyncStore: { load: async () => null, save: async () => {} }, nativeSyncTransport: { status: async () => ({ paired: false, listening: false }), disconnect: async () => {} } }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('../card-window', () => ({ createCardWindowController: () => ({ enter: desktopBoundary.enterCard, exit: desktopBoundary.exitCard }) }));
 vi.mock('../updater/tauri', () => ({ TauriUpdatePort: class { check = desktopBoundary.updateCheck; } }));

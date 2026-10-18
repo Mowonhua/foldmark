@@ -349,7 +349,7 @@ pub fn run() {
             unwatch_file,
             sync::sync_status, sync::sync_offer, sync::sync_pair, sync::sync_approve,
             sync::sync_unpair, sync::sync_address, sync::sync_exchange, sync::sync_respond,
-            sync::sync_probe,
+            sync::sync_probe, sync::sync_notify, sync::sync_disconnect,
             sync::sync_load_state, sync::sync_save_state,
             system_fonts::list_system_fonts,
             window_material::set_window_material

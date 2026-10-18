@@ -212,6 +212,9 @@ export class SyncEngine {
         target = await revision(merged, [doc.head, remote.head]); doc.revisions[target.id] = target;
       }
       await this.apply(record, target.id);
+      // 对端发送的 head 已证明其持有该版本；本机成功落盘后双方已一致，无须再等一轮。
+      // 自动合并产生的新版本尚未被对端持有，仍须等待后续交换确认。
+      if (target.id === remote.head) record.binding.acknowledged = target.id;
     } catch (error) { record.error = String(error); }
   }
   private async apply(record: SyncRecord, target: string): Promise<void> {

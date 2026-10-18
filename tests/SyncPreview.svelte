@@ -16,6 +16,7 @@
     status: async () => ({ paired: scenario !== 'unpaired', listening: !params.has('mobile'), session: 'preview' }),
     offer: async () => ({ version: 1, address: '192.168.31.156:50736', addresses: ['192.168.31.156:50736', '192.168.137.2:50736'], token: '0'.repeat(64), certificate: Array.from({ length: 400 }, (_, i) => i % 256), expires: Date.now() / 1000 + 300 }),
     pair: async () => false, approve: async () => {}, unpair: async () => {}, probe: async () => {}, exchange: async value => value, respond: async () => {}, address: async () => {},
+    notify: async () => {}, disconnect: async () => {},
   };
   const controller = new SyncController(engine, transport, !params.has('mobile'), () => version++);
   onMount(() => { void (async () => {

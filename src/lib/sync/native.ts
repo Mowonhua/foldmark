@@ -13,6 +13,7 @@ export const nativeSyncTransport: SyncTransport = {
     await invoke('sync_probe');
   },
   exchange: envelope => invoke('sync_exchange', { envelope }),
+  notify: () => invoke('sync_notify'), disconnect: () => invoke('sync_disconnect'),
   respond: (id, envelope, error) => invoke('sync_respond', { id, envelope, error }),
   address: address => invoke('sync_address', { address }),
 };

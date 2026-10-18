@@ -6,8 +6,9 @@ use rand::{rngs::OsRng, RngCore};
 use rustls::{pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName}, ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, io::{Read, Write}, net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket}, path::PathBuf, sync::{atomic::{AtomicUsize, Ordering}, mpsc, Arc, Mutex, OnceLock}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{collections::HashMap, io::{Read, Write}, net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket, Shutdown}, path::PathBuf, sync::{atomic::{AtomicUsize, Ordering}, mpsc, Arc, Mutex, OnceLock}, time::{Duration, SystemTime, UNIX_EPOCH}};
 use tauri::{Emitter, Manager};
+mod connection;
 
 const LIMIT: usize = 8 * 1024 * 1024;
 const SERVICE: &str = "_foldmark._tcp.local.";
@@ -19,7 +20,12 @@ struct Credentials { certificate: Vec<u8>, key: Vec<u8>, id: String, secret: Str
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Offer { version: u8, address: String, #[serde(default)] addresses: Vec<String>, certificate: Vec<u8>, token: String, expires: u64 }
 struct Inner { credentials: Credentials, offer: Option<Offer>, pending: Option<Peer>, port: Option<u16>, daemon: Option<ServiceDaemon> }
-struct Runtime { inner: Mutex<Inner>, directory: PathBuf, responses: Mutex<HashMap<String, mpsc::SyncSender<Result<Value>>>> }
+/** 已认证连接的唯一发送入口；id 区分重连代次，socket 仅用于主动中断阻塞读取。 */
+struct LiveConnection { id: String, session: String, sender: mpsc::SyncSender<connection::Command>, socket: TcpStream }
+struct Runtime {
+    inner: Mutex<Inner>, directory: PathBuf, responses: Mutex<HashMap<String, mpsc::SyncSender<Result<Value>>>>,
+    connection: Mutex<Option<LiveConnection>>, connection_start: Mutex<()>, connection_epoch: AtomicUsize,
+}
 #[derive(Default)]
 pub struct SyncState { runtime: OnceLock<Arc<Runtime>>, initialization: Mutex<()> }
 
@@ -63,7 +69,7 @@ fn runtime(app: &tauri::AppHandle, state: &SyncState) -> Result<Arc<Runtime>> {
             Credentials { certificate: cert.cert.der().to_vec(), key: cert.key_pair.serialize_der(), id: random(), secret: random(), peer: None }
         }
     };
-    let value = Arc::new(Runtime { inner: Mutex::new(Inner { credentials, offer: None, pending: None, port: None, daemon: None }), directory, responses: Mutex::new(HashMap::new()) });
+    let value = Arc::new(Runtime { inner: Mutex::new(Inner { credentials, offer: None, pending: None, port: None, daemon: None }), directory, responses: Mutex::new(HashMap::new()), connection: Mutex::new(None), connection_start: Mutex::new(()), connection_epoch: AtomicUsize::new(0) });
     save_credentials(&value, &*value.inner.lock().map_err(err)?)?;
     let _ = state.runtime.set(value.clone()); Ok(value)
 }
@@ -111,9 +117,14 @@ fn start(app: &tauri::AppHandle, runtime: &Arc<Runtime>) -> Result<()> {
                 let _ = socket.set_read_timeout(Some(Duration::from_secs(35))); let _ = socket.set_write_timeout(Some(Duration::from_secs(35)));
                 if let Ok(connection) = ServerConnection::new(config) {
                     let mut stream = StreamOwned::new(connection, socket);
-                    let response = read_frame(&mut stream).and_then(|request| handle(&app, &runtime, request));
-                    let value = match response { Ok(value) => json!({"ok": value}), Err(error) => json!({"error": error}) };
-                    let _ = write_frame(&mut stream, &value);
+                    match read_frame(&mut stream) {
+                        Ok(request) if request["action"] == "stream" => { let _ = serve_stream(&app, &runtime, &mut stream, request); }
+                        request => {
+                            let response = request.and_then(|request| handle(&app, &runtime, request));
+                            let value = match response { Ok(value) => json!({"ok": value}), Err(error) => json!({"error": error}) };
+                            let _ = write_frame(&mut stream, &value);
+                        }
+                    }
                 }
                 connections.fetch_sub(1, Ordering::SeqCst);
             });
@@ -141,23 +152,31 @@ fn handle(app: &tauri::AppHandle, runtime: &Runtime, request: Value) -> Result<V
     if request["action"] == "ping" { return Ok(Value::Null); }
     if request["action"] != "exchange" { return Err("SYNC_PROTOCOL: 未知同步操作".into()); }
     drop(inner);
+    let result = frontend_exchange(app, runtime, request["envelope"].clone());
+    if !authenticated(&*runtime.inner.lock().map_err(err)?, &request) { return Err("SYNC_AUTH: 配对已撤销".into()); }
+    result
+}
+/** 短连接兼容入口与长连接共用相同的前端协调器及三十秒响应边界。 */
+fn frontend_exchange(app: &tauri::AppHandle, runtime: &Runtime, envelope: Value) -> Result<Value> {
     let id = random(); let (sender, receiver) = mpsc::sync_channel(1);
     runtime.responses.lock().map_err(err)?.insert(id.clone(), sender);
-    if let Err(error) = app.emit("foldmark:sync-request", json!({ "id": id, "envelope": request["envelope"] })) {
+    if let Err(error) = app.emit("foldmark:sync-request", json!({ "id": id, "envelope": envelope })) {
         runtime.responses.lock().map_err(err)?.remove(&id); return Err(err(error));
     }
     let result = receiver.recv_timeout(Duration::from_secs(30)).map_err(|_| "同步超时，内容保留，稍后重试".to_string()).and_then(|value| value);
     runtime.responses.lock().map_err(err)?.remove(&id);
-    if !authenticated(&*runtime.inner.lock().map_err(err)?, &request) { return Err("SYNC_AUTH: 配对已撤销".into()); }
     result
 }
-fn connect(peer: &Peer, request: &Value) -> Result<Value> {
+fn open_connection(peer: &Peer) -> Result<StreamOwned<ClientConnection, TcpStream>> {
     let mut roots = RootCertStore::empty(); roots.add(CertificateDer::from(peer.certificate.clone())).map_err(err)?;
     let config = ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
     let connection = ClientConnection::new(Arc::new(config), ServerName::try_from("foldmark.local").map_err(err)?).map_err(err)?;
     let socket = TcpStream::connect_timeout(&address(&peer.address)?, Duration::from_secs(3)).map_err(err)?;
     socket.set_read_timeout(Some(Duration::from_secs(35))).map_err(err)?; socket.set_write_timeout(Some(Duration::from_secs(35))).map_err(err)?;
-    let mut stream = StreamOwned::new(connection, socket); write_frame(&mut stream, request)?;
+    Ok(StreamOwned::new(connection, socket))
+}
+fn connect(peer: &Peer, request: &Value) -> Result<Value> {
+    let mut stream = open_connection(peer)?; write_frame(&mut stream, request)?;
     let response = read_frame(&mut stream)?;
     if let Some(error) = response["error"].as_str() { return Err(error.into()); }
     response.get("ok").cloned().ok_or_else(|| "SYNC_INVALID: 响应无效".into())
@@ -190,6 +209,89 @@ fn connect_available(peer: &Peer, request: &Value) -> Result<(Value, String)> {
             Err(first)
         }
     }
+}
+/** 安装新连接时关闭旧代次；配对锁先于连接锁，撤销与重连不能安装过期凭证。 */
+fn install_connection(runtime: &Runtime, session: &str, socket: &TcpStream, epoch: Option<usize>) -> Result<(String, mpsc::Receiver<connection::Command>)> {
+    let inner = runtime.inner.lock().map_err(err)?;
+    if inner.credentials.peer.as_ref().is_none_or(|peer| peer.secret != session) { return Err("SYNC_AUTH: 配对状态已变化".into()); }
+    let id = random(); let (sender, receiver) = mpsc::sync_channel(8);
+    let mut live = runtime.connection.lock().map_err(err)?;
+    if epoch.is_some_and(|epoch| runtime.connection_epoch.load(Ordering::SeqCst) != epoch) { return Err("同步连接已停用".into()); }
+    let next = LiveConnection { id: id.clone(), session: session.into(), sender, socket: socket.try_clone().map_err(err)? };
+    if let Some(previous) = live.replace(next) { let _ = previous.socket.shutdown(Shutdown::Both); }
+    Ok((id, receiver))
+}
+fn connection_current(runtime: &Runtime, id: &str, session: &str) -> bool {
+    let Ok(inner) = runtime.inner.lock() else { return false; };
+    if inner.credentials.peer.as_ref().is_none_or(|peer| peer.secret != session) { return false; }
+    runtime.connection.lock().map(|live| live.as_ref().is_some_and(|live| live.id == id)).unwrap_or(false)
+}
+/** 清理只作用于自己的代次，旧线程退出不能关闭重连后建立的新连接。 */
+fn remove_connection(runtime: &Runtime, id: Option<&str>) -> bool {
+    let Ok(mut live) = runtime.connection.lock() else { return false; };
+    if id.is_some_and(|id| live.as_ref().is_none_or(|live| live.id != id)) { return false; }
+    if let Some(previous) = live.take() { let _ = previous.socket.shutdown(Shutdown::Both); return true; }
+    false
+}
+fn serve_stream(app: &tauri::AppHandle, runtime: &Runtime, stream: &mut StreamOwned<ServerConnection, TcpStream>, request: Value) -> Result<()> {
+    let session = {
+        let inner = runtime.inner.lock().map_err(err)?;
+        if request["protocol"] != 1 || !authenticated(&inner, &request) {
+            write_frame(stream, &json!({"error":"SYNC_AUTH: 设备未配对或配对已撤销"}))?;
+            return Err("SYNC_AUTH: 长连接认证失败".into());
+        }
+        inner.credentials.peer.as_ref().unwrap().secret.clone()
+    };
+    let (id, commands) = install_connection(runtime, &session, &stream.sock, None)?;
+    let result = (|| {
+        write_frame(stream, &json!({"ok":{"stream":1}}))?;
+        stream.sock.set_read_timeout(Some(Duration::from_millis(100))).map_err(err)?;
+        stream.sock.set_write_timeout(Some(Duration::from_secs(5))).map_err(err)?;
+        connection::server(stream, commands, || connection_current(runtime, &id, &session), |envelope| frontend_exchange(app, runtime, envelope))
+    })();
+    remove_connection(runtime, Some(&id)); result
+}
+fn open_stream(peer: &Peer) -> Result<StreamOwned<ClientConnection, TcpStream>> {
+    let mut stream = open_connection(peer)?;
+    write_frame(&mut stream, &json!({"protocol":1,"action":"stream","id":peer.id,"secret":peer.secret}))?;
+    let response = read_frame(&mut stream)?;
+    if let Some(error) = response["error"].as_str() { return Err(error.into()); }
+    if response["ok"]["stream"] != 1 { return Err("SYNC_PROTOCOL: 请更新两端应用以启用双向长连接".into()); }
+    Ok(stream)
+}
+/** 手机只保留一个已认证的长连接；发现仍只提供地址，不能更换固定证书。 */
+fn ensure_connection(app: &tauri::AppHandle, runtime: &Arc<Runtime>, epoch: usize) -> Result<()> {
+    let _starting = runtime.connection_start.lock().map_err(err)?;
+    if runtime.connection_epoch.load(Ordering::SeqCst) != epoch { return Err("同步连接已停用".into()); }
+    let peer = runtime.inner.lock().map_err(err)?.credentials.peer.clone().ok_or("设备尚未配对")?;
+    if runtime.connection.lock().map_err(err)?.as_ref().is_some_and(|live| live.session == peer.secret) { return Ok(()); }
+    let (mut stream, endpoint) = match open_stream(&peer) {
+        Ok(stream) => (stream, peer.address.clone()),
+        Err(first) => {
+            // 认证或协议错误不是地址错误，不通过发现重复尝试同一设备。
+            if first.starts_with("SYNC_AUTH:") || first.starts_with("SYNC_PROTOCOL:") { return Err(first); }
+            let mut found = None;
+            for endpoint in discover(&peer).into_iter().filter(|value| value != &peer.address).take(8) {
+                if let Ok(stream) = open_stream(&Peer { address: endpoint.clone(), ..peer.clone() }) { found = Some((stream, endpoint)); break; }
+            }
+            found.ok_or(first)?
+        }
+    };
+    {
+        let mut inner = runtime.inner.lock().map_err(err)?;
+        let current = inner.credentials.peer.as_mut().filter(|current| current.secret == peer.secret).ok_or("SYNC_AUTH: 配对状态已变化")?;
+        if current.address != endpoint { current.address = endpoint; save_credentials(runtime, &inner)?; }
+    }
+    stream.sock.set_read_timeout(Some(Duration::from_millis(100))).map_err(err)?;
+    stream.sock.set_write_timeout(Some(Duration::from_secs(5))).map_err(err)?;
+    let (id, commands) = install_connection(runtime, &peer.secret, &stream.sock, Some(epoch))?;
+    let runtime = runtime.clone(); let app = app.clone();
+    std::thread::spawn(move || {
+        let _ = connection::client(&mut stream, commands, || connection_current(&runtime, &id, &peer.secret), || { let _ = app.emit("foldmark:sync-wake", ()); });
+        // 意外断线唤醒控制器更新状态并按既有错误策略重试；主动关闭已经移除了代次。
+        if remove_connection(&runtime, Some(&id)) { let _ = app.emit("foldmark:sync-wake", ()); }
+    });
+    Ok(())
 }
 #[tauri::command]
 pub async fn sync_status(app: tauri::AppHandle, state: tauri::State<'_, SyncState>) -> Result<Value> {
@@ -235,32 +337,49 @@ pub async fn sync_pair(app: tauri::AppHandle, state: tauri::State<'_, SyncState>
 pub async fn sync_unpair(app: tauri::AppHandle, state: tauri::State<'_, SyncState>) -> Result<()> {
     let runtime = runtime(&app, &state)?; let mut inner = runtime.inner.lock().map_err(err)?;
     inner.credentials.peer = None; inner.credentials.secret = random(); inner.pending = None; inner.offer = None;
+    runtime.connection_epoch.fetch_add(1, Ordering::SeqCst); remove_connection(&runtime, None);
     save_credentials(&runtime, &inner)
 }
 #[tauri::command]
 pub async fn sync_address(app: tauri::AppHandle, state: tauri::State<'_, SyncState>, address: String) -> Result<()> {
     self::address(&address)?; let runtime = runtime(&app, &state)?; let mut inner = runtime.inner.lock().map_err(err)?;
-    inner.credentials.peer.as_mut().ok_or("设备尚未配对")?.address = address; save_credentials(&runtime, &inner)
+    inner.credentials.peer.as_mut().ok_or("设备尚未配对")?.address = address;
+    runtime.connection_epoch.fetch_add(1, Ordering::SeqCst); remove_connection(&runtime, None);
+    save_credentials(&runtime, &inner)
 }
 #[tauri::command]
 pub async fn sync_exchange(app: tauri::AppHandle, state: tauri::State<'_, SyncState>, envelope: Value) -> Result<Value> {
-    transfer(app, state, Some(envelope)).await
+    let runtime = runtime(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        // 建连只由前台 probe 发起；退到后台后尚在生成信封的旧任务不能重新打开连接。
+        let (send, receive) = mpsc::sync_channel(1);
+        {
+            let live = runtime.connection.lock().map_err(err)?;
+            live.as_ref().ok_or("同步连接已关闭")?.sender.try_send(connection::Command::Exchange(envelope, send)).map_err(|_| "同步连接忙或已关闭")?;
+        }
+        receive.recv_timeout(Duration::from_secs(35)).map_err(|_| "同步连接超时，内容保留，稍后重试".to_string())?
+    }).await.map_err(err)?
 }
 #[tauri::command]
 pub async fn sync_probe(app: tauri::AppHandle, state: tauri::State<'_, SyncState>) -> Result<()> {
-    transfer(app, state, None).await.map(|_| ())
+    let runtime = runtime(&app, &state)?;
+    let epoch = runtime.connection_epoch.load(Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || ensure_connection(&app, &runtime, epoch)).await.map_err(err)?
 }
-async fn transfer(app: tauri::AppHandle, state: tauri::State<'_, SyncState>, envelope: Option<Value>) -> Result<Value> {
-    let runtime = runtime(&app, &state)?; let peer = runtime.inner.lock().map_err(err)?.credentials.peer.clone().ok_or("设备尚未配对")?;
-    let session = peer.secret.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let request = json!({"protocol":1,"action":if envelope.is_some() {"exchange"} else {"ping"},"id":peer.id,"secret":peer.secret,"envelope":envelope});
-        connect_available(&peer, &request)
-    }).await.map_err(err)??;
-    let mut inner = runtime.inner.lock().map_err(err)?;
-    if inner.credentials.peer.as_ref().is_none_or(|peer| peer.secret != session) { return Err("SYNC_AUTH: 配对状态已变化".into()); }
-    if let Some(peer) = inner.credentials.peer.as_mut() { peer.address = result.1; save_credentials(&runtime, &inner)?; }
-    Ok(result.0)
+#[tauri::command]
+pub async fn sync_notify(app: tauri::AppHandle, state: tauri::State<'_, SyncState>) -> Result<()> {
+    let runtime = runtime(&app, &state)?;
+    if let Some(live) = runtime.connection.lock().map_err(err)?.as_ref() {
+        // 多次输入可合并为一个通知；队列已满代表已有工作待发，不丢弃正文版本。
+        let _ = live.sender.try_send(connection::Command::Wake);
+    }
+    Ok(())
+}
+#[tauri::command]
+pub fn sync_disconnect(app: tauri::AppHandle, state: tauri::State<'_, SyncState>) -> Result<()> {
+    let runtime = runtime(&app, &state)?;
+    runtime.connection_epoch.fetch_add(1, Ordering::SeqCst); remove_connection(&runtime, None);
+    Ok(())
 }
 #[tauri::command]
 pub async fn sync_respond(app: tauri::AppHandle, state: tauri::State<'_, SyncState>, id: String, envelope: Option<Value>, error: Option<String>) -> Result<()> {
@@ -335,6 +454,47 @@ mod tests {
         assert_eq!(response["received"], true); server.join().unwrap();
     }
     #[test]
+    fn tls_stream_reuses_connection_after_idle_and_delivers_both_directions() {
+        use std::sync::atomic::AtomicBool;
+        let certificate = rcgen::generate_simple_self_signed(vec!["foldmark.local".into()]).unwrap();
+        let config = ServerConfig::builder().with_no_client_auth().with_single_cert(
+            vec![certificate.cert.der().clone()], PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certificate.key_pair.serialize_der()))).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let peer = Peer { id: random(), secret: random(), address: listener.local_addr().unwrap().to_string(), certificate: certificate.cert.der().to_vec() };
+        let expected = peer.clone(); let alive = Arc::new(AtomicBool::new(true));
+        let (desktop_send, desktop_receive) = mpsc::sync_channel(8);
+        let running = alive.clone();
+        let server = std::thread::spawn(move || {
+            let (socket, _) = listener.accept().unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            socket.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut stream = StreamOwned::new(ServerConnection::new(Arc::new(config)).unwrap(), socket);
+            let request = read_frame(&mut stream).unwrap();
+            assert_eq!(request["id"], expected.id); assert_eq!(request["secret"], expected.secret);
+            assert_eq!(request["action"], "stream");
+            write_frame(&mut stream, &json!({"ok":{"stream":1}})).unwrap();
+            stream.sock.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
+            connection::server(&mut stream, desktop_receive, || running.load(Ordering::SeqCst), |envelope| Ok(envelope))
+        });
+        let mut stream = open_stream(&peer).unwrap();
+        stream.sock.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
+        let (phone_send, phone_receive) = mpsc::sync_channel(8);
+        let (wake_send, wake_receive) = mpsc::sync_channel(8);
+        let running = alive.clone();
+        let client = std::thread::spawn(move || connection::client(&mut stream, phone_receive, || running.load(Ordering::SeqCst), || { let _ = wake_send.send(()); }));
+        // 跨过多次 socket 读超时后，TLS 状态和同一连接仍须可用。
+        std::thread::sleep(Duration::from_millis(150));
+        desktop_send.send(connection::Command::Wake).unwrap();
+        wake_receive.recv_timeout(Duration::from_secs(2)).unwrap();
+        for text in ["手机正文", "电脑响应后的确认"] {
+            let (send, receive) = mpsc::sync_channel(1);
+            phone_send.send(connection::Command::Exchange(json!({"text":text}), send)).unwrap();
+            assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap().unwrap()["text"], text);
+        }
+        alive.store(false, Ordering::SeqCst);
+        let _ = client.join().unwrap(); let _ = server.join().unwrap();
+    }
+    #[test]
     fn revoked_and_unrecognized_devices_cannot_authenticate() {
         let peer = Peer { id: random(), secret: random(), address: String::new(), certificate: vec![] };
         let request = json!({"id":peer.id,"secret":peer.secret});
@@ -342,5 +502,31 @@ mod tests {
         assert!(authenticated(&inner, &request));
         assert!(!authenticated(&inner, &json!({"id":request["id"],"secret":"wrong"})));
         inner.credentials.peer = None; assert!(!authenticated(&inner, &request));
+    }
+    #[test]
+    fn replacing_connection_and_cancelling_connect_preserve_generation_boundaries() {
+        let directory = tempfile::tempdir().unwrap();
+        let peer = Peer { id: random(), secret: random(), address: String::new(), certificate: vec![] };
+        let runtime = Runtime {
+            inner: Mutex::new(Inner { credentials: Credentials { id: random(), secret: random(), certificate: vec![], key: vec![], peer: Some(peer.clone()) }, offer: None, pending: None, port: None, daemon: None }),
+            directory: directory.path().into(), responses: Mutex::new(HashMap::new()), connection: Mutex::new(None), connection_start: Mutex::new(()), connection_epoch: AtomicUsize::new(0),
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut first_peer = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        first_peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        let (first, _) = listener.accept().unwrap();
+        let (old_id, _) = install_connection(&runtime, &peer.secret, &first, Some(0)).unwrap();
+        let _second_peer = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (second, _) = listener.accept().unwrap();
+        let (new_id, _) = install_connection(&runtime, &peer.secret, &second, Some(0)).unwrap();
+        assert_eq!(first_peer.read(&mut [0; 1]).unwrap(), 0);
+        assert!(!remove_connection(&runtime, Some(&old_id)));
+        assert!(connection_current(&runtime, &new_id, &peer.secret));
+        runtime.connection_epoch.fetch_add(1, Ordering::SeqCst);
+        remove_connection(&runtime, None);
+        assert!(install_connection(&runtime, &peer.secret, &second, Some(0)).is_err());
+        assert!(!connection_current(&runtime, &new_id, &peer.secret));
+        runtime.inner.lock().unwrap().credentials.peer = None;
+        assert!(install_connection(&runtime, &peer.secret, &second, Some(1)).is_err());
     }
 }

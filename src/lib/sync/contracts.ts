@@ -83,6 +83,10 @@ export interface SyncTransport {
   approve(accept: boolean): Promise<void>;
   unpair(): Promise<void>;
   probe(): Promise<void>;
+  /** 通知已连接的对端拉取本机版本；无连接时保留版本，重连后交换。 */
+  notify(): Promise<void>;
+  /** 释放前台长连接；不撤销配对，也不清除未确认版本。 */
+  disconnect(): Promise<void>;
   exchange(envelope: SyncEnvelope): Promise<SyncEnvelope>;
   respond(id: string, envelope?: SyncEnvelope, error?: string): Promise<void>;
   address(address: string): Promise<void>;

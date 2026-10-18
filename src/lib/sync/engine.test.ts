@@ -12,6 +12,35 @@ function device(initial = '甲\n\n乙\n') {
   return { port, store, edit: (value: string) => { disk = text(value); }, disk: () => disk, crash: () => { fail = true; }, engine: () => new SyncEngine(port, store) };
 }
 describe('同步持久化', () => {
+  it('自动合并产生的新版本必须等待对端确认', async () => {
+    const a = device(), b = device(); const left = a.engine(), right = b.engine();
+    await left.load(); await right.load(); const id = await left.enable('local', 'project');
+    await right.receive(await left.offer()); await right.accept(id);
+    await left.receive(await right.offer()); await right.receive(await left.offer());
+    a.edit('甲改\n\n乙\n'); b.edit('甲\n\n乙改\n');
+    await right.receive(await left.offer());
+    let record = right.snapshot().records[id];
+    expect(record.document.revisions[record.document.head].content.text).toBe('甲改\n\n乙改\n');
+    expect(record.binding?.acknowledged).not.toBe(record.document.head);
+    await left.receive(await right.offer()); await right.receive(await left.offer());
+    record = right.snapshot().records[id];
+    expect(record.binding?.acknowledged).toBe(record.document.head);
+  });
+  it('收到对端版本并成功写入后立即确认，写入失败不能确认', async () => {
+    const a = device(), b = device(); const left = a.engine(), right = b.engine();
+    await left.load(); await right.load(); const id = await left.enable('local', 'project');
+    await right.receive(await left.offer()); await right.accept(id);
+    await left.receive(await right.offer()); await right.receive(await left.offer());
+    a.edit('手机修改');
+    await right.receive(await left.offer());
+    let record = right.snapshot().records[id];
+    expect(record.binding?.acknowledged).toBe(record.document.head);
+    a.edit('写入失败'); b.crash();
+    await right.receive(await left.offer());
+    record = right.snapshot().records[id];
+    expect(record.pending).toBeDefined();
+    expect(record.binding?.acknowledged).not.toBe(record.pending?.target);
+  });
   it('取消选择撤回尚未接收的文档，重启和旧请求重传不恢复接收提示', async () => {
     const a = device(), b = device(); const left = a.engine(); let right = b.engine();
     await left.load(); await right.load(); const id = await left.enable('local', 'project');
