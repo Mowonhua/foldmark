@@ -474,7 +474,7 @@ mod tests {
             assert_eq!(request["action"], "stream");
             write_frame(&mut stream, &json!({"ok":{"stream":1}})).unwrap();
             stream.sock.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
-            connection::server(&mut stream, desktop_receive, || running.load(Ordering::SeqCst), |envelope| Ok(envelope))
+            connection::server(&mut stream, desktop_receive, || running.load(Ordering::SeqCst), Ok)
         });
         let mut stream = open_stream(&peer).unwrap();
         stream.sock.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
