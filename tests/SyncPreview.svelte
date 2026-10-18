@@ -11,7 +11,10 @@
   let version = $state(0); let ready = $state(false);
   const content = new Map<string, DocumentContent>(projects.map(project => [project.id, { text: '# 工作清单\n\n整理本周的设计反馈。\n', name: project.name, archived: false }]));
   content.set('inspiration', { text: '一个新想法', name: '灵感', archived: false });
+  // 两端各有独立正文：共用一份会让修改互相可见，构造不出真实的并发冲突。
+  const peerContent = new Map<string, DocumentContent>([...content].map(([id, value]) => [id, { ...value }]));
   const engine = new SyncEngine({ read: async id => content.get(id)!, apply: async (id, _, next) => { content.set(id, next); }, accept: async () => null }, { load: async () => null, save: async () => {} }, () => version++);
+  const peer = new SyncEngine({ read: async id => peerContent.get(id)!, apply: async (id, _, next) => { peerContent.set(id, next); }, accept: async () => null }, { load: async () => null, save: async () => {} }, () => version++);
   const transport: SyncTransport = {
     status: async () => ({ paired: scenario !== 'unpaired', listening: !params.has('mobile'), session: 'preview' }),
     offer: async () => ({ version: 1, address: '192.168.31.156:50736', addresses: ['192.168.31.156:50736', '192.168.137.2:50736'], token: '0'.repeat(64), certificate: Array.from({ length: 400 }, (_, i) => i % 256), expires: Date.now() / 1000 + 300 }),
@@ -20,21 +23,32 @@
   };
   const controller = new SyncController(engine, transport, !params.has('mobile'), () => version++);
   onMount(() => { void (async () => {
-    await engine.load(); await engine.attachPairing('preview'); controller.connection = await transport.status(); controller.status = scenario === 'unpaired' ? '未配对' : '已同步';
-    if (scenario !== 'unpaired') {
-      const id = await engine.enable('local-0', 'project'); await engine.enable('local-1', 'project');
-      const acknowledged = await engine.offer(); acknowledged.selection!.revision = 0; await engine.receive(acknowledged);
-      if (scenario === 'conflict') {
-        const other = new SyncEngine({ read: async () => ({ text: '# 工作清单\n\n手机整理后的设计反馈。\n', name: '工作清单', archived: false }), apply: async () => {}, accept: async () => 'remote' }, { load: async () => null, save: async () => {} });
-        await other.load(); await other.receive(await engine.offer()); await other.accept(id); await engine.receive(await other.offer()); controller.status = '有同步冲突';
-      }
-      if (scenario === 'incoming') {
-        const other = new SyncEngine({ read: async () => ({ text: '新文档', name: '手机上的新项目', archived: false }), apply: async () => {}, accept: async () => null }, { load: async () => null, save: async () => {} });
-        await other.load(); const incomingId = await other.enable('new', 'project'); await engine.receive(await other.offer()); controller.status = '有待接收文档';
-        window.addEventListener('withdraw-preview', () => { void (async () => { await other.disable(incomingId); await engine.receive(await other.offer()); })(); }, { once: true });
-      }
-      if (scenario === 'error') { controller.error = '无法连接电脑，请确认两端连接同一局域网。'; controller.status = '等待同步'; }
+    await engine.load(); await engine.attachPairing('preview');
+    controller.connection = await transport.status();
+    if (scenario === 'unpaired') { controller.status = '未配对'; ready = true; return; }
+    await peer.load(); await peer.attachPairing('preview');
+    // 先让两端共享同一基线再各自修改。伪造对端确认会让选择序号与版本基线脱节，引擎会以缺基线拒绝接收。
+    const ids = [await engine.enable('local-0', 'project'), await engine.enable('local-1', 'project')];
+    await peer.receive(await engine.offer());
+    await peer.accept(ids[0], 'local-0'); await peer.accept(ids[1], 'local-1');
+    await engine.receive(await peer.offer());
+    controller.status = '已同步';
+    if (scenario === 'conflict') {
+      content.set('local-0', { text: '# 工作清单\n\n本机整理后的设计反馈。\n', name: '工作清单', archived: false });
+      peerContent.set('local-0', { text: '# 工作清单\n\n手机整理后的设计反馈。\n', name: '工作清单', archived: false });
+      // 两端必须在看到对方版本之前各自生成版本；先发后收会被自动合并，留下的是冲突之外的结果。
+      const local = await engine.offer(); const remote = await peer.offer();
+      await engine.receive(remote); await peer.receive(local);
+      controller.status = '有同步冲突';
     }
+    if (scenario === 'incoming') {
+      peerContent.set('new', { text: '新文档', name: '手机上的新项目', archived: false });
+      const incomingId = await peer.enable('new', 'project');
+      await engine.receive(await peer.offer());
+      controller.status = '有待接收文档';
+      window.addEventListener('withdraw-preview', () => { void (async () => { await peer.disable(incomingId); await engine.receive(await peer.offer()); })(); }, { once: true });
+    }
+    if (scenario === 'error') { controller.error = '无法连接电脑，请确认两端连接同一局域网。'; controller.status = '等待同步'; }
     ready = true;
   })(); return () => controller.stop(); });
 </script>
