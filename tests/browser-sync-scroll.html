@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同步接收阅读位置验收</title>
+<style>
+  :root { --text:#263027; --ink:#263027; --muted:#74806f; --accent:#537146; --surface:#fff; --surface-alt:#f0f3ed; --border:#d6ded1; --selection:#d8e7ca; --danger:#a53d3d; }
+  body { margin:20px; color:var(--text); background:#fafbf9; font-family:system-ui,sans-serif; }
+  #editor { width:390px; height:700px; border:1px solid var(--border); background:var(--surface); }
+  button { margin-bottom:12px; padding:8px 16px; cursor:pointer; }
+  #result { max-width:1000px; white-space:pre-wrap; overflow-wrap:anywhere; }
+</style>
+<h1>同步接收阅读位置验收</h1>
+<p>在手机尺寸的真实编辑器中接收对端版本，检查视口顶部原文行和像素偏移保持不变。</p>
+<button id="verify">验证阅读位置</button>
+<span id="status" role="status">等待运行</span>
+<div id="editor"></div>
+<pre id="result" aria-live="polite"></pre>
+<script type="module" src="./browser-sync-scroll.ts"></script>

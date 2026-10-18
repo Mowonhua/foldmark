@@ -53,6 +53,7 @@ export function captureSourcePosition(view: EditorView): SourceReturn {
  */
 export function restoreSourcePosition(view: EditorView, position: SourceReturn, isCurrent: () => boolean): void {
   let attempts = 0;
+  let stable = 0;
   const measure = (): void => view.requestMeasure({
     key: restoreSourcePosition,
     read: () => {
@@ -67,10 +68,12 @@ export function restoreSourcePosition(view: EditorView, position: SourceReturn, 
       // CodeMirror 在测量写阶段之后还会补偿行高变化；必须等它结束，避免两次叠加同一滚动差。
       view.dom.ownerDocument.defaultView!.requestAnimationFrame(() => {
         if (!isCurrent()) return;
-        const changed = Math.abs(view.scrollDOM.scrollTop - scrollTop) > 0.5;
+        const settled = Math.abs(view.scrollDOM.scrollTop - scrollTop) <= 0.5;
         view.scrollDOM.scrollTop = scrollTop;
-        // 远处行块首次可能使用估计高度；滚动后校正实际排版，不把光标拉到视口中。
-        if (changed && ++attempts < 3) measure();
+        // 远处行块首次可能使用估计高度，滚动后 CodeMirror 仍会校正排版并回写滚动位置。
+        // 连续两帧无需修正才算布局稳定；在它最后一次补偿前停下会留下整屏偏移。
+        stable = settled ? stable + 1 : 0;
+        if (stable < 2 && ++attempts < 30) measure();
       });
     },
   });

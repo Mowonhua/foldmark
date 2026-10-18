@@ -237,9 +237,10 @@ export class EditorController {
     ui.cursor = map(ui.cursor);
     if (ui.sourceReturn) ui.sourceReturn = { ...ui.sourceReturn, cursor: map(ui.sourceReturn.cursor), anchor: map(ui.sourceReturn.anchor) };
     this.contextMenu?.invalidate();
-    const generation = ++this.positionGeneration;
     // 旧撤销栈不能把已经接收的版本整体回滚；阅读锚点则随差异映射。
+    // setUIState 会自增 positionGeneration 取消此前的滚动恢复，恢复令牌必须在它之后取得，否则本次恢复会被立即作废。
     this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui);
+    const generation = ++this.positionGeneration;
     restoreSourcePosition(this.view, mapped, () => this.positionGeneration === generation);
   }
 
