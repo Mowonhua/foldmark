@@ -16,9 +16,18 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import org.json.JSONArray
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URL
 import java.util.concurrent.Executors
 import javax.net.ssl.HttpsURLConnection
+
+/** 单次网络操作的重试次数；每次重试都新建连接，只用于吸收连接被中断的抖动。 */
+private const val requestAttempts = 3
+/** 重试前的线性退避基数；过短会让同一故障连续失败，过长会拖慢用户主动重试。 */
+private const val retryDelayMillis = 600L
+/** 解析 206 响应 `Content-Range` 起始偏移的匹配式。 */
+private val contentRangePattern = Regex("""bytes (\d+)-""")
 
 /**
  * 结构职责：描述来自固定 GitHub 仓库的稳定版 Android 安装包。
@@ -26,6 +35,16 @@ import javax.net.ssl.HttpsURLConnection
  * 约束条件：候选不可由前端提供；安装前仍须检查包名、版本和安装签名。
  */
 internal data class AndroidUpdateCandidate(val version: String, val body: String, val url: String, val size: Long)
+
+/**
+ * 结构职责：保存一次安装包下载的断点续传状态。
+ * 字段说明：received 是当前文件已确认写入的字节数；etag 是服务端最近一次给出的资源标识。
+ * 约束条件：只在单次下载会话内有效；服务端忽略范围请求或资源变化时必须丢弃已写入内容。
+ */
+private class DownloadSession(val file: File) {
+    var received = 0L
+    var etag: String? = null
+}
 
 /**
  * 接口职责：隔离版本比较及发布元数据选择规则。
@@ -99,7 +118,8 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
     fun check(invoke: Invoke) {
         run(invoke) { token ->
             val current = installed().versionName ?: error("无法读取当前版本")
-            val json = request("https://api.github.com/repos/Mowonhua/foldmark/releases?per_page=30", token) { response ->
+            val json = request("https://api.github.com/repos/Mowonhua/foldmark/releases?per_page=30", token) { response, status ->
+                check(status == 200) { "更新服务器返回 HTTP $status" }
                 response.inputStream.bufferedReader().use { reader ->
                     val body = StringBuilder()
                     val characters = CharArray(8192)
@@ -137,44 +157,83 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
         run(invoke) { token ->
             val file = File.createTempFile("update-", ".apk", cache)
             try {
-                val size = request(release.url, token) { response ->
-                    var received = 0L
-                    var lastProgress = 0L
-                    response.inputStream.use { input ->
-                        file.outputStream().use { output ->
-                            val bytes = ByteArray(64 * 1024)
-                            while (true) {
-                                val count = input.read(bytes)
-                                if (count < 0) break
-                                ensureCurrent(token)
-                                received += count
-                                check(received <= release.size) { "安装包大小不匹配" }
-                                output.write(bytes, 0, count)
-                                val now = System.currentTimeMillis()
-                                if (now - lastProgress >= 200) {
-                                    lastProgress = now
-                                    activity.runOnUiThread {
-                                        synchronized(this) {
-                                            if (generation == token && pending === invoke) progress(progressResult(received, release.size))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    check(received == release.size) { "安装包下载不完整" }
-                    received
-                }
+                val size = downloadTo(file, release, token, invoke)
                 validate(file, release)
                 finish(token, invoke, { file.delete() }) {
                     downloaded?.takeUnless { it in handedOff }?.delete()
                     downloaded = file
+                    // 完成事件直接发送：finish 已清空 pending，经过 publishProgress 会被当作迟到回调丢弃。
                     progress(progressResult(size, release.size))
                     invoke.resolve(progressResult(size, release.size))
                 }
             } catch (error: Exception) {
                 file.delete()
                 throw error
+            }
+        }
+    }
+    /**
+     * 函数职责：把安装包下载到目标文件，连接中断后从已写入字节继续。
+     * 输入说明：file 必须是本次会话独占的临时文件；release.size 是发布资产大小。
+     * 输出说明：返回完整文件的字节数；服务端忽略范围请求时从头重下。
+     * 实现思路：每轮携带 Range 和 If-Range，只接受与已写入位置一致的 206；200 表示资源不匹配，截断重写。
+     */
+    private fun downloadTo(file: File, release: AndroidUpdateCandidate, token: Long, invoke: Invoke): Long {
+        val session = DownloadSession(file)
+        return request(
+            release.url,
+            token,
+            prepare = { connection ->
+                session.received = file.length()
+                val etag = session.etag
+                if (session.received > 0 && etag != null) {
+                    connection.setRequestProperty("Range", "bytes=${session.received}-")
+                    connection.setRequestProperty("If-Range", etag)
+                }
+            },
+        ) { response, status ->
+            val resumed = status == 206
+            check(status == 200 || resumed) { "更新服务器返回 HTTP $status" }
+            if (resumed) {
+                check(contentRangeOffset(response) == session.received) { "更新续传位置不匹配" }
+            } else {
+                // 服务端忽略 Range 或资源已变化：丢弃旧字节，从零重写。
+                session.received = 0L
+            }
+            response.getHeaderField("ETag")?.takeIf { it.isNotBlank() }?.let { session.etag = it }
+            var lastProgress = 0L
+            response.inputStream.use { input ->
+                FileOutputStream(file, resumed).use { output ->
+                    val bytes = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(bytes)
+                        if (count < 0) break
+                        ensureCurrent(token)
+                        check(session.received + count <= release.size) { "安装包大小不匹配" }
+                        output.write(bytes, 0, count)
+                        session.received += count
+                        val now = System.currentTimeMillis()
+                        if (now - lastProgress >= 200) {
+                            lastProgress = now
+                            publishProgress(token, invoke, session.received, release.size)
+                        }
+                    }
+                }
+            }
+            check(session.received == release.size) { "安装包下载不完整" }
+            session.received
+        }
+    }
+    /** 解析 206 响应 `Content-Range` 的起始偏移；缺失或格式非法时返回 -1，触发续传位置校验失败。 */
+    private fun contentRangeOffset(response: HttpsURLConnection): Long {
+        val header = response.getHeaderField("Content-Range") ?: return -1L
+        return contentRangePattern.find(header)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: -1L
+    }
+    /** 进度只覆盖当前会话；取消后迟到的回调不能写入新一轮下载。 */
+    private fun publishProgress(token: Long, invoke: Invoke, received: Long, total: Long) {
+        activity.runOnUiThread {
+            synchronized(this) {
+                if (generation == token && pending === invoke) progress(progressResult(received, total))
             }
         }
     }
@@ -253,8 +312,39 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
         check(generation == token && pending != null) { "更新操作已取消" }
     }
 
+    /**
+     * 函数职责：执行受控 HTTPS 请求，跟随重定向并在传输层失败时重试。
+     * 输入说明：prepare 在每次连接建立前设置请求头；read 处理最终响应并完整读取或写入内容。
+     * 输出说明：返回 read 的结果；重试耗尽后抛出最后一次网络异常。
+     * 实现思路：每轮都新建连接；只对 IOException 重试，HTTP 状态和协议错误立即失败，取消时停止重试。
+     */
+    private fun <T> request(
+        address: String,
+        token: Long,
+        prepare: (HttpsURLConnection) -> Unit = {},
+        read: (HttpsURLConnection, Int) -> T,
+    ): T {
+        var failure: Exception? = null
+        for (round in 0 until requestAttempts) {
+            ensureCurrent(token)
+            try {
+                return attemptOnce(address, token, prepare, read)
+            } catch (error: IOException) {
+                failure = error
+                // close() 后旧请求立即失效，不再消耗退避等待。
+                ensureCurrent(token)
+                if (round < requestAttempts - 1) Thread.sleep(retryDelayMillis * (round + 1))
+            }
+        }
+        throw failure ?: IOException("更新请求失败")
+    }
     /** 手动跟随 HTTPS 重定向，防止资产地址跳转到明文连接；每跳均可由 close 中断。 */
-    private fun <T> request(address: String, token: Long, read: (HttpsURLConnection) -> T): T {
+    private fun <T> attemptOnce(
+        address: String,
+        token: Long,
+        prepare: (HttpsURLConnection) -> Unit,
+        read: (HttpsURLConnection, Int) -> T,
+    ): T {
         var url = URL(address)
         repeat(6) {
             ensureCurrent(token)
@@ -267,12 +357,12 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
                 response.instanceFollowRedirects = false
                 response.setRequestProperty("User-Agent", "Foldmark-Android")
                 response.setRequestProperty("Accept", if (url.host == "api.github.com") "application/vnd.github+json" else "application/octet-stream")
+                prepare(response)
                 val status = response.responseCode
                 if (status in listOf(301, 302, 303, 307, 308)) {
                     url = URL(url, response.getHeaderField("Location") ?: error("更新重定向无效"))
                 } else {
-                    check(status == 200) { "更新服务器返回 HTTP $status" }
-                    return read(response)
+                    return read(response, status)
                 }
             } finally {
                 response.disconnect()

@@ -35,3 +35,9 @@ it('原生没有新版本时不创建下载会话', async () => {
   native.invoke.mockResolvedValueOnce({ available: false, currentVersion: '0.7.0' });
   expect(await new AndroidUpdatePort().check()).toBeNull();
 });
+it('传输中断的原始英文异常被替换为可重试的网络提示', async () => {
+  native.invoke.mockRejectedValueOnce(new Error('unexpected end of stream on com.android.okhttp.Address@5cc2440'));
+  await expect(new AndroidUpdatePort().check()).rejects.toThrow('网络中断');
+  native.invoke.mockRejectedValueOnce(new Error('安装包签名不匹配'));
+  await expect(new AndroidUpdatePort().check()).rejects.toThrow('安装包签名不匹配');
+});

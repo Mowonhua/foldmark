@@ -66,3 +66,5 @@
 | S-06 | 正常 | 没有可安装的新版本时结束检查且不创建候选 | src/lib/updater/android.test.ts::原生没有新版本时不创建下载会话 |
 
 | S-07 | 约束 | v0.7.1 起标签发布必须包含同版本签名 arm64 APK，缺失或摘要不符时禁止公开版本；重跑不覆盖已公开资源 | scripts/release.test.mjs::<module>, scripts/release-policy.test.mjs::<module>, scripts/release-github.test.mjs::<module> |
+| S-08 | 异常 | 传输连接中断时重新建立连接并从已写入字节续传；服务端忽略范围请求或资源变化时从头重写 | - |
+| S-09 | 异常 | 重试耗尽后界面显示统一的网络中断提示，不暴露平台英文异常 | src/lib/updater/android.test.ts::传输中断的原始英文异常被替换为可重试的网络提示 |

@@ -20,6 +20,7 @@ export const platformMessages: Readonly<Record<string, string>> = {
   "新版本 {version} 已准备好安装。": "Version {version} is ready to install.",
   "正在保存文档并安装更新，请稍候…": "Saving documents and installing the update. Please wait…",
   "更新未完成：{message}": "Update incomplete: {message}",
+  "网络中断，请检查网络后重试。": "The network connection was interrupted. Check your connection and try again.",
   "更新说明": "Release notes",
   "检查更新": "Check for updates",
   "下载更新": "Download update",
