@@ -1054,11 +1054,12 @@
 
   /** 在弹窗外按下鼠标即关闭；不能用 click 判定：弹窗内按下拖动选择文本、移出窗口松开时，
    *  浏览器会把 click 合成到窗口根节点，导致误关。捕获阶段先关闭已有弹窗，避免打开按钮的
-   *  同一次点击立即将新弹窗关闭；桌面标题栏也算外部；仅主键关闭，与原 click 语义一致。 */
+   *  同一次点击立即将新弹窗关闭；桌面标题栏也算外部；仅主键关闭，与原 click 语义一致。
+   *  设备同步面板与普通弹窗同为独立浮层，按下面板外空白处也直接关闭整个面板。 */
   function dismissDialog(event: PointerEvent): void {
-    if (!dialog || updateInstalling || projectActionBusy) return;
+    if ((!dialog && !syncOpen) || updateInstalling || projectActionBusy) return;
     if (event.button !== 0) return;
-    if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) dialog = null;
+    if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) { dialog = null; syncOpen = false; }
   }
 
   /** 捕获按下事件，避免编辑器阻止 click 冒泡导致浮层不关闭；触发按钮和浮层内部保留原操作。 */
@@ -1228,7 +1229,7 @@
 
 <svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onclick={dismissPopovers} />
 
-<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
+<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null || syncOpen} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
 
   {#if mobile && sidebar}<button class="drawer-scrim" aria-label="关闭项目导航" onclick={() => sidebar = false}></button>{/if}
   {#if sidebar && !cardMode}
