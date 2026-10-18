@@ -13,7 +13,7 @@
   } = $props();
   const snapshot = $derived.by(() => { void revision; return controller.engine.snapshot(); });
   const connection = $derived.by(() => { void revision; return controller.connection; });
-  const current = $derived.by(() => { void revision; return { status: controller.status, error: controller.error, busy: controller.busy }; });
+  const current = $derived.by(() => { void revision; return { status: controller.status, error: controller.error, busy: controller.busy, pending: controller.pendingEdits }; });
   const records = $derived(Object.values(snapshot.records));
   const pending = $derived(records.filter(record => !record.binding));
   const attention = $derived(records.filter(record => record.binding?.enabled && (record.conflict || record.error)));
@@ -32,7 +32,8 @@
     if (!record?.binding?.enabled) return '仅本机';
     if (record.conflict) return '需合并';
     if (record.error) return '待处理';
-    return record.binding.acknowledged === record.document.head && current.status !== '等待同步' ? '已同步' : '待同步';
+    // 对端确认的是当前 head 且本机没有新改动才算已同步；只看状态文案无法区分待发送与离线。
+    return record.binding.acknowledged === record.document.head && !current.pending ? '已同步' : '待同步';
   }
   async function act(operation: () => Promise<unknown>): Promise<void> {
     if (working) return; working = true; error = '';

@@ -28,13 +28,20 @@ it('对端不可达时不为离线输入固化发送版本', async () => {
   const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
   const before = f.engine.snapshot(); f.read.mockClear(); f.probe.mockRejectedValue(new Error('offline'));
   await f.controller.sync(); expect(f.read).not.toHaveBeenCalled(); expect(f.engine.snapshot()).toEqual(before);
-  expect(f.controller.status).toBe('等待同步');
+  // 对端没开只改变面板状态，底栏不提示；本机正文已保存在磁盘上，重试即恢复。
+  expect(f.controller.status).toBe('等待对端'); expect(f.controller.attention).toBe('');
 });
 it('原生权限拒绝保留可读原因，不显示对象占位文字', async () => {
   const f = fixture(); await f.controller.start();
   f.probe.mockRejectedValue({ message: '局域网权限已拒绝，请在系统设置中允许后重试' });
   await f.controller.sync();
   expect(f.controller.error).toBe('局域网权限已拒绝，请在系统设置中允许后重试');
+  expect(f.controller.status).toBe('同步失败'); expect(f.controller.attention).toBe('同步失败');
+});
+it('已配对且确认完成时底栏不呈现同步状态', async () => {
+  const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
+  await f.controller.sync();
+  expect(f.controller.status).toBe('已同步'); expect(f.controller.attention).toBe('');
 });
 it('手机离开前台不启动连接，前台确认后显示已同步', async () => {
   const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');

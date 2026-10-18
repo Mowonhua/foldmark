@@ -42,9 +42,9 @@
   let syncRevision = $state(0);
   let syncOpen = $state(false);
   let syncError = $state('');
-  const syncLabel = $derived.by(() => { void syncRevision; return syncController?.status ?? '设备同步'; });
-  // 未配对时底部栏不呈现同步状态；更新提示存活时间短且优先级更高，占用同一位置替换同步状态，不并排。
-  const syncNotice = $derived.by(() => { void syncRevision; return native && syncController?.connection.paired === true; });
+  const syncLabel = $derived.by(() => { void syncRevision; return syncController?.attention ?? ''; });
+  // 底部栏只放需要用户处理的同步问题；未配对和正常同步过程只出现在同步面板。更新提示存活时间短且优先级更高，占用同一位置替换同步状态，不并排。
+  const syncNotice = $derived.by(() => { void syncRevision; return native && !!syncLabel; });
   const TOAST_DURATION_MS = 3000;
   // 灵感簿使用伪项目身份复用会话与搜索机制；不写入 projects 列表，避免污染项目语义与聚合视图。
   const INSPIRATION_ID = 'inspiration';

@@ -3,12 +3,21 @@ import { listen } from '@tauri-apps/api/event';
 import type { ConnectionStatus, PairingOffer, SyncEnvelope, SyncTransport } from './contracts';
 import { SyncEngine } from './engine';
 import { errorMessage } from '../session/save-coordinator';
+/**
+ * 需要用户处理的同步错误：配对失效、协议不兼容、超出限制、本机保存失败和本机网络配置错误。
+ * 连接被拒、超时和断线只表示对端暂时不可达，重试即可，不进入底栏提示。
+ */
+const actionable = (message: string): boolean => /^(SYNC_AUTH|SYNC_PROTOCOL|SYNC_LIMIT|SYNC_SAVE):|^局域网权限|^仅支持局域网|^请输入局域网/.test(message);
 export class SyncController {
   connection: ConnectionStatus = { paired: false, listening: false };
   status = '未配对';
+  /** 底栏需要呈现的问题；空串表示底栏不出现同步入口，正常同步过程只留在同步面板。 */
+  attention = '';
   error = '';
   busy = false;
   private dirty = false;
+  /** 最近一次交换未能联系到对端；正文已保存在本机，重试即可恢复，不算同步失败。 */
+  private offline = false;
   private editGeneration = 0;
   private pendingOffer?: PairingOffer;
   private timer?: ReturnType<typeof setTimeout>;
@@ -31,8 +40,12 @@ export class SyncController {
         const reply = await this.engine.offer();
         await this.transport.respond(event.payload.id, reply);
         if (generation === this.editGeneration) this.dirty = false;
-        this.status = this.summary(); this.error = '';
-      } catch (error) { await this.transport.respond(event.payload.id, undefined, errorMessage(error)).catch(() => {}); this.error = errorMessage(error); }
+        this.offline = false; this.error = ''; this.setStatus(this.summary());
+      } catch (error) {
+        this.error = errorMessage(error); this.offline = !actionable(this.error);
+        await this.transport.respond(event.payload.id, undefined, this.error).catch(() => {});
+        this.setStatus(this.offline ? this.summary() : '同步失败');
+      }
       this.changed();
     });
     if (!this.desktop) this.stopWakeListener = await listen('foldmark:sync-wake', () => {
@@ -58,15 +71,34 @@ export class SyncController {
       void this.transport.disconnect().catch(() => {});
     }
   };
+  /** 面板设备行展示的同步状态；底栏不读取这里，改由 issues() 判断是否需要用户处理。 */
   private summary(): string {
     const records = Object.values(this.engine.snapshot().records).filter(record => !record.binding || record.binding.enabled);
     if (records.some(record => record.conflict)) return '有同步冲突';
     if (records.some(record => record.error)) return '部分文档待处理';
     if (records.some(record => !record.binding)) return '有待接收文档';
+    // 对端没开时本机改动仍保存在磁盘上，重试即可，不能显示成同步失败。
+    if (this.offline) return '等待对端';
     if (this.dirty) return '等待同步';
     if (records.some(record => record.binding?.enabled && record.binding.acknowledged !== record.document.head)) return '等待对端确认';
     return '已同步';
   }
+  /** 底栏只列需要用户处理的问题；未配对、待发送、待确认和对端离线都只留在同步面板。 */
+  private issues(): string {
+    if (!this.connection.paired) return '';
+    const records = Object.values(this.engine.snapshot().records).filter(record => !record.binding || record.binding.enabled);
+    if (records.some(record => record.conflict)) return '有同步冲突';
+    if (records.some(record => !record.binding)) return '有文档待接收';
+    if (records.some(record => record.error)) return '同步失败';
+    return this.offline ? '' : this.error ? '同步失败' : '';
+  }
+  /** 状态与底栏提示一起更新，避免两处各自推断同一批记录。 */
+  private setStatus(status: string): void {
+    this.status = status;
+    this.attention = this.issues();
+  }
+  /** 本机还有未发送给对端的修改；面板用它区分“确认已完成”和“确认后本机又改过”。 */
+  get pendingEdits(): boolean { return this.dirty; }
   async pair(offer: PairingOffer): Promise<void> { this.pendingOffer = offer; await this.sync(); }
   async sync(): Promise<void> {
     if (this.stopped || !this.desktop && document.hidden) return;
@@ -78,11 +110,11 @@ export class SyncController {
     try {
       if (this.pendingOffer) {
         if (await this.transport.pair(this.pendingOffer)) this.pendingOffer = undefined;
-        else { this.status = '等待电脑确认'; return; }
+        else { this.setStatus('等待电脑确认'); return; }
       }
       this.connection = await this.transport.status();
       await this.engine.attachPairing(this.connection.session);
-      if (!this.connection.paired) { this.status = '未配对'; return; }
+      if (!this.connection.paired) { this.offline = false; this.error = ''; this.setStatus('未配对'); return; }
       if (!this.desktop) {
         if (this.stopped || document.hidden) return;
         // 先建立或复用已认证连接再固化版本，离线重试不产生多余历史。
@@ -112,13 +144,17 @@ export class SyncController {
         // 网络等待期间的新输入尚未包含在本轮确认中，不能提前显示“已同步”。
         if (generation === this.editGeneration) this.dirty = false;
       } else await this.transport.notify();
-      this.status = this.summary(); this.error = '';
-    } catch (error) { this.error = errorMessage(error); this.status = '等待同步'; }
-    finally { this.busy = false; this.schedule(followUp || this.resyncRequested); this.changed(); }
+      this.offline = false; this.error = ''; this.setStatus(this.summary());
+    } catch (error) {
+      const message = errorMessage(error);
+      // 连不上对端属于预期状态：本机正文已保存，只有本机能处理的错误才提示同步失败。
+      this.offline = !actionable(message); this.error = message;
+      this.setStatus(this.offline ? this.summary() : '同步失败');
+    } finally { this.busy = false; this.schedule(followUp || this.resyncRequested); this.changed(); }
   }
   markDirty(localId?: string): void {
     if (!this.connection.paired || !Object.values(this.engine.snapshot().records).some(record => record.binding?.enabled && record.binding.localId === localId)) return;
-    this.editGeneration++; this.dirty = true; this.status = '等待同步';
+    this.editGeneration++; this.dirty = true; this.setStatus(this.summary());
     // 输入后稍作合并再同步，避免连续按键每次都发起交换；增量传输下本轮只携带新版本。
     clearTimeout(this.timer);
     clearTimeout(this.dirtyTimer);
@@ -128,7 +164,7 @@ export class SyncController {
   async unpair(): Promise<void> {
     this.pendingOffer = undefined;
     await this.transport.unpair(); await this.engine.reset();
-    this.connection = await this.transport.status(); this.status = '未配对'; this.changed();
+    this.connection = await this.transport.status(); this.offline = false; this.error = ''; this.setStatus('未配对'); this.changed();
   }
   stop(): void {
     this.stopped = true; clearTimeout(this.timer); clearTimeout(this.dirtyTimer);
