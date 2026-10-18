@@ -12,7 +12,7 @@ try {
   await page.waitForFunction(() => document.getElementById('result')?.textContent?.includes('"pass"'));
   const result = JSON.parse(await page.locator('#result').textContent());
   for (const scenario of result.scenarios) {
-    assert(scenario.pass, `${scenario.name}：接收同步后顶行偏移 ${Number.isFinite(scenario.offsetDifference) ? scenario.offsetDifference.toFixed(2) : '无法定位'} px`);
+    assert(scenario.pass, `${scenario.name}：接收同步后顶行偏移 ${Number.isFinite(scenario.offsetDifference) ? scenario.offsetDifference.toFixed(2) : '无法定位'} px，过程峰值偏移 ${Number.isFinite(scenario.peakDrift) ? scenario.peakDrift.toFixed(2) : '锚点行离开视口'} px，丢失帧 ${scenario.lostFrames}`);
   }
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/sync-scroll-preserved.png' });

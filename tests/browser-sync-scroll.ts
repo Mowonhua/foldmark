@@ -1,4 +1,4 @@
-/** 文件职责：用真实 DOM 几何验收同步接收后的阅读位置保持；每次替换正文后顶部原文行与像素偏移不得跳动。 */
+/** 文件职责：用真实 DOM 几何验收同步接收后的阅读位置保持；替换正文后顶部原文行与像素偏移不得跳动，且替换过程中不得出现锚点行离开视口的中间帧。 */
 import { EditorController } from '../src/lib/editor';
 
 const task = (index: number): string => `- [ ] 任务 ${String(index).padStart(3, '0')}\n\n  第 ${index} 项说明段落，包含一些普通正文用于验证行高。`;
@@ -31,17 +31,32 @@ function offsetOf(text: string): number | null {
   return element ? element.getBoundingClientRect().top - top : null;
 }
 
+/** 中间帧允许的最大偏移：不超过一行高度，用户不会感知为跳动；数百像素的位移会表现为画面抽搐。 */
+const SETTLE_LIMIT = 30;
+
 async function verify(name: string, next: string): Promise<Record<string, unknown>> {
   const scroll = editor.view.scrollDOM;
   scroll.scrollTop = (scroll.scrollHeight - scroll.clientHeight) * 0.5;
   await settled();
   const before = topVisibleLine();
   editor.setSynchronizedText(next);
-  await settled();
+  // 逐帧采样锚点行的屏幕偏移：接收替换若发生整份重建，锚点行会短暂离开视口再被拉回，
+  // 只看最终状态无法发现这种中间抖动。采样只读布局，不写入滚动位置。
+  const drift: (number | null)[] = [];
+  for (let count = 0; count < 16; count++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const offset = offsetOf(before.text);
+    drift.push(offset === null ? null : offset - before.offset);
+  }
   const after = offsetOf(before.text);
   const top = topVisibleLine();
   const offsetDifference = after === null ? Number.POSITIVE_INFINITY : after - before.offset;
-  return { name, before, after, offsetDifference, sameTopLine: top.text === before.text, pass: after !== null && Math.abs(offsetDifference) < 3 && top.text === before.text };
+  const lostFrames = drift.filter(value => value === null).length;
+  const peakDrift = drift.reduce<number>((peak, value) => Math.max(peak, value === null ? Number.POSITIVE_INFINITY : Math.abs(value)), 0);
+  return {
+    name, before, after, offsetDifference, peakDrift, lostFrames, drift, sameTopLine: top.text === before.text,
+    pass: after !== null && Math.abs(offsetDifference) < 3 && top.text === before.text && lostFrames === 0 && peakDrift <= SETTLE_LIMIT,
+  };
 }
 
 button.addEventListener('click', async () => {

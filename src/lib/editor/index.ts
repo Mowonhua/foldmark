@@ -219,7 +219,12 @@ export class EditorController {
       ? translate('暂缓整理归档：请检查源码中的代码围栏或 HTML 是否完整。') : null;
   }
 
-  /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
+  /**
+   * 函数职责：接收对端版本并替换当前正文。
+   * 输入说明：text 为合并后的完整文档；组合输入期间拒绝执行。
+   * 输出说明：只替换差异区间并恢复阅读锚点，折叠状态按折叠键保留；接收内容不进入撤销历史。
+   * 实现思路：按字符级差异生成增量事务，避免整份重建视图。
+   */
   setSynchronizedText(text: string): void {
     if (this.view.composing) throw new Error('SYNC_BUSY: 正在组合输入');
     const ui = this.getUIState(); const viewport = captureSourcePosition(this.view);
@@ -237,9 +242,20 @@ export class EditorController {
     ui.cursor = map(ui.cursor);
     if (ui.sourceReturn) ui.sourceReturn = { ...ui.sourceReturn, cursor: map(ui.sourceReturn.cursor), anchor: map(ui.sourceReturn.anchor) };
     this.contextMenu?.invalidate();
-    // 旧撤销栈不能把已经接收的版本整体回滚；阅读锚点则随差异映射。
-    // setUIState 会自增 positionGeneration 取消此前的滚动恢复，恢复令牌必须在它之后取得，否则本次恢复会被立即作废。
-    this.view.setState(this.createState(text, ui.mode)); this.setUIState(ui);
+    // 增量替换正文而不是重建 EditorState：重建会销毁全部视图插件与可见行 DOM，可见区域在测量完成前塌缩，
+    // 随后滚动位置被连续改写，在手机上表现为画面抽搐。
+    // 接收内容不进入撤销历史，用户无法把已确认的对端版本整体回滚；源码范围必须显式重算，否则会沿用旧文件的隐藏坐标。
+    this.view.dispatch({
+      changes,
+      // 同一个事务里保持锚点行的屏幕位置：校正必须和正文更新在同一帧完成，
+      // 否则未校正的偏移会先被绘制，再被后续测量拉回，形成一次可见跳动。
+      // 该定位只用当时的高度估算，删除大段上文时仍会残留一行以内的偏差，
+      // 因此后面继续用 restoreSourcePosition 按真实排版收敛到亚像素。
+      effects: [refreshSourceScope.of(null), EditorView.scrollIntoView(mapped.anchor, { y: 'start', yMargin: mapped.offset })],
+      annotations: Transaction.addToHistory.of(false),
+    });
+    this.applyUIState(ui, false);
+    // applyUIState 会自增 positionGeneration 取消此前的滚动恢复，恢复令牌必须在它之后取得，否则本次恢复会被立即作废。
     const generation = ++this.positionGeneration;
     restoreSourcePosition(this.view, mapped, () => this.positionGeneration === generation);
   }
@@ -278,7 +294,14 @@ export class EditorController {
       ...(mode === 'source' ? { sourceView: this.state.facet(sourceViewFacet), ...(sourceReturn ? { sourceReturn } : {}) } : {}),
     };
   }
-  setUIState(ui: ProjectView): void {
+  setUIState(ui: ProjectView): void { this.applyUIState(ui, true); }
+
+  /**
+   * 函数职责：应用持久化的界面状态。
+   * 输入说明：restoreScroll 为真时才按 ui.scrollTop 写像素滚动，仅适用于布局已稳定的项目切换；
+   * 接收同步的位置必须由语义锚点恢复，写回替换前的像素值会落到错误位置。
+   */
+  private applyUIState(ui: ProjectView, restoreScroll: boolean): void {
     this.contextMenu?.invalidate();
     this.positionGeneration++;
     const model = this.state.field(documentField);
@@ -288,7 +311,7 @@ export class EditorController {
     const expandedGroups = model.items.filter(item => groupKeys.has(foldKey(model, item))).map(item => item.from);
     const sourceReturn = ui.sourceReturn ? { ...ui.sourceReturn, cursor: Math.min(ui.sourceReturn.cursor, this.state.doc.length), anchor: Math.min(ui.sourceReturn.anchor, this.state.doc.length) } : null;
     this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setExpandedCompletedGroups.of(expandedGroups), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
-    this.view.scrollDOM.scrollTop = ui.scrollTop;
+    if (restoreScroll) this.view.scrollDOM.scrollTop = ui.scrollTop;
   }
   focusAt(pos: number): void {
     this.positionGeneration++;

@@ -14,6 +14,16 @@ it('同步在光标前插入正文时光标仍定位原任务且不能撤销远�
   expect(instance.state.selection.main.head).toBe(cursor + '新增段落\n\n'.length);
   expect(instance.undo()).toBe(false);
 });
+it('接收同步保留本机既有撤销历史，但已接收的对端版本不可回滚', () => {
+  const instance = editor();
+  instance.view.dispatch({ changes: { from: 0, insert: '本机输入\n' }, userEvent: 'input' });
+  const local = instance.text;
+  instance.setSynchronizedText('对端新增\n\n' + local);
+  expect(instance.text).toBe('对端新增\n\n' + local);
+  // 撤销只回退本机输入，对端接收的内容必须留在文档中。
+  expect(instance.undo()).toBe(true);
+  expect(instance.text).toBe('对端新增\n\n' + local.slice('本机输入\n'.length));
+});
 it('待办源码只显示待办，返回进入前的光标位置，切换不进入文本历史', () => {
   const instance = editor();
   const cursor = instance.text.indexOf('当前任务');
