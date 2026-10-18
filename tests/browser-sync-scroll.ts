@@ -4,7 +4,8 @@ import { EditorController } from '../src/lib/editor';
 const task = (index: number): string => `- [ ] 任务 ${String(index).padStart(3, '0')}\n\n  第 ${index} 项说明段落，包含一些普通正文用于验证行高。`;
 const base = '# 工作清单\n\n' + Array.from({ length: 120 }, (_, index) => task(index)).join('\n\n') + '\n';
 
-const editor = new EditorController(document.querySelector<HTMLElement>('#editor')!, { text: base, mode: 'todo', onChange: () => {}, nativeSelection: true });
+const mobile = new URLSearchParams(location.search).has('mobile');
+const editor = new EditorController(document.querySelector<HTMLElement>('#editor')!, { text: base, mode: 'todo', onChange: () => {}, nativeSelection: mobile });
 const button = document.querySelector<HTMLButtonElement>('#verify')!;
 const output = document.querySelector<HTMLElement>('#result')!;
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -18,7 +19,7 @@ async function settled(): Promise<void> {
 function topVisibleLine(): { text: string; offset: number } {
   const scroll = editor.view.scrollDOM;
   const top = scroll.getBoundingClientRect().top + scroll.clientTop;
-  const element = [...editor.view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')].find(line => line.getBoundingClientRect().bottom > top + 0.5);
+  const element = [...editor.view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')].find(line => line.textContent?.trim() && line.getBoundingClientRect().bottom > top + 0.5);
   if (!element) throw new Error('视口内没有可测量的真实原文行');
   return { text: element.textContent ?? '', offset: element.getBoundingClientRect().top - top };
 }
@@ -31,8 +32,8 @@ function offsetOf(text: string): number | null {
   return element ? element.getBoundingClientRect().top - top : null;
 }
 
-/** 中间帧允许的最大偏移：不超过一行高度，用户不会感知为跳动；数百像素的位移会表现为画面抽搐。 */
-const SETTLE_LIMIT = 30;
+/** 中间帧与最终布局仅允许像素取整误差，小幅位移也会表现为闪烁或抽搐。 */
+const SETTLE_LIMIT = 1;
 
 async function verify(name: string, next: string): Promise<Record<string, unknown>> {
   const scroll = editor.view.scrollDOM;
@@ -55,7 +56,7 @@ async function verify(name: string, next: string): Promise<Record<string, unknow
   const peakDrift = drift.reduce<number>((peak, value) => Math.max(peak, value === null ? Number.POSITIVE_INFINITY : Math.abs(value)), 0);
   return {
     name, before, after, offsetDifference, peakDrift, lostFrames, drift, sameTopLine: top.text === before.text,
-    pass: after !== null && Math.abs(offsetDifference) < 3 && top.text === before.text && lostFrames === 0 && peakDrift <= SETTLE_LIMIT,
+    pass: after !== null && Math.abs(offsetDifference) <= SETTLE_LIMIT && top.text === before.text && lostFrames === 0 && peakDrift <= SETTLE_LIMIT,
   };
 }
 
@@ -69,6 +70,11 @@ button.addEventListener('click', async () => {
     scenarios.push(await verify('上方插入', '新增段落\n\n' + editor.text));
     // 锚点上方整段删除，锚点行内容不变时屏幕位置仍须保持。
     scenarios.push(await verify('上方删除', editor.text.slice(editor.text.indexOf('第 5 项说明'))));
+    scenarios.push(await verify('上方多处修改', editor.text.replace('任务 010', '修改后的任务 010').replace('任务 020', '修改后的任务 020')));
+    // 连续接收不能留下上一轮延迟校正，干扰下一轮阅读位置。
+    for (let index = 0; index < 3; index++) scenarios.push(await verify(`连续接收 ${index + 1}`, `第 ${index} 轮新增\n\n` + editor.text));
+    editor.toggleSource(); await settled();
+    scenarios.push(await verify('源码上方插入', '源码新增\n\n' + editor.text));
     const result = { pass: scenarios.every(scenario => scenario.pass), scenarios };
     output.textContent = JSON.stringify(result, null, 2);
     status.textContent = result.pass ? '通过' : '存在偏差';

@@ -227,7 +227,7 @@ export class EditorController {
    */
   setSynchronizedText(text: string): void {
     if (this.view.composing) throw new Error('SYNC_BUSY: 正在组合输入');
-    const ui = this.getUIState(); const viewport = captureSourcePosition(this.view);
+    const ui = this.getUIState();
     const parts = diffChars(this.text, text, { timeout: 100, maxEditLength: 10000 });
     const edits: { from: number; to: number; insert: string }[] = [];
     let offset = 0;
@@ -238,7 +238,6 @@ export class EditorController {
     }
     const changes = this.state.changes(parts ? edits : [{ from: 0, to: this.text.length, insert: text }]);
     const map = (position: number) => changes.mapPos(Math.min(position, this.text.length), 1);
-    const mapped = { ...viewport, cursor: map(viewport.cursor), anchor: map(viewport.anchor) };
     ui.cursor = map(ui.cursor);
     if (ui.sourceReturn) ui.sourceReturn = { ...ui.sourceReturn, cursor: map(ui.sourceReturn.cursor), anchor: map(ui.sourceReturn.anchor) };
     this.contextMenu?.invalidate();
@@ -247,17 +246,13 @@ export class EditorController {
     // 接收内容不进入撤销历史，用户无法把已确认的对端版本整体回滚；源码范围必须显式重算，否则会沿用旧文件的隐藏坐标。
     this.view.dispatch({
       changes,
-      // 同一个事务里保持锚点行的屏幕位置：校正必须和正文更新在同一帧完成，
-      // 否则未校正的偏移会先被绘制，再被后续测量拉回，形成一次可见跳动。
-      // 该定位只用当时的高度估算，删除大段上文时仍会残留一行以内的偏差，
-      // 因此后面继续用 restoreSourcePosition 按真实排版收敛到亚像素。
-      effects: [refreshSourceScope.of(null), EditorView.scrollIntoView(mapped.anchor, { y: 'start', yMargin: mapped.offset })],
+      // 快照以行块而非光标矩形记录像素偏移，并随正文差异映射到新坐标。
+      // 由 CodeMirror 在同轮布局测量中恢复，不能再追加异步 scrollTop 校正：
+      // 光标矩形与行块高度存在差异，分帧校正会让正文先偏移几个像素再被拉回。
+      effects: [refreshSourceScope.of(null), this.view.scrollSnapshot().map(changes)!],
       annotations: Transaction.addToHistory.of(false),
     });
     this.applyUIState(ui, false);
-    // applyUIState 会自增 positionGeneration 取消此前的滚动恢复，恢复令牌必须在它之后取得，否则本次恢复会被立即作废。
-    const generation = ++this.positionGeneration;
-    restoreSourcePosition(this.view, mapped, () => this.positionGeneration === generation);
   }
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
