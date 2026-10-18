@@ -19,7 +19,7 @@ const click = name => page.evaluate(`(()=>{const button=[...document.querySelect
 const initial = await invoke('sync_status'); assert.equal(initial.paired, false, '验收前应解除已有测试配对');
 await writeFile(path, '# 同步验收\n\n电脑段落。\n\n手机段落。\n\n- [ ] 两端任务\n\n  任务说明。\n\n- [ ] 其他任务\n');
 await wait(`document.querySelector('.cm-content')?.textContent.includes('电脑段落。')`);
-if (!await page.evaluate(`!!document.querySelector('.sync-panel')`)) await click('未配对');
+if (!await page.evaluate(`!!document.querySelector('.sync-panel')`)) { await page.evaluate(`document.querySelector('button[aria-label="更多操作"]').click()`); await click('设备同步'); }
 const offer = await invoke('sync_offer');
 const id = randomBytes(32).toString('hex'), secret = randomBytes(32).toString('hex');
 function exchange(payload) {

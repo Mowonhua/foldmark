@@ -43,6 +43,8 @@
   let syncOpen = $state(false);
   let syncError = $state('');
   const syncLabel = $derived.by(() => { void syncRevision; return syncController?.status ?? '设备同步'; });
+  // 未配对时底部栏不呈现同步状态；更新提示存活时间短且优先级更高，占用同一位置替换同步状态，不并排。
+  const syncNotice = $derived.by(() => { void syncRevision; return native && syncController?.connection.paired === true; });
   const TOAST_DURATION_MS = 3000;
   // 灵感簿使用伪项目身份复用会话与搜索机制；不写入 projects 列表，避免污染项目语义与聚合视图。
   const INSPIRATION_ID = 'inspiration';
@@ -1374,8 +1376,8 @@
           <button class="outline-button" class:outline-active={outlineVisible} aria-label={outlineVisible ? $t("返回导航") : $t("大纲目录")} title={outlineVisible ? $t("返回导航") : $t("大纲目录")} aria-pressed={outlineVisible} disabled={screen !== 'project' || !active} onclick={toggleOutlineView}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01M8 5.5h8.5M8 10h8.5M8 14.5h8.5"/></svg></button>
           {#if !mobile}<button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>{/if}
         </div>
-        {#if native}<button class="sync-status" onclick={() => syncOpen = true}>{syncLabel}</button>{/if}
-        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? `${$t("正在下载更新…")}${updateDownloadSize}` : $t("发现新版本")}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
+        {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? `${$t("正在下载更新…")}${updateDownloadSize}` : $t("发现新版本")}</button>
+        {:else if syncNotice}<button class="sync-status" onclick={() => syncOpen = true}>{syncLabel}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
       </footer>
     </div>
   </main>
