@@ -15,6 +15,29 @@ export interface SyncDocument {
   /** 双方已确认的历史截点保留原哈希与父标识，允许截点之前的正文从活动历史移出。 */
   checkpoints?: RevisionId[];
 }
+/** 行级补丁以字符偏移定位；应用时必须按 from 升序不重叠，否则视为损坏数据。 */
+export interface RevisionPatch { from: number; to: number; insert: string }
+/**
+ * 线上传输版本与持久化格式分离：正文以全文或相对 base 版本的补丁传输，接收方重建后按哈希校验。
+ * base 与 patches 必须同时存在；缺省 base 时 text 为完整正文。
+ */
+export interface WireRevision {
+  id: RevisionId;
+  parents: RevisionId[];
+  name: string;
+  archived: boolean;
+  text: string;
+  base?: RevisionId;
+  patches?: RevisionPatch[];
+}
+/** 线上文档只携带对端缺失的版本；revisions 为空表示 head 无变化。 */
+export interface WireDocument {
+  id: DocumentId;
+  kind: 'project' | 'inspiration';
+  head: RevisionId;
+  revisions: Record<RevisionId, WireRevision>;
+  checkpoints?: RevisionId[];
+}
 /** 本地绑定只存于本机。暂停不会删除文档或向对方传播删除。 */
 export interface SyncBinding {
   localId: string;
@@ -29,12 +52,17 @@ export interface SyncRecord {
   conflict?: { local: RevisionId; remote: RevisionId; reason: string };
   pending?: PendingApply;
   error?: string;
+  /** 对端最近报告的 head；其祖先闭包视为对端已持有，增量编码以此为下界，跟踪偏差只会多传不会传错。 */
+  peerKnown?: RevisionId;
 }
 /** 用户所选文档的完整清单；revision 是本机持久化操作序号，不是设备时间。 */
 export interface SyncSelection { revision: number; ids: DocumentId[] }
 export interface SyncState { version: 1; pairing?: string; records: Record<DocumentId, SyncRecord>; selectionRevision?: number; remoteSelection?: SyncSelection }
-/** 协议 2 支持撤回待接收文档；selection 缺省仅供本机旧版本记录校验，网络接收必须包含。 */
-export interface SyncEnvelope { protocol: 2; documents: SyncDocument[]; selection?: SyncSelection }
+/**
+ * 协议 3 为增量传输：版本按 peerKnown 差集编码，正文可缩为行级补丁；needsFull 请求对端下轮回复全量。
+ * selection 缺省仅供本机旧版本记录校验，网络接收必须包含。
+ */
+export interface SyncEnvelope { protocol: 3; documents: WireDocument[]; selection?: SyncSelection; needsFull?: boolean }
 /** 文档写入须复用保存协调器；编辑中或有受保护草稿时允许推迟，禁止覆盖。 */
 export interface SyncDocumentPort {
   read(localId: string): Promise<DocumentContent>;

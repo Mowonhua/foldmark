@@ -32,6 +32,22 @@ describe('同步文档端口', () => {
     await expect(f.port.read('local')).rejects.toThrow('SYNC_MISSING');
     expect(f.disk().text).toBe('正文'); expect(f.files.write).not.toHaveBeenCalled();
   });
+  it('打开项目未修改时按基线指纹跳过重复读盘', async () => {
+    const f = fixture();
+    const saver = { hasLocalChanges: false, hasProtectedRecovery: false, diskSnapshot: { path: 'a.md', text: '正文', revision: '1' }, checkExternal: vi.fn(async () => {}), flush: vi.fn(async () => { saver.hasLocalChanges = false; return true; }) };
+    f.options.session = () => ({ saver }) as never;
+    expect((await f.port.read('local')).text).toBe('正文');
+    expect(f.files.read).toHaveBeenCalledTimes(1);
+    expect((await f.port.read('local')).text).toBe('正文');
+    expect(f.files.read).toHaveBeenCalledTimes(1); expect(saver.checkExternal).toHaveBeenCalledTimes(1);
+    saver.diskSnapshot = { path: 'a.md', text: '新正文', revision: '2' };
+    vi.mocked(f.files.read).mockImplementation(async () => ({ path: 'a.md', text: '新正文', revision: '2' }));
+    expect((await f.port.read('local')).text).toBe('新正文');
+    expect(f.files.read).toHaveBeenCalledTimes(2);
+    saver.hasLocalChanges = true;
+    expect((await f.port.read('local')).text).toBe('新正文');
+    expect(f.files.read).toHaveBeenCalledTimes(3);
+  });
   it('取消接收不创建项目或文件', async () => {
     const f = fixture(); expect(await f.port.accept(crypto.randomUUID(), 'project', { text: '远端', name: '新项目', archived: false })).toBeNull();
     expect(f.config.projects).toHaveLength(1); expect(f.files.write).not.toHaveBeenCalled();

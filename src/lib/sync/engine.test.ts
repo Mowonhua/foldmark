@@ -128,7 +128,7 @@ describe('同步持久化', () => {
     content.delete('missing'); content.set('healthy', { text: '正文', name: '新名称', archived: true });
     const offer = await engine.offer();
     expect(offer.documents.map(document => document.id)).toEqual([healthy]);
-    expect(offer.documents[0].revisions[offer.documents[0].head].content).toEqual(content.get('healthy'));
+    expect(offer.documents[0].revisions[offer.documents[0].head]).toMatchObject(content.get('healthy')!);
     expect(engine.snapshot().records[missing].error).toContain('missing');
   });
   it('本机正文超过上限后保留可加载的旧版本，缩小正文后继续同步', async () => {
@@ -136,6 +136,39 @@ describe('同步持久化', () => {
     a.edit('大'.repeat(400000)); expect((await engine.offer()).documents).toHaveLength(0);
     expect(engine.snapshot().records[id].error).toContain('SYNC_LIMIT');
     engine = a.engine(); await engine.load(); a.edit('缩小后的正文');
-    const next = await engine.offer(); expect(next.documents[0].revisions[next.documents[0].head].content.text).toBe('缩小后的正文');
+    const next = await engine.offer(); expect(next.documents[0].revisions[next.documents[0].head].text).toBe('缩小后的正文');
+  });
+  it('收敛后交换不传输正文，新修改只携带补丁', async () => {
+    const long = `甲\n\n${'长'.repeat(2000)}\n\n乙\n`;
+    const a = device(long), b = device(long); const left = a.engine(), right = b.engine();
+    await left.load(); await right.load(); const id = await left.enable('local', 'project');
+    await right.receive(await left.offer()); await right.accept(id);
+    await left.receive(await right.offer());
+    const idle = await left.offer();
+    expect(Object.keys(idle.documents[0].revisions)).toHaveLength(0);
+    await right.receive(idle); await left.receive(await right.offer());
+    a.edit(`甲改\n\n${'长'.repeat(2000)}\n\n乙\n`);
+    const delta = await left.offer();
+    const wire = delta.documents[0].revisions[delta.documents[0].head];
+    expect(wire.base).toBeDefined(); expect(wire.text).toBe('');
+    expect(JSON.stringify(delta).length).toBeLessThan(long.length);
+    await right.receive(delta);
+    expect(b.disk().text).toBe(`甲改\n\n${'长'.repeat(2000)}\n\n乙\n`);
+  });
+  it('对端状态重建后拒绝增量并以全量恢复', async () => {
+    const a = device('首段\n\n尾段\n'), b = device('首段\n\n尾段\n'); const left = a.engine(), right = b.engine();
+    await left.load(); await right.load(); const id = await left.enable('local', 'project');
+    await right.receive(await left.offer()); await right.accept(id); await left.receive(await right.offer());
+    const rebuilt = device().engine(); await rebuilt.load();
+    await expect(rebuilt.receive(await left.offer())).rejects.toThrow('SYNC_BASE_MISSING');
+    expect(rebuilt.snapshot().records[id]).toBeUndefined();
+    const request = await rebuilt.offer();
+    expect(request.needsFull).toBe(true);
+    await left.receive(request);
+    const full = await left.offer();
+    expect(full.documents[0].revisions[full.documents[0].head].text).toContain('首段');
+    await rebuilt.receive(full);
+    expect(rebuilt.snapshot().records[id].document.head).toBe(full.documents[0].head);
+    expect((await rebuilt.offer()).needsFull).toBeUndefined();
   });
 });

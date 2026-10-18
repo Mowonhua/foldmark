@@ -44,6 +44,9 @@ export class SaveCoordinator {
   /** 用于失效路径重定位；只读比较唯一编辑状态与已加载磁盘基线。 */
   get hasLocalChanges(): boolean { return this.options.getText() !== this.baseline.text; }
 
+  /** 无本地修改时正文即该基线；revision 指纹供同步跳过重复读盘，写入路径不得使用。 */
+  get diskSnapshot(): FileSnapshot { return this.baseline; }
+
   /** 既有恢复草稿仍需保留时禁止自动整理正文；用户主动编辑和明确恢复仍由正常保存流程处理。 */
   get hasProtectedRecovery(): boolean { return this.preserveRecovery; }
 

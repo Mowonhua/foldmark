@@ -18,7 +18,10 @@ export interface SyncDocumentOptions {
   receivePath(name: string): Promise<string | null>;
 }
 export class SessionSyncDocuments implements SyncDocumentPort {
+  /** 无本地修改时按磁盘基线指纹缓存正文；打开文档的监听器保持基线新鲜，写入路径不经过缓存。 */
+  private cached = new Map<string, { token: string; content: DocumentContent }>();
   constructor(private readonly options: SyncDocumentOptions) {}
+  private token(revision: string, project: Project): string { return `${revision}\n${project.name}\n${project.archived ?? false}`; }
   private project(id: string): Project {
     const config = this.options.config();
     const project = id === 'inspiration' && config.inspiration ? { id, name: '灵感', path: config.inspiration.path } : config.projects.find(project => project.id === id);
@@ -29,6 +32,11 @@ export class SessionSyncDocuments implements SyncDocumentPort {
     this.options.capture();
     const project = this.project(id); const session = this.options.session(id);
     if (this.options.composing(id) || session?.saver.hasProtectedRecovery) throw new Error('SYNC_BUSY: 正在输入或有待处理草稿');
+    // 每轮同步多次读取同一文档；基线指纹与项目资料未变时跳过整轮读盘与草稿检查。
+    if (session && !session.saver.hasLocalChanges) {
+      const hit = this.cached.get(id);
+      if (hit?.token === this.token(session.saver.diskSnapshot.revision, project)) return hit.content;
+    }
     if (session) {
       await session.saver.checkExternal();
       if (!await session.saver.flush()) throw new Error('SYNC_SAVE: 请先处理本机保存失败或冲突');
@@ -37,7 +45,9 @@ export class SessionSyncDocuments implements SyncDocumentPort {
     const draft = await this.options.files.loadRecovery(project.path);
     if (draft && draft.text !== snapshot.text || session?.saver.hasLocalChanges || this.options.composing(id)) throw new Error('SYNC_BUSY: 本机有尚未保存的输入或草稿');
     const current = this.project(id);
-    return { text: snapshot.text, name: current.name, archived: current.archived ?? false };
+    const content = { text: snapshot.text, name: current.name, archived: current.archived ?? false };
+    if (session) this.cached.set(id, { token: this.token(snapshot.revision, current), content });
+    return content;
   }
   async apply(id: string, expected: DocumentContent, next: DocumentContent): Promise<void> {
     if (!sameContent(await this.read(id), expected)) throw new Error('SYNC_CHANGED: 本机内容或项目资料已变化');

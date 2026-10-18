@@ -11,7 +11,9 @@ export class SyncController {
   private dirty = false;
   private editGeneration = 0;
   private pendingOffer?: PairingOffer;
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: ReturnType<typeof setTimeout>;
+  private dirtyTimer?: ReturnType<typeof setTimeout>;
+  private idleRounds = 0;
   private stopListener?: () => void;
   private stopped = false;
   constructor(readonly engine: SyncEngine, readonly transport: SyncTransport, readonly desktop: boolean, private readonly changed: () => void) {}
@@ -32,9 +34,16 @@ export class SyncController {
       this.changed();
     });
     if (this.stopped) { this.stopListener(); return; }
-    this.timer = setInterval(() => { void this.sync(); }, 5000);
     document.addEventListener('visibilitychange', this.visibility);
     await this.sync();
+  }
+  /** 有未发送输入时快速跟进；空闲、离线或出错时按轮次退避，降低前台轮询与后台耗电。 */
+  private schedule(): void {
+    if (this.stopped) return;
+    clearTimeout(this.timer);
+    const active = (this.desktop || !document.hidden) && !this.error && this.dirty;
+    this.idleRounds = active ? 0 : this.idleRounds + 1;
+    this.timer = setTimeout(() => { void this.sync(); }, active ? 2000 : Math.min(15000, 5000 * 1.5 ** this.idleRounds));
   }
   private visibility = (): void => { if (!document.hidden) void this.sync(); };
   private summary(): string {
@@ -62,8 +71,13 @@ export class SyncController {
         // 先确认对端可达再固化发送版本，离线输入不应每五秒产生一份完整历史。
         await this.transport.probe();
         const generation = this.editGeneration;
-        const offer = await this.engine.offer();
-        const reply = await this.transport.exchange(offer);
+        let reply: SyncEnvelope;
+        try { reply = await this.transport.exchange(await this.engine.offer()); }
+        catch (error) {
+          if (!errorMessage(error).includes('SYNC_BASE_MISSING')) throw error;
+          // 对端缺少增量基线（如应用数据重建）时用全量版本重试一次。
+          reply = await this.transport.exchange(await this.engine.offer(true));
+        }
         if (this.stopped) return;
         const current = await this.transport.status();
         if (current.session !== this.connection.session) return;
@@ -73,16 +87,20 @@ export class SyncController {
       }
       this.status = this.summary(); this.error = '';
     } catch (error) { this.error = errorMessage(error); this.status = '等待同步'; }
-    finally { this.busy = false; this.changed(); }
+    finally { this.busy = false; this.schedule(); this.changed(); }
   }
   markDirty(localId?: string): void {
     if (!this.connection.paired || !Object.values(this.engine.snapshot().records).some(record => record.binding?.enabled && record.binding.localId === localId)) return;
-    this.editGeneration++; this.dirty = true; this.status = '等待同步'; this.changed();
+    this.editGeneration++; this.dirty = true; this.status = '等待同步';
+    // 输入后稍作合并再同步，避免连续按键每次都发起交换；增量传输下本轮只携带新版本。
+    clearTimeout(this.dirtyTimer);
+    this.dirtyTimer = setTimeout(() => { this.dirtyTimer = undefined; void this.sync(); }, 400);
+    this.changed();
   }
   async unpair(): Promise<void> {
     this.pendingOffer = undefined;
     await this.transport.unpair(); await this.engine.reset();
     this.connection = await this.transport.status(); this.status = '未配对'; this.changed();
   }
-  stop(): void { this.stopped = true; clearInterval(this.timer); this.stopListener?.(); document.removeEventListener('visibilitychange', this.visibility); }
+  stop(): void { this.stopped = true; clearTimeout(this.timer); clearTimeout(this.dirtyTimer); this.stopListener?.(); document.removeEventListener('visibilitychange', this.visibility); }
 }

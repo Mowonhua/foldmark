@@ -2,13 +2,17 @@
  * 文件职责：串行协调文档版本、合并和可恢复的条件写入。
  * 定义范围：同步数据持久化；连接与编辑器通过独立端口注入。
  */
-import type { DocumentContent, SyncDocument, SyncDocumentPort, SyncEnvelope, SyncRecord, SyncState, SyncStore } from './contracts';
-import { ancestors, commonAncestor, mergeContent, revision, sameContent, validateEnvelope, validateSelection } from './merge';
+import type { DocumentContent, RevisionId, SyncDocument, SyncDocumentPort, SyncEnvelope, SyncRecord, SyncRevision, SyncState, SyncStore, WireDocument } from './contracts';
+import { ancestors, commonAncestor, decodeRevision, encodeDocument, mergeContent, revision, sameContent, validateEnvelope, validateSelection, validateStoredDocument } from './merge';
 const INSPIRATION_DOCUMENT = '00000000-0000-4000-8000-000000000001';
 export class SyncEngine {
   private state: SyncState = { version: 1, records: {} };
   private queue: Promise<unknown> = Promise.resolve();
   private loaded = false;
+  /** 本机无法解码对端增量时置位，下轮 offer 携带 needsFull 请对端全量重发；成功接收后清除。 */
+  private needsFull = false;
+  /** 对端请求全量时置位，由下一次 offer 消费；内存标记丢失无碍，对端解码失败会再次请求。 */
+  private peerRequestsFull = false;
   constructor(private readonly documents: SyncDocumentPort, private readonly store: SyncStore, private readonly changed: () => void = () => {}) {}
   snapshot(): SyncState { return structuredClone(this.state); }
   private run<T>(operation: () => Promise<T>, loading = false): Promise<T> {
@@ -29,8 +33,9 @@ export class SyncEngine {
       if (saved.remoteSelection) saved.remoteSelection = validateSelection(saved.remoteSelection);
       // 本地历史可能超过单次网络上限，因此逐文档校验；损坏时不能回退为空状态。
       for (const [id, entry] of Object.entries(saved.records)) {
-        await validateEnvelope({ protocol: 2, documents: [entry.document] });
+        await validateStoredDocument(entry.document);
         if (id !== entry.document.id || entry.binding && (typeof entry.binding.localId !== 'string' || typeof entry.binding.enabled !== 'boolean')) throw new Error('SYNC_STATE: 文档绑定无效');
+        if (entry.peerKnown !== undefined && (typeof entry.peerKnown !== 'string' || !/^[a-f0-9]{64}$/.test(entry.peerKnown))) throw new Error('SYNC_STATE: 对端版本记录无效');
         for (const head of [entry.conflict?.local, entry.conflict?.remote, entry.pending?.target]) if (head && !Object.hasOwn(entry.document.revisions, head)) throw new Error('SYNC_STATE: 恢复版本缺失');
       }
       this.state = saved;
@@ -101,60 +106,113 @@ export class SyncEngine {
     }
     await this.save();
   }
-  offer(): Promise<SyncEnvelope> {
+  /** 对端已确认持有的版本及其祖先与历史截点无需重传；跟踪偏差的代价只是多传，不会影响正确性。 */
+  private knownRevisions(record: SyncRecord): Set<RevisionId> {
+    const known = new Set<RevisionId>(record.document.checkpoints ?? []);
+    if (record.peerKnown) for (const id of ancestors(record.document, record.peerKnown)) known.add(id);
+    return known;
+  }
+  /** full 为 true 或对端请求时忽略增量跟踪发送全部活动版本，用于对端状态不完整后的恢复。 */
+  offer(full = false): Promise<SyncEnvelope> {
     return this.run(async () => {
       await this.captureAll();
+      const serveFull = full || this.peerRequestsFull;
+      this.peerRequestsFull = false;
       const selected = Object.values(this.state.records).filter(record => record.binding?.enabled);
       // 暂时无法读取的文档仍在清单中；文件错误不能被误解为用户取消选择。
-      const envelope: SyncEnvelope = { protocol: 2, selection: { revision: this.state.selectionRevision ?? 0, ids: selected.map(record => record.document.id).sort() }, documents: selected.filter(record => !record.error).map(record => structuredClone(record.document)) };
+      const envelope: SyncEnvelope = {
+        protocol: 3,
+        selection: { revision: this.state.selectionRevision ?? 0, ids: selected.map(record => record.document.id).sort() },
+        documents: selected.filter(record => !record.error).map(record => encodeDocument(record.document, serveFull ? new Set() : this.knownRevisions(record))),
+        ...(this.needsFull ? { needsFull: true } : {}),
+      };
       return validateEnvelope(envelope);
     });
+  }
+  /**
+   * 解码文档中的全部新版本；已在本机记录中的版本直接复用，跳过重复哈希。
+   * 返回前保证 head 可解析，任一基线缺失都抛出 SYNC_BASE_MISSING 且不改动任何记录。
+   */
+  private async decodeDocument(remote: WireDocument): Promise<SyncRevision[]> {
+    const resolved: Record<RevisionId, SyncRevision> = { ...(this.state.records[remote.id]?.document.revisions ?? {}) };
+    const pending = new Map(Object.entries(remote.revisions));
+    const fresh: SyncRevision[] = [];
+    let progress = true;
+    while (progress && pending.size) {
+      progress = false;
+      for (const [id, wire] of pending) {
+        if (resolved[id]) { pending.delete(id); progress = true; continue; }
+        if (wire.base !== undefined && !resolved[wire.base]) continue;
+        const entry = await decodeRevision(wire, base => resolved[base]);
+        resolved[id] = entry; fresh.push(entry); pending.delete(id); progress = true;
+      }
+    }
+    if (pending.size || !resolved[remote.head]) throw new Error('SYNC_BASE_MISSING: 对端引用了本机没有的版本，需要全量同步');
+    return fresh;
   }
   receive(value: unknown): Promise<void> {
     return this.run(async () => {
       const incoming = await validateEnvelope(value);
       if (!incoming.selection) throw new Error('SYNC_PROTOCOL: 对端缺少文档选择清单，请更新两端应用');
       const selected = validateSelection(incoming.selection), previous = this.state.remoteSelection;
+      // 全量请求与选择序号无关：对端状态重建后序号回退，不能随旧清单一起被丢弃。
+      if (incoming.needsFull) this.peerRequestsFull = true;
       if (previous && selected.revision < previous.revision) return;
       if (previous && selected.revision === previous.revision && JSON.stringify(selected.ids) !== JSON.stringify(previous.ids)) throw new Error('SYNC_INVALID: 相同选择序号对应不同文档');
       // 仅撤回尚未接收的副本。已关联文件、正在处理的本机正文都不传播删除。
       for (const [id, entry] of Object.entries(this.state.records)) if (!entry.binding && !selected.ids.includes(id)) delete this.state.records[id];
       this.state.remoteSelection = selected;
       await this.captureAll();
-      for (const remote of incoming.documents) {
-        let record = this.state.records[remote.id];
-        if (!record) { this.state.records[remote.id] = { document: structuredClone(remote) }; continue; }
-        if (record.binding && !record.binding.enabled) continue;
-        if (record.document.kind !== remote.kind) throw new Error('SYNC_INVALID: 文档类型不一致');
-        // 相同版本 ID 已校验内容哈希，重传只扩充已知历史，不创建新编辑。
-        record.document.revisions = { ...record.document.revisions, ...remote.revisions };
-        record.document.checkpoints = [...new Set([...(record.document.checkpoints ?? []), ...(remote.checkpoints ?? [])])];
-        if (!record.binding) { record.document.head = remote.head; continue; }
-        if (record.error || record.pending) continue;
-        try {
-          const doc = record.document;
-          if (doc.head === remote.head) {
-            record.binding.acknowledged = doc.head;
-            // 只在对端明确持有相同版本后压缩活动历史。冲突和写入日志中的版本不得清除。
-            // 旧备份重连若落在截点之前则转为人工合并，绝不能凭时间选择覆盖。
-            if (!record.conflict && !record.pending) {
-              doc.revisions = { [doc.head]: doc.revisions[doc.head] }; doc.checkpoints = [doc.head];
-            }
-            continue;
-          }
-          if (ancestors(doc, doc.head).has(remote.head)) continue;
-          let target = doc.revisions[remote.head];
-          if (!ancestors(doc, remote.head).has(doc.head)) {
-            const base = commonAncestor(doc, doc.head, remote.head);
-            const merged = base && mergeContent(base.content, doc.revisions[doc.head].content, target.content);
-            if (!merged) { record.conflict = { local: doc.head, remote: remote.head, reason: base ? '两端修改存在重叠或任务结构变化' : '没有唯一共同版本，请合并双方内容' }; continue; }
-            target = await revision(merged, [doc.head, remote.head]); doc.revisions[target.id] = target;
-          }
-          await this.apply(record, target.id);
-        } catch (error) { record.error = String(error); }
+      try {
+        // 先解码全部文档：任一文档缺基线都不应用部分修改，并请求对端下轮全量重发。
+        const decoded = new Map<string, SyncRevision[]>();
+        for (const remote of incoming.documents) decoded.set(remote.id, await this.decodeDocument(remote));
+        for (const remote of incoming.documents) await this.merge(remote, decoded.get(remote.id)!);
+        this.needsFull = false;
+        await this.save();
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('SYNC_BASE_MISSING')) this.needsFull = true;
+        throw error;
       }
-      await this.save();
     });
+  }
+  private async merge(remote: WireDocument, fresh: SyncRevision[]): Promise<void> {
+    const record = this.state.records[remote.id];
+    if (!record) {
+      const revisions: Record<RevisionId, SyncRevision> = {};
+      for (const entry of fresh) revisions[entry.id] = entry;
+      this.state.records[remote.id] = { document: { id: remote.id, kind: remote.kind, head: remote.head, revisions, ...(remote.checkpoints?.length ? { checkpoints: [...remote.checkpoints] } : {}) }, peerKnown: remote.head };
+      return;
+    }
+    if (record.binding && !record.binding.enabled) return;
+    if (record.document.kind !== remote.kind) throw new Error('SYNC_INVALID: 文档类型不一致');
+    // 相同版本 ID 已校验内容哈希，重传只扩充已知历史，不创建新编辑。
+    for (const entry of fresh) record.document.revisions[entry.id] = entry;
+    record.document.checkpoints = [...new Set([...(record.document.checkpoints ?? []), ...(remote.checkpoints ?? [])])];
+    record.peerKnown = remote.head;
+    if (!record.binding) { record.document.head = remote.head; return; }
+    if (record.error || record.pending) return;
+    try {
+      const doc = record.document;
+      if (doc.head === remote.head) {
+        record.binding.acknowledged = doc.head;
+        // 只在对端明确持有相同版本后压缩活动历史。冲突和写入日志中的版本不得清除。
+        // 旧备份重连若落在截点之前则转为人工合并，绝不能凭时间选择覆盖。
+        if (!record.conflict && !record.pending) {
+          doc.revisions = { [doc.head]: doc.revisions[doc.head] }; doc.checkpoints = [doc.head];
+        }
+        return;
+      }
+      if (ancestors(doc, doc.head).has(remote.head)) return;
+      let target = doc.revisions[remote.head];
+      if (!ancestors(doc, remote.head).has(doc.head)) {
+        const base = commonAncestor(doc, doc.head, remote.head);
+        const merged = base && mergeContent(base.content, doc.revisions[doc.head].content, target.content);
+        if (!merged) { record.conflict = { local: doc.head, remote: remote.head, reason: base ? '两端修改存在重叠或任务结构变化' : '没有唯一共同版本，请合并双方内容' }; return; }
+        target = await revision(merged, [doc.head, remote.head]); doc.revisions[target.id] = target;
+      }
+      await this.apply(record, target.id);
+    } catch (error) { record.error = String(error); }
   }
   private async apply(record: SyncRecord, target: string): Promise<void> {
     const expected = record.document.revisions[record.document.head].content;

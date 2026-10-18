@@ -25,12 +25,14 @@ try {
   assert(!record.document.revisions[record.document.head].content.text.includes(marker), '必须使用新的验收标记');
   const config = await invoke('load_config'); const project = config.projects.find(project => project.id === record.binding.localId);
   assert(project.path.replaceAll('\\', '/').includes('/foldmark/test-results/'), '只能验证专用文档');
-  // 原生调用入口不可改写。使用仅限验收实例的调试断点停在确认调用前，此时真实控制器已完成可靠保存。
+  // 原生调用入口不可改写。协议 3 的确认回包不再携带正文，改为停在状态保存调用上：
+  // 第一次命中是写入日志保存（正文尚未落盘），第二次命中是正文落盘后的最终保存，此时确认尚未发出。
   await page.call('Debugger.enable');
+  await page.evaluate('window.__saveHits = 0');
   const fn = await page.call('Runtime.evaluate', { expression: 'window.__TAURI_INTERNALS__.invoke' });
   breakpoint = (await page.call('Debugger.setBreakpointOnFunctionCall', {
     objectId: fn.result.objectId,
-    condition: `cmd === 'sync_respond' && payload?.envelope?.documents?.some(doc => doc.id === ${JSON.stringify(documentId)} && doc.revisions[doc.head].content.text.includes(${JSON.stringify(marker)}))`,
+    condition: `cmd === 'sync_save_state' && JSON.stringify(payload).includes(${JSON.stringify(marker)}) && (window.__saveHits = (window.__saveHits ?? 0) + 1) >= 2`,
   })).breakpointId;
   console.log(`等待手机在已同步文档中输入 ${marker}`);
   await wait(async () => paused, 180000);

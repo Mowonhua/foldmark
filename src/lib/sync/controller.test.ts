@@ -50,3 +50,42 @@ it('传输等待期间的新输入不能被旧版本确认清除', async () => {
   f.transport.exchange = async value => value;
   await f.controller.sync(); expect(f.controller.status).toBe('已同步');
 });
+it('输入后防抖自动同步，不等待轮询', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
+    const exchange = vi.spyOn(f.transport, 'exchange'); exchange.mockClear();
+    f.controller.markDirty('local');
+    await vi.advanceTimersByTimeAsync(399); expect(exchange).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); expect(exchange).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000); expect(exchange).toHaveBeenCalledTimes(1);
+    f.controller.markDirty('local'); f.controller.markDirty('local');
+    await vi.advanceTimersByTimeAsync(400); expect(exchange).toHaveBeenCalledTimes(2);
+  } finally { vi.useRealTimers(); }
+});
+it('空闲轮询逐步退避，待发送输入时快速跟进', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
+    const exchange = vi.spyOn(f.transport, 'exchange'); exchange.mockClear();
+    await vi.advanceTimersByTimeAsync(7499); expect(exchange).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); expect(exchange).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(11249); expect(exchange).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1); expect(exchange).toHaveBeenCalledTimes(2);
+    // 传输中产生的新输入保持 dirty，下一轮由防抖在两秒内跟上。
+    exchange.mockImplementation(async value => { f.controller.markDirty('local'); return value; });
+    await vi.advanceTimersByTimeAsync(14999); expect(exchange).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1); expect(exchange).toHaveBeenCalledTimes(3);
+    exchange.mockImplementation(async value => value);
+    await vi.advanceTimersByTimeAsync(399); expect(exchange).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1); expect(exchange).toHaveBeenCalledTimes(4);
+  } finally { vi.useRealTimers(); }
+});
+it('对端缺少增量基线时用全量版本重试一次', async () => {
+  const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
+  const offer = vi.spyOn(f.engine, 'offer');
+  let failed = false;
+  f.transport.exchange = async value => { if (!failed) { failed = true; throw new Error('SYNC_BASE_MISSING: 对端引用了本机没有的版本'); } return value; };
+  await f.controller.sync();
+  expect(offer.mock.calls).toEqual([[], [true]]); expect(f.controller.status).toBe('已同步');
+});

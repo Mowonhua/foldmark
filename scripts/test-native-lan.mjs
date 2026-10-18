@@ -38,7 +38,7 @@ function exchange(payload) {
   });
 }
 try {
-  await assert.rejects(exchange({ action: 'exchange', envelope: { protocol: 2, selection: { revision: 0, ids: [] }, documents: [] } }), /SYNC_AUTH/);
+  await assert.rejects(exchange({ action: 'exchange', envelope: { protocol: 3, selection: { revision: 0, ids: [] }, documents: [] } }), /SYNC_AUTH/);
   assert.equal(await exchange({ action: 'pair', token: offer.token }), false);
   await wait(`!![...document.querySelectorAll('button')].find(button=>button.textContent==='允许连接')`);
   await click('允许连接');
@@ -46,33 +46,34 @@ try {
   assert.equal(await exchange({ action: 'pair', token: offer.token }), true);
   await page.evaluate(`document.querySelector('.sync-documents input').click()`);
   await wait(`(async()=>{const state=await window.__TAURI_INTERNALS__.invoke('sync_load_state');return state&&Object.values(state.records).some(record=>record.binding?.enabled&&record.document.kind==='project');})()`);
-  const response = await exchange({ action: 'exchange', envelope: { protocol: 2, selection: { revision: 0, ids: [] }, documents: [] } });
-  assert.equal(response.protocol, 2); assert.equal(response.documents.length, 1);
-  const document = response.documents[0]; assert(document.revisions[document.head].content.text.includes('电脑段落'));
+  const response = await exchange({ action: 'exchange', envelope: { protocol: 3, selection: { revision: 0, ids: [] }, documents: [] } });
+  assert.equal(response.protocol, 3); assert.equal(response.documents.length, 1);
+  const document = response.documents[0]; assert(document.revisions[document.head].text.includes('电脑段落'));
   assert(!JSON.stringify(response).includes('D:/Workspace'), '网络消息不能泄露设备路径');
   await exchange({ action: 'exchange', envelope: response });
   await wait(`document.querySelector('.sync-device [role=status]')?.textContent==='已同步'`);
+  // 线上版本与电脑持久化格式不同：正文直接为 text 字段，内容哈希键序固定为 text、name、archived。
   const changed = (document, text) => {
-    const parents = [document.head]; const base = document.revisions[document.head].content;
+    const parents = [document.head]; const base = document.revisions[document.head];
     const content = { text, name: base.name, archived: base.archived };
     const id = createHash('sha256').update(JSON.stringify([parents, content])).digest('hex');
-    return { ...document, head: id, revisions: { ...document.revisions, [id]: { id, parents, content } } };
+    return { ...document, head: id, revisions: { ...document.revisions, [id]: { id, parents, name: content.name, archived: content.archived, text } } };
   };
-  const fromPhone = changed(document, document.revisions[document.head].content.text.replace('手机段落。', '手机段落已更新。'));
-  let latest = await exchange({ action: 'exchange', envelope: { protocol: 2, selection: { revision: 1, ids: [fromPhone.id] }, documents: [fromPhone] } });
+  const fromPhone = changed(document, document.revisions[document.head].text.replace('手机段落。', '手机段落已更新。'));
+  let latest = await exchange({ action: 'exchange', envelope: { protocol: 3, selection: { revision: 1, ids: [fromPhone.id] }, documents: [fromPhone] } });
   assert((await invoke('read_file', { path })).text.includes('手机段落已更新。'));
   await exchange({ action: 'exchange', envelope: latest });
-  const baseline = latest.documents[0];
-  const baseText = baseline.revisions[baseline.head].content.text;
+  // 双方确认后电脑回复只携带 head，不再重复正文；后续并发以手机已确认版本为基线。
+  const baseText = fromPhone.revisions[fromPhone.head].text;
   await writeFile(path, baseText.replace('电脑段落。', '电脑段落被外部编辑。'));
-  const concurrent = changed(baseline, baseText.replace('电脑段落。', '电脑段落被手机修改。'));
-  await exchange({ action: 'exchange', envelope: { protocol: 2, selection: { revision: 1, ids: [concurrent.id] }, documents: [concurrent] } });
+  const concurrent = changed(fromPhone, baseText.replace('电脑段落。', '电脑段落被手机修改。'));
+  await exchange({ action: 'exchange', envelope: { protocol: 3, selection: { revision: 1, ids: [concurrent.id] }, documents: [concurrent] } });
   await wait(`!![...document.querySelectorAll('button')].find(button=>button.textContent.trim().startsWith('比较并处理'))`);
   assert((await invoke('read_file', { path })).text.includes('电脑段落被外部编辑。'), '外部改动不能被远端静默覆盖');
   await page.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.trim().startsWith('比较并处理'))).click()`);
   await click('选用对端');
   await wait(`(async()=>{const result=await window.__TAURI_INTERNALS__.invoke('read_file',{path:${JSON.stringify(path)}});return result.text.includes('电脑段落被手机修改。')})()`);
-  latest = await exchange({ action: 'exchange', envelope: { protocol: 2, selection: { revision: 1, ids: [concurrent.id] }, documents: [concurrent] } });
+  latest = await exchange({ action: 'exchange', envelope: { protocol: 3, selection: { revision: 1, ids: [concurrent.id] }, documents: [concurrent] } });
   await exchange({ action: 'exchange', envelope: latest });
   assert(!(await invoke('read_file', { path })).text.includes('<<<<<<<'));
   await assert.rejects(exchange({ protocol: 2, action: 'ping' }), /SYNC_PROTOCOL/);

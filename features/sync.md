@@ -2,7 +2,7 @@
 
 ## F-SYN-001 版本交换与保守合并
 
-同步所选正文和项目资料，使用共同祖先合并独立修改，保留有歧义的双方版本。
+同步所选正文和项目资料，按对端已知版本增量交换并以行级补丁压缩正文，使用共同祖先合并独立修改，保留有歧义的双方版本。
 
 创建提交：-
 
@@ -11,6 +11,7 @@
 | 角色 | 代码符号 |
 |---|---|
 | 主入口 | src/lib/sync/engine.ts::SyncEngine |
+| 关键实现 | src/lib/sync/merge.ts::encodeDocument |
 | 关键实现 | src/lib/session/sync-documents.ts::SessionSyncDocuments |
 
 ### 行为场景
@@ -27,6 +28,9 @@
 | S-08 | 正常 | 重新配对可明确关联已有项目，不创建副本；不同正文先保留双方，重启后继续合并 | src/lib/sync/engine.test.ts::同步持久化 > 明确关联已有项目不创建副本且先保留双方内容\，重启后可合并 |
 | S-09 | 约束 | 一个本机项目只能关联一个同步文档，项目不能关联到灵感簿 | src/lib/sync/engine.test.ts::同步持久化 > 拒绝关联已被占用的本机项目或把项目关联到灵感簿 |
 | S-10 | 正常 | 取消选择撤回对端尚未接收的文档，重启及旧请求重传不能恢复提示，不删除已接收正文 | src/lib/sync/engine.test.ts::同步持久化 > 取消选择撤回尚未接收的文档\，重启和旧请求重传不恢复接收提示, src/lib/sync/engine.test.ts::同步持久化 > 取消选择不删除对端已接收的正文和关联, scripts/test-mobile-native-fixes.mjs::<module> |
+| S-11 | 正常 | 收敛后交换不传输正文，修改以行级补丁发送；对端状态重建拒绝增量并以全量恢复 | src/lib/sync/engine.test.ts::同步持久化 > 收敛后交换不传输正文\，新修改只携带补丁, src/lib/sync/engine.test.ts::同步持久化 > 对端状态重建后拒绝增量并以全量恢复, src/lib/sync/merge.test.ts::同步三方合并 > 增量编码只传输未知版本\，补丁重建与全文结果一致, src/lib/sync/merge.test.ts::同步三方合并 > 拒绝不兼容协议篡改内容与缺失基线 |
+| S-12 | 正常 | 输入后防抖立即同步，空闲与离线逐步退避；对端缺少增量基线时全量重试 | src/lib/sync/controller.test.ts::输入后防抖自动同步\，不等待轮询, src/lib/sync/controller.test.ts::空闲轮询逐步退避\，待发送输入时快速跟进, src/lib/sync/controller.test.ts::对端缺少增量基线时用全量版本重试一次 |
+| S-13 | 约束 | 打开项目未修改时按基线指纹跳过重复读盘，远端写入仍按磁盘基线校验 | src/lib/session/sync-documents.test.ts::同步文档端口 > 打开项目未修改时按基线指纹跳过重复读盘 |
 
 ## F-SYN-002 设备配对与加密连接
 
