@@ -1,11 +1,11 @@
 {
-  "version": "0.7.2",
-  "notes": "# Foldmark v0.7.2\r\n\r\n相较于 v0.7.1：\r\n\r\n- 局域网同步改为增量传输。协议升级至 3，只发送对端尚缺的文档版本，正文以行级补丁相对上一版本传输，无变化时仅交换标识，编辑后约 0.4 秒即开始同步。\r\n- 同步失败或断开时按轮次退避重试，最长间隔 15 秒，恢复后自动回到增量传输。\r\n- 桌面输入成对括号和引号时自动补齐闭符号，光标落在符号中间，支持跳过闭符号和一次删除整对。\r\n- 手机端关闭弹窗不再唤起输入法；底部栏仅在配对后显示同步状态；设备同步面板与其他弹窗的样式和点击外部关闭行为一致。\r\n\r\nWindows 可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.7.2_x64-setup.exe` 安装。Android 可下载 `Foldmark-0.7.2-arm64.apk` 覆盖安装。\r\n\r\n局域网同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。v0.7.2 使用的新同步协议与 v0.7.1 及更早版本不兼容，两端需一起升级。\r\n",
-  "pub_date": "2026-10-18T04:31:59.704Z",
+  "version": "0.7.3",
+  "notes": "# Foldmark v0.7.3\r\n\r\n相较于 v0.7.2：\r\n\r\n- 手机与电脑复用同一条已认证的 TLS 长连接传输变更通知、文档交换和心跳。两端编辑防抖四百毫秒后交换，电脑的修改主动通知手机，空闲每十五秒兜底交换一次，覆盖外部文件修改。\r\n- 接收对端版本并成功保存后立即确认，不再等待下一轮交换，同步状态更快显示为「已同步」。\r\n- 接收对端版本替换正文后保持阅读位置：视口顶部的原文行与像素偏移不变，末尾追加、上方插入和上方删除都不跳动。\r\n- 手机检查更新和下载遇到连接中断时自动重建连接重试，并从已写入位置续传；服务端不支持续传或资源已变化时从头重下，重试仍失败时显示可重试的网络中断提示。\r\n- 手机退到后台释放长连接，回到前台立即重连并交换；离线或连接失败时逐步延长重试间隔，最长十五秒。\r\n\r\nWindows 可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.7.3_x64-setup.exe` 安装。Android 可下载 `Foldmark-0.7.3-arm64.apk` 覆盖安装。\r\n\r\n局域网同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。v0.7.3 的双向长连接与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
+  "pub_date": "2026-10-18T06:45:07.729Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTRaWDI5bjdtd3ZodlIzZGFDYXc2S3RHQWpqbm5vcCtXRytLekFLS2lCU2R1THVUaHIyZUlRRnpUV2gyN1NtVGxEejJxNytmdytLeGl6blRDSmpGVXdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjk3OTE4CWZpbGU6Rm9sZG1hcmtfMC43LjJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNy4yCkJMdzJUZHBYaERwb3BUSkRSNVpuQ21HdjR1Z0QvVmZSUG5EQnBUd1d4aVplZkxIRXl6S0xHVXFzZHREQUJBbmp3L25mZ0VZTWRTaDVsWkV3bTl4OUN3PT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.7.2/Foldmark_0.7.2_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTlQQmtCR25TU2tzSVFpYUovMVRaWFBtUEpRcDBPeFJQYnlJTmxmZWNBVVljRFg2c1E2WUVqMTJFR0tGMTdIdEllcWFXQUhUK0gvTytwREE4cmtQWmdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzA1OTA2CWZpbGU6Rm9sZG1hcmtfMC43LjNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNy4zCnNkUW9aTU5Ddlp0V3JYbThGUk5qTDUxYW9yQUc3bUVWZnkvaTE1VkZPZUZqcDBiVDFmSXNKRTY3MDdVYnZCNzBQcVdGbDkvbXhtaXZlL1ZPMHg1cEFRPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.7.3/Foldmark_0.7.3_x64-setup.exe"
     }
   }
 }
