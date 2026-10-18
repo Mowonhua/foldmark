@@ -32,7 +32,7 @@
 | S-08 | 正常 | 点击正文底部留白后输入出现在可见段落，隐藏归档保持不变 | src/lib/editor/empty-task-click.test.ts::<module>, scripts/test-mobile-input.mjs::<module>, scripts/test-mobile-native-fixes.mjs::<module> |
 | S-09 | 约束 | 删除手机项目清理私有正文和恢复草稿，拒绝删除目录外文件；删除失败保留项目 | src-tauri/src/lib.rs::tests::managed_delete_removes_private_document_and_draft_but_rejects_external_files, src/lib/session/app-integration.test.ts::<module>, scripts/test-mobile-native-fixes.mjs::<module> |
 | S-10 | 正常 | 图标辅助栏保持可见，短通知在窄屏保持单行并留出操作空间 | scripts/test-mobile-browser.mjs::<module> |
-| S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
+| S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；弹窗外触屏关闭后焦点不落回正文，避免立即唤起输入法；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
 | S-12 | 正常 | 视口左侧 50% 范围内右滑展开导航，侧栏左滑收起；纵向滚动和右半屏横滑不触发 | scripts/test-mobile-navigation.mjs::<module> |
 
 ## F-MOB-002 Android 应用更新

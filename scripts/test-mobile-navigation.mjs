@@ -21,6 +21,15 @@ try {
   assert.equal(await page.getByRole('menuitem', { name: '快捷键', exact: true }).count(), 0);
   assert.equal(await page.getByRole('menuitem', { name: '检查更新', exact: true }).count(), 1);
   await page.touchscreen.tap(350, 730);
+  // 弹窗外触屏只关闭弹窗，不把焦点交回正文（否则会立即唤起输入法）。
+  await page.locator('[aria-label="Markdown 任务文档"]').tap();
+  await page.getByRole('button', { name: '更多操作', exact: true }).tap();
+  await page.getByRole('menuitem', { name: '新增项目', exact: true }).tap();
+  await page.locator('.modal[role="dialog"]').first().waitFor();
+  await page.touchscreen.tap(350, 730);
+  await page.waitForTimeout(80);
+  assert.equal(await page.locator('.modal[role="dialog"]').count(), 0, '弹窗外触屏关闭弹窗');
+  assert.notEqual(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Markdown 任务文档', '弹窗外关闭后焦点不落回正文');
   const cdp = await page.context().newCDPSession(page);
   async function swipe(x, y, dx, dy = 0) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
@@ -47,5 +56,5 @@ try {
     await swipe(width * 0.51, 450, 80);
     assert.equal(await page.locator('.sidebar').count(), 0, `${width}px 视口右侧 51% 处右滑不展开导航`);
   }
-  console.log('手机导航验收通过：三个浮层外部关闭、快捷键入口移除、更新入口、左右滑动与纵向滚动隔离。');
+  console.log('手机导航验收通过：三个浮层外部关闭、弹窗外部关闭不聚焦正文、快捷键入口移除、更新入口、左右滑动与纵向滚动隔离。');
 } finally { await browser.close(); }
