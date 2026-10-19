@@ -39,6 +39,8 @@ function insertWithinParagraph(marker: string, text: string): string {
 }
 
 const SETTLE_LIMIT = 1;
+/** 采样窗口：分段呈现固定约 160 毫秒，采样必须覆盖整段，否则高刷新率屏幕上会提前结束。 */
+const STAGING_WINDOW = 260;
 
 async function verify(name: string, next: string, staged = false): Promise<Record<string, unknown>> {
   const scroll = editor.view.scrollDOM;
@@ -48,11 +50,14 @@ async function verify(name: string, next: string, staged = false): Promise<Recor
   editor.setSynchronizedText(next);
   // 逐帧采样锚点行的屏幕偏移：接收替换若发生整份重建，锚点行会短暂离开视口再被拉回，
   // 只看最终状态无法发现这种中间抖动。采样只读布局，不写入滚动位置。
-  // 分段写入期间正文会逐帧靠近目标，因此同时统计尚未写完的帧数。
+  // 分段写入期间正文会逐段靠近目标，因此同时统计尚未写完的帧数。
   const drift: (number | null)[] = [];
   let stagedFrames = 0;
-  for (let count = 0; count < 16; count++) {
+  const samplingUntil = performance.now() + STAGING_WINDOW;
+  let frames = 0;
+  while (frames < 16 || performance.now() < samplingUntil) {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    frames++;
     const offset = offsetOf(before.text);
     drift.push(offset === null ? null : offset - before.offset);
     if (editor.text !== next) stagedFrames++;

@@ -10,8 +10,12 @@ import { refreshSourceScope } from './source-scope';
 /** 字符级差异：from/to 属于替换前的正文，insert 为替换后的文本。 */
 export interface SyncEdit { from: number; to: number; insert: string }
 
-/** 分段呈现的最多批次：批次越多，逐帧派发事务的总耗时越长。 */
+/** 分段呈现的最多批次：批次越多，派发事务的总耗时越长。 */
 const MAX_STEPS = 8;
+/** 整段呈现的目标时长：批次按时间铺开，节奏不随显示器刷新率与批次数变化。 */
+const REVEAL_DURATION = 160;
+/** 批次之间的最短间隔：再短就与一次写入无法区分。 */
+const MIN_STEP_INTERVAL = 12;
 /** 单处插入达到该行数才按行组拆分；短改动一次写入，不做无意义的等待。 */
 const REVEAL_MIN_LINES = 4;
 /** 行组的目标行数：长插入按此节奏依次出现。 */
@@ -187,20 +191,22 @@ function arrivalDecorations(state: EditorState, ranges: readonly SyncArrivalRang
  */
 export interface SyncStreamHost { settled(): void }
 
-/** 分段呈现的单帧调度句柄。 */
-interface Frame { cancel(): void }
-
-/** 分段呈现的前提：有帧调度能力且用户未要求减少动态效果。 */
+/** 分段呈现的前提：有帧调度能力且用户未要求减少动态效果；缺少帧调度的环境一次写入全部差异。 */
 function canAnimate(view: EditorView): boolean {
   const win = view.dom.ownerDocument.defaultView;
   if (!win || typeof win.requestAnimationFrame !== 'function') return false;
   return !(win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
 }
 
+/** 呈现计时所用的单调时钟，避免系统时间调整影响批次间隔。 */
+function now(view: EditorView): number {
+  return view.dom.ownerDocument.defaultView?.performance.now() ?? Date.now();
+}
+
 /**
  * 接口职责：为一次接收分段写入正文并标注到达行。
  * 调用方：编辑器控制器的同步接收入口。
- * 实现要求：首段同步写入，其余按帧写入；用户编辑立即落定剩余差异；整份替换放弃剩余分段。
+ * 实现要求：首个批次同步写入，其余批次按固定总时长铺开；用户编辑立即落定剩余差异；整份替换放弃剩余分段。
  */
 export class SyncStream {
   private steps: readonly (readonly SyncEdit[])[] = [];
@@ -211,7 +217,11 @@ export class SyncStream {
   /** 整段接收期间的阅读位置：null 表示正文未超出视口，无需保护。 */
   private anchor: number | null = null;
   private arrivals: SyncArrivalRange[] = [];
-  private frame: Frame | null = null;
+  /** 下一次写入的计时器；批次按时间推进而不是按帧计数。 */
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  /** 本次呈现的起始时刻与批次间隔。 */
+  private startedAt = 0;
+  private interval = 0;
   private arrivalsTimer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
   private deferred = false;
@@ -238,6 +248,9 @@ export class SyncStream {
     if (!canAnimate(this.view)) { this.apply(this.view.state.changes(edits), []); this.host.settled(); return; }
     this.steps = planSyncSteps(edits, this.anchor, this.text);
     this.index = 0; this.streaming = true;
+    // 批次数只决定写入间隔，整段时长固定在 REVEAL_DURATION 附近。
+    this.startedAt = now(this.view);
+    this.interval = Math.max(MIN_STEP_INTERVAL, REVEAL_DURATION / Math.max(1, this.steps.length));
     this.write();
   }
 
@@ -336,9 +349,10 @@ export class SyncStream {
   }
 
   private schedule(): void {
-    const win = this.view.dom.ownerDocument.defaultView!;
-    const id = win.requestAnimationFrame(() => { this.frame = null; this.write(); });
-    this.frame = { cancel: () => win.cancelAnimationFrame(id) };
+    // 按目标时刻推进而不是每帧推进一批：帧间隔取决于显示器刷新率，高刷新率屏幕上
+    // “每帧一步”会让整段只有几十毫秒，60Hz 屏幕上又慢一倍；固定总时长后各设备节奏一致。
+    const wait = Math.max(0, this.startedAt + this.index * this.interval - now(this.view));
+    this.timer = setTimeout(() => { this.timer = undefined; this.write(); }, wait);
   }
 
   private settle(): void {
@@ -375,8 +389,7 @@ export class SyncStream {
   }
 
   private cancel(): void {
-    this.frame?.cancel();
-    this.frame = null;
+    if (this.timer !== undefined) { clearTimeout(this.timer); this.timer = undefined; }
     if (this.arrivalsTimer !== undefined) { clearTimeout(this.arrivalsTimer); this.arrivalsTimer = undefined; }
   }
 }
