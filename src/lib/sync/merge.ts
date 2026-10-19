@@ -1,5 +1,5 @@
 /**
- * 文件职责：校验同步数据、编码增量版本并保守合并 Markdown。
+ * 文件职责：校验同步数据、编码增量版本，并在共同祖先上按并集合并 Markdown 正文。
  * 定义范围：纯内容合并、内容寻址、线上补丁编解码和版本祖先关系；不执行文件或网络访问。
  */
 import { diffLines } from 'diff';
@@ -25,28 +25,125 @@ function edits(base: string, next: string): Edit[] {
   }
   return result;
 }
-/** 结构行变化不尝试推测任务身份；宁可要求合并，也不能把移动误认成无关增删。 */
-function structure(text: string): string {
-  return text.split('\n').filter(line => /^\s*(?:#{1,6}\s|[-+*]\s|\d+[.)]\s|`{3,}|~{3,}|<|>)/.test(line)).join('\n');
+/**
+ * 差异块类型：决定合并界面要为该块提供哪些选择，以及能否不经用户决定直接采纳。
+ * local 只有本端改动；remote 只有对端改动；same 两端改动结果相同；union 两端在同一处各自改动且互不覆盖，默认都保留；
+ * overlap 两端改动同一段已有内容且结果不同，必须由用户选择。
+ */
+export type MergeHunkKind = 'local' | 'remote' | 'same' | 'union' | 'overlap';
+/** 差异块选择；union 只能用于带 union 文本的差异块。 */
+export type MergeChoice = 'local' | 'remote' | 'union';
+/**
+ * 结构职责：一处三方差异，供合并界面逐块展示和选择。
+ * 字段说明：from/to 是该块在共同祖先正文中的字符区间，纯新增时 from === to；
+ *   local/remote 分别是只应用本端、只应用对端编辑后的块内文本，未改动的一侧等于祖先原文；
+ *   union 只在 kind 为 union 时给出，表示两端改动都保留的拼合结果。
+ * 约束条件：差异块按 from 升序且互不重叠；块内文本不含祖先正文区间之外的内容。
+ */
+export interface MergeHunk { from: number; to: number; local: string; remote: string; union?: string; kind: MergeHunkKind }
+
+/**
+ * 函数职责：在祖先正文的一段区间内应用某一侧的行级编辑。
+ * 输入说明：区间与编辑必须来自同一份祖先正文，编辑按 from 升序且互不重叠。
+ * 输出说明：返回该区间应用编辑后的文本，区间之外的内容不参与。
+ * 实现思路：正序遍历编辑，逐段拼接保留的原文与插入文本。
+ */
+function applyRegion(base: string, from: number, to: number, region: Edit[]): string {
+  let text = ''; let cursor = from;
+  for (const edit of region) { text += base.slice(cursor, edit.from) + edit.insert; cursor = edit.to; }
+  return text + base.slice(cursor, to);
 }
+/** 位于同一位置的多个插入必须有固定顺序，否则两端各自合并会得到不同正文而无法收敛。 */
+const insertOrder = (insert: string): string => (/(^|\n)\s*#{1,6}\s/.test(insert) ? '1' : '0') + insert;
+/**
+ * 函数职责：把两端在同一个差异块内的编辑并成一次可确定重现的应用顺序。
+ * 输入说明：两侧编辑互不覆盖同一段已有字符，纯新增可落在同一位置。
+ * 输出说明：按位置升序返回编辑列表，可直接交给 applyRegion。
+ * 实现思路：先按 from、再按 to 排序，使同一位置的插入排在自该位置开始的替换之前；
+ *   位置完全相同的插入按“带标题行的排后、其余按文本比较”定序。
+ *   新增章节因此排在新增任务之后，对端新增的任务不会被并进本机新建的章节或落到归档章节之后。
+ */
+function unionEdits(left: Edit[], right: Edit[]): Edit[] {
+  const order = (edit: Edit): string => insertOrder(edit.insert);
+  return [...left, ...right].sort((a, b) => a.from - b.from || a.to - b.to
+    || (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0));
+}
+/**
+ * 函数职责：按行级差异计算三方合并的差异块，并判定每块可直接采纳还是必须选择。
+ * 输入说明：base 为共同祖先正文，local 与 remote 为两端正文；差异过大时抛 SYNC_COMPLEX。
+ * 输出说明：按正文位置升序返回差异块，只改动一侧的内容也会给出对应块。
+ * 实现思路：分别求两端相对祖先的行级编辑，把相互重叠或相邻的编辑并为一个差异块；
+ *   块内分别应用两端编辑得到两块文本，结果相同或只有一侧改动即可直接采纳；
+ *   两端都改动时只按是否覆盖同一段已有字符区分并集与冲突，不因任务归档、排序造成的移动而拒绝合并。
+ */
+export function diffHunks(base: string, local: string, remote: string): MergeHunk[] {
+  const entries = [
+    ...edits(base, local).map(edit => ({ edit, local: true })),
+    ...edits(base, remote).map(edit => ({ edit, local: false })),
+  ].sort((a, b) => a.edit.from - b.edit.from || a.edit.to - b.edit.to);
+  const hunks: MergeHunk[] = [];
+  for (let index = 0; index < entries.length;) {
+    const from = entries[index].edit.from;
+    let to = entries[index].edit.to; let end = index + 1;
+    // 中间没有两端都保持原样的内容时不能把它们当成互不相关的改动：相邻改动必须一起判断。
+    while (end < entries.length && entries[end].edit.from <= to) { to = Math.max(to, entries[end].edit.to); end++; }
+    const group = entries.slice(index, end); index = end;
+    const left = group.filter(entry => entry.local).map(entry => entry.edit);
+    const right = group.filter(entry => !entry.local).map(entry => entry.edit);
+    const ancestor = base.slice(from, to);
+    const localText = applyRegion(base, from, to, left);
+    const remoteText = applyRegion(base, from, to, right);
+    const collides = left.some(a => right.some(b => a.from < b.to && b.from < a.to));
+    const kind: MergeHunkKind = localText === remoteText ? 'same' : remoteText === ancestor ? 'local'
+      : localText === ancestor ? 'remote' : collides ? 'overlap' : 'union';
+    hunks.push({ from, to, local: localText, remote: remoteText, ...(kind === 'union' ? { union: applyRegion(base, from, to, unionEdits(left, right)) } : {}), kind });
+  }
+  return hunks;
+}
+/**
+ * 函数职责：给出差异块的默认选择，未决定的位置为 null。
+ * 输入说明：hunks 必须来自同一次 diffHunks。
+ * 输出说明：单端改动取改动的一侧，两端改动相同时取本端文本（两侧结果一致），并集块取两端都保留，
+ *   覆盖同一段内容的冲突块返回 null。
+ */
+export function defaultChoices(hunks: MergeHunk[]): (MergeChoice | null)[] {
+  return hunks.map(hunk => hunk.kind === 'local' || hunk.kind === 'same' ? 'local'
+    : hunk.kind === 'remote' ? 'remote' : hunk.kind === 'union' ? 'union' : null);
+}
+/**
+ * 函数职责：按逐块选择把差异块拼回完整正文。
+ * 输入说明：choices 与 hunks 一一对应，null 表示尚未决定并使用 pending 占位；union 只能选择带 union 文本的差异块。
+ * 输出说明：返回合并后的完整正文，未改动区间原样保留；选择与差异块不匹配时抛 SYNC_INVALID。
+ */
+export function assembleMerge(base: string, hunks: MergeHunk[], choices: (MergeChoice | null)[], pending = ''): string {
+  if (choices.length !== hunks.length) throw new Error('SYNC_INVALID: 差异块选择数量不匹配');
+  let text = ''; let cursor = 0;
+  hunks.forEach((hunk, index) => {
+    const choice = choices[index];
+    const piece = choice === 'local' ? hunk.local : choice === 'remote' ? hunk.remote : choice === 'union' ? hunk.union : choice === null ? pending : undefined;
+    if (piece === undefined) throw new Error('SYNC_INVALID: 差异块不支持该选择');
+    text += base.slice(cursor, hunk.from) + piece; cursor = hunk.to;
+  });
+  return text + base.slice(cursor);
+}
+/**
+ * 函数职责：用共同祖先合并两端文档内容，能确定的部分直接合并。
+ * 输入说明：base 为共同祖先内容，local 与 remote 为两端内容。
+ * 输出说明：返回合并结果；正文存在两端改动同一段内容且结果不同的差异块时返回 null，交给用户选择。
+ * 实现思路：项目资料按字段取值，正文按差异块逐块决定；两端各自新增的内容都保留，
+ *   任务归档、排序造成的移动不再单独构成冲突，只有两端改动同一段已有内容时才要求人工选择。
+ */
 export function mergeContent(base: DocumentContent, local: DocumentContent, remote: DocumentContent): DocumentContent | null {
   const name = field(base.name, local.name, remote.name);
   const archived = field(base.archived, local.archived, remote.archived);
   if (name === undefined || archived === undefined) return null;
   let text = field(base.text, local.text, remote.text);
   if (text === undefined) {
-    if (structure(base.text) !== structure(local.text) || structure(base.text) !== structure(remote.text)) return null;
-    let left: Edit[], right: Edit[];
-    try { left = edits(base.text, local.text); right = edits(base.text, remote.text); } catch { return null; }
-    const all = [...left];
-    for (const other of right) {
-      if (left.some(edit => edit.from === other.from && edit.to === other.to && edit.insert === other.insert)) continue;
-      // 相邻插入也按冲突处理，避免任意规定同一位置的内容顺序。
-      if (left.some(edit => edit.from <= other.to && other.from <= edit.to)) return null;
-      all.push(other);
-    }
-    text = base.text;
-    for (const edit of all.sort((a, b) => b.from - a.from)) text = text.slice(0, edit.from) + edit.insert + text.slice(edit.to);
+    let hunks: MergeHunk[];
+    try { hunks = diffHunks(base.text, local.text, remote.text); } catch { return null; }
+    const choices = defaultChoices(hunks);
+    if (choices.some(choice => choice === null)) return null;
+    text = assembleMerge(base.text, hunks, choices);
   }
   return { text, name, archived };
 }

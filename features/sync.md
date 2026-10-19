@@ -2,7 +2,7 @@
 
 ## F-SYN-001 版本交换与保守合并
 
-同步所选正文和项目资料，按对端已知版本增量交换并以行级补丁压缩正文，使用共同祖先合并独立修改，保留有歧义的双方版本。
+同步所选正文和项目资料，按对端已知版本增量交换并以行级补丁压缩正文，使用共同祖先按并集合并双方修改；只有两端改动同一段内容时才保留冲突，交由用户逐处选择。
 
 创建提交：-
 
@@ -12,6 +12,8 @@
 |---|---|
 | 主入口 | src/lib/sync/engine.ts::SyncEngine |
 | 关键实现 | src/lib/sync/merge.ts::encodeDocument |
+| 关键实现 | src/lib/sync/merge.ts::mergeContent |
+| 关键实现 | src/lib/sync/merge.ts::diffHunks |
 | 关键实现 | src/lib/session/sync-documents.ts::SessionSyncDocuments |
 | 关键实现 | src/lib/editor/index.ts::EditorController.setSynchronizedText |
 
@@ -20,7 +22,7 @@
 | 编号 | 类型 | 场景与预期 | 测试 |
 |---|---|---|---|
 | S-01 | 正常 | 单端修改与不相交段落修改收敛到相同版本 | src/lib/sync/engine.test.ts::同步持久化 > 往返重复交换及独立修改最终收敛 |
-| S-02 | 并发 | 相同文本范围修改或任务结构变化与并行修改保留冲突 | src/lib/sync/merge.test.ts::同步三方合并 > 任务归档排序删除与并行说明修改均保留冲突 |
+| S-02 | 并发 | 两端改动同一段内容，或删除与修改落在同一段时保留冲突，等待选择保留哪一侧 | src/lib/sync/merge.test.ts::同步三方合并 > 重叠修改保留冲突且不插入冲突标记, src/lib/sync/merge.test.ts::同步三方合并 > 删除与并行修改落在同一段内容时保留冲突 |
 | S-03 | 异常 | 断线、重复传输和重启不能重复应用或覆盖新修改 | src/lib/sync/engine.test.ts::同步持久化 > 写入后退出由日志恢复而不重复修改, src/lib/sync/engine.test.ts::同步持久化 > 处理冲突期间的新编辑使旧解决请求失效, scripts/test-paired-recovery.mjs::<module> |
 | S-04 | 约束 | 外部文件修改、组合输入和受保护草稿阻止覆盖 | src/lib/session/sync-documents.test.ts::同步文档端口 > 外部改动和受保护草稿拒绝远端覆盖, src/lib/session/sync-documents.test.ts::同步文档端口 > 组合输入期间推迟同步且移除关联不删除文件 |
 | S-05 | 约束 | 停止同步保留正文；删除手机项目仅清理本机私有文件，不传播删除，未知项目须明确接收 | src/lib/sync/engine.test.ts::同步持久化 > 暂停保留文件并拒绝远端覆盖, src/lib/session/sync-documents.test.ts::同步文档端口 > 取消接收不创建项目或文件 |
@@ -34,6 +36,7 @@
 | S-13 | 约束 | 打开项目未修改时按基线指纹跳过重复读盘，远端写入仍按磁盘基线校验 | src/lib/session/sync-documents.test.ts::同步文档端口 > 打开项目未修改时按基线指纹跳过重复读盘 |
 | S-14 | 正常 | 接收对端版本并成功保存后立即确认，失败时不确认；手机接收或合并新版本后立即回传，使电脑确认不等待下轮轮询；合并版本仍须得到对端确认 | src/lib/sync/engine.test.ts::同步持久化 > 收到对端版本并成功写入后立即确认\，写入失败不能确认, src/lib/sync/engine.test.ts::同步持久化 > 自动合并产生的新版本必须等待对端确认, src/lib/sync/controller.test.ts::前台空闲后电脑通知立即送达手机并完成双方确认 |
 | S-15 | 正常 | 手机与桌面接收对端版本按差异增量替换正文，替换过程与结果都保持视口顶部原文行与像素偏移；末尾追加、上方插入、上方删除、多处修改及连续接收均不跳动，源码视图同样保持阅读位置，中间帧不丢失锚点行，位移不超过 1 像素 | scripts/test-sync-scroll.mjs::<module> |
+| S-16 | 并发 | 两端各自新增内容与任务归档、排序等结构变化按并集合并，双方改动都保留且结果与调用顺序无关 | src/lib/sync/merge.test.ts::同步三方合并 > 两端各自新增与任务归档移动都保留, src/lib/sync/merge.test.ts::同步三方合并 > 排序移动与并行说明修改合并\,搬运覆盖另一端改动时保留冲突, src/lib/sync/merge.test.ts::同步三方合并 > 同一位置的两端新增都保留且与调用顺序无关 |
 
 ## F-SYN-002 设备配对与加密连接
 

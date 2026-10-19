@@ -208,7 +208,7 @@ export class SyncEngine {
       if (!ancestors(doc, remote.head).has(doc.head)) {
         const base = commonAncestor(doc, doc.head, remote.head);
         const merged = base && mergeContent(base.content, doc.revisions[doc.head].content, target.content);
-        if (!merged) { record.conflict = { local: doc.head, remote: remote.head, reason: base ? '两端修改存在重叠或任务结构变化' : '没有唯一共同版本，请合并双方内容' }; return; }
+        if (!merged) { record.conflict = { local: doc.head, remote: remote.head, reason: base ? '两端修改了同一段内容，请选择保留哪一侧' : '没有唯一共同版本，请合并双方内容' }; return; }
         target = await revision(merged, [doc.head, remote.head]); doc.revisions[target.id] = target;
       }
       await this.apply(record, target.id);
