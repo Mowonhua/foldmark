@@ -32,7 +32,12 @@ function offsetOf(text: string): number | null {
   return element ? element.getBoundingClientRect().top - top : null;
 }
 
-/** 中间帧与最终布局仅允许像素取整误差，小幅位移也会表现为闪烁或抽搐。 */
+/** 在指定段落内插入文字；段落标记缺失时立即失败，避免用例静默退化成空改动。 */
+function insertWithinParagraph(marker: string, text: string): string {
+  if (!editor.text.includes(marker)) throw new Error(`缺少段落标记：${marker}`);
+  return editor.text.replace(marker, marker + text);
+}
+
 const SETTLE_LIMIT = 1;
 
 async function verify(name: string, next: string, staged = false): Promise<Record<string, unknown>> {
@@ -77,6 +82,8 @@ button.addEventListener('click', async () => {
     scenarios.push(await verify('上方多处修改', editor.text.replace('任务 010', '修改后的任务 010').replace('任务 020', '修改后的任务 020')));
     // 分段呈现：长段插入必须跨多帧陆续写入，同时不得让锚点行偏移或离开视口。
     scenarios.push(await verify('长段插入分段写入', editor.text + '\n\n' + '长段插入的一行正文\n\n'.repeat(12), true));
+    // 段内插入按字符块出现：阅读位置下方的段落内插入必须跨多帧写入。
+    scenarios.push(await verify('段内插入逐字写入', insertWithinParagraph('第 100 项说明段落，', '同一段里逐个出现的补充文字，'), true));
     // 连续接收不能留下上一轮延迟校正，干扰下一轮阅读位置。
     for (let index = 0; index < 3; index++) scenarios.push(await verify(`连续接收 ${index + 1}`, `第 ${index} 轮新增\n\n` + editor.text));
     editor.toggleSource(); await settled();
