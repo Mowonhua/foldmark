@@ -50,9 +50,14 @@ function prevChar(state: EditorState, pos: number): string {
   return [...state.sliceDoc(Math.max(0, pos - 2), pos)].pop() ?? '';
 }
 
-/** 函数职责：判断字符是否属于词字符；空串不算，用于识别引号是否贴在单词上。 */
+/** 函数职责：判断字符是否属于词字符；空串不算，用于识别光标右侧是否紧贴单词。 */
 function isWordChar(state: EditorState, pos: number, char: string): boolean {
   return char !== '' && state.charCategorizer(pos)(char) === CharCategory.Word;
+}
+
+/** 函数职责：判断字符是否为 ASCII 字母、数字或下划线，用于识别英文单词内部的撇号。 */
+function isAsciiWordChar(char: string): boolean {
+  return /[0-9A-Za-z_]/.test(char);
 }
 
 /**
@@ -221,9 +226,10 @@ export const singleSymbolPairs = EditorView.inputHandler.of((view, from, to, tex
   }
   // 开符号右侧已经是它自己的闭符号：直接插入，不能改写右侧字符，否则会吞掉已有的闭符号。
   if (after === close) return false;
-  // 引号自配对只在词边界补齐：贴在单词前后都不补，避免打断 don't 这类撇号输入。
+  // 引号自配对只在词边界补齐：紧跟 ASCII 字母或数字时按撇号缩写处理（don't）不补，
+  // 汉字之后是中文写作里输入引号的常见位置，照常补齐；右侧紧跟词字符（含汉字）时也不补，避免把词拆开。
   if (close === text) {
-    if (isWordChar(state, from, prevChar(state, from)) || isWordChar(state, from, after)) return false;
+    if (isAsciiWordChar(prevChar(state, from)) || isWordChar(state, from, after)) return false;
   } else if (after !== '' && !PAIRABLE_BEFORE.has(after) && !/\s/.test(after)) return false;
   view.dispatch({ changes: { from, insert: text + close }, selection: { anchor: from + text.length }, scrollIntoView: true, userEvent });
   keepCaret(view, from + text.length, from + text.length + close.length);

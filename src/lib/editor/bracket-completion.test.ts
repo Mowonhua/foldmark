@@ -75,6 +75,20 @@ describe('成对符号补全', () => {
     expect(instance.text).toBe("- [ ] don'");
   });
 
+  it('手机在汉字之后输入引号同样补齐为整对', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '"');
+    expectCentered(instance, '""');
+  });
+
+  it('手机在英文单词内部输入引号不补齐', async () => {
+    const instance = editor('- [ ] don', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '"');
+    expect(instance.text).toBe('- [ ] don"');
+  });
+
   it('手机在补齐的闭符号前再输入闭符号时移过去，而不是重复插入', async () => {
     const instance = editor('- [ ] 任务', true);
     instance.focusAt(instance.text.length);
