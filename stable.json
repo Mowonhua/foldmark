@@ -1,11 +1,11 @@
 {
-  "version": "0.7.4",
-  "notes": "# Foldmark v0.7.4\r\n\r\n相较于 v0.7.3：\r\n\r\n- 接收对端版本时按字符级差异替换正文，不再整份重建编辑器状态，接收过程中的画面跳动消失，视口顶部的原文行及其像素偏移保持不变。\r\n- 锚点行的位置校正与正文更新在同一事务内提交，不再绘制出校正生效前的中间帧。\r\n- 接收到的对端内容不进入撤销历史：本机原有编辑历史保留，对端版本仍不能整体回滚。\r\n- 底部栏只提示需要处理的问题，即存在同步冲突、有文档待接收或同步失败；等待对端、等待确认、传输中和未打开对端时状态只留在同步面板，同步完成后也不再闪现「已同步」。\r\n\r\nWindows 可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.7.4_x64-setup.exe` 安装。Android 可下载 `Foldmark-0.7.4-arm64.apk` 覆盖安装。\r\n\r\n局域网同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。v0.7.4 沿用 v0.7.3 的同步协议，可与 v0.7.3 混用；与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
-  "pub_date": "2026-10-18T09:42:27.733Z",
+  "version": "0.7.5",
+  "notes": "# Foldmark v0.7.5\r\n\r\n相较于 v0.7.4：\r\n\r\n- 接收对端版本时按差异分段呈现：阅读位置及其上方的删除与替换一次落定，下方改动逐段出现，视口顶部的行与像素偏移保持不变。\r\n- 单行插入按字符块逐段显现，短句逐字、长句均分为固定块数，整段约 160 毫秒，节奏不再随屏幕刷新率变化；多行插入按行组依次出现。到达的行以柔和底色淡出标注，减少动效偏好下整段写入并跳过动画。\r\n- 分段呈现期间开始编辑时，剩余差异立即落定；会话正文按最终文本记录后再做归档整理，中间状态不进入撤销历史。\r\n- 同步合并界面改为逐处差异卡片：每处并列显示本机与对端内容，可选择保留本机、保留对端或同时保留两端，合并结果可继续编辑；无法自动取舍的改动不预填，选择完成前不能保存。\r\n- 两端合并改为并集：双方各自新增的内容都保留，任务归档与排序等结构变化不再构成冲突，只有两端改动同一段已有内容时才需要选择。\r\n- 手机端输入单个开符号时补齐对应的全角括号与中文引号，引号在汉字之后同样补齐，英文单词内的撇号不受影响；光标停在成对符号中间，退格一次删除整对，成对高亮只保留底色。\r\n- 手机端切换项目、关闭菜单与搜索等浮层后不再自动唤起输入法，点按正文空白也不会弹出输入法；在一对符号内部再输入开符号时补齐内层符号。\r\n\r\nWindows 可在「更多操作 → 检查更新」升级，或下载 `Foldmark_0.7.5_x64-setup.exe` 安装。Android 可下载 `Foldmark-0.7.5-arm64.apk` 覆盖安装。\r\n\r\n局域网同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。v0.7.5 沿用 v0.7.4 的同步协议，可与 v0.7.4、v0.7.3 混用；与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
+  "pub_date": "2026-10-19T12:17:53.900Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NThKTzk1bnhBUHdqbmNYb1JCT05ub0JCb3NaVXB0ZGhKcnRkNmVjTlEwcE1wSGk4b3NFU0dVdWdVZU1sZTBaYzlyZDlzQUhKMXlpdTF5UmdBblVvOEFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzE2NTQ2CWZpbGU6Rm9sZG1hcmtfMC43LjRfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNy40CjZadkJYWDBpNldvM1AwQTRmSE9nVmsvZXNzQm5rQ05TYkU5aSt4dHRBWVpLaExUUWhoK3IyUEhGYVNqS3c0dzBINlp0TmRyc2JRcGdNaHI3aGNaaUNRPT0K",
-      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.7.4/Foldmark_0.7.4_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTNrZGFDTjk3cUFKYmJVcGZ4bGRFcXErQTEzcWVPNW9DQU5OVXNzZFJhbkZ6OHVySzhiVjBpeHl1Ylg4UGNCVThIbUxUZ29CWFhpaEd6M0d6aU5BRFFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDEyMjcxCWZpbGU6Rm9sZG1hcmtfMC43LjVfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNy41CnlPZFZRRUFsL2RKellMMkZwaFUwZjVjTSttamxhWDlCQ1Bsc2owaGt3VkJiM2h3TUFKWlZEV05MRnFOcnJKWTlIdHFxMjZ6MTM3ZE4zd1JXZS9PUEFBPT0K",
+      "url": "https://github.com/Mowonhua/foldmark/releases/download/v0.7.5/Foldmark_0.7.5_x64-setup.exe"
     }
   }
 }
