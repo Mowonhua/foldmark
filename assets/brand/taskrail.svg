@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Taskrail</title>
+  <desc id="desc">深绿色圆角方形中的米白色 T，双竖轨道表示多个项目。</desc>
+  <rect id="background" x="64" y="64" width="896" height="896" rx="216" fill="#173F35"/>
+  <g fill="#F5F1E7">
+    <path d="M240 248H784Q816 248 816 280V344Q816 376 784 376H592C550 376 526 404 512 452C498 404 474 376 432 376H240Q208 376 208 344V280Q208 248 240 248Z"/>
+    <path d="M384 416H420C456 416 484 444 484 480V782C484 810 462 832 434 832C406 832 384 810 384 782Z"/>
+    <path d="M640 416H604C568 416 540 444 540 480V782C540 810 562 832 590 832C618 832 640 810 640 782Z"/>
+  </g>
+</svg>

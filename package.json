@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "icons:generate": "node scripts/generate-icons.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
