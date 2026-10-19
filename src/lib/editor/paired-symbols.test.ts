@@ -31,7 +31,7 @@ async function commit(instance: EditorController, inserted: string, caret = inse
 }
 
 describe('输入法成对符号光标居中', () => {
-  it.each([['（）'], ['()'], ['【】'], ['[]'], ['《》'], ['""'], ['“”']])('整段提交 %s 后光标落在两符号之间', async inserted => {
+  it.each([['（）'], ['()'], ['【】'], ['[]'], ['{}'], ['<>'], ['［］'], ['｛｝'], ['〈〉'], ['《》'], ['〔〕'], ['〖〗'], ['「」'], ['『』'], ['""'], ["''"], ['“”'], ['‘’']])('整段提交 %s 后光标落在两符号之间', async inserted => {
     const instance = editor('- [ ] 任务');
     await commit(instance, inserted);
     expect(instance.text).toBe(`- [ ] 任务${inserted}`);
@@ -54,8 +54,9 @@ describe('输入法成对符号光标居中', () => {
     expect(instance.text).toBe('- [ ] 任务');
   });
 
-  it('单独符号和普通多字符输入保持默认光标位置', async () => {
-    for (const inserted of ['（', '）', 'ab', '（（']) {
+  /** 单个符号的补齐由 bracket-completion.test.ts 覆盖，这里只确认本扩展不改写非整对提交。 */
+  it('非整对提交保持默认光标位置', async () => {
+    for (const inserted of ['ab', '（（']) {
       const instance = editor('- [ ] 任务');
       await commit(instance, inserted);
       expect(instance.text).toBe(`- [ ] 任务${inserted}`);

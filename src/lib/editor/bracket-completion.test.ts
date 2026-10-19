@@ -1,4 +1,4 @@
-/** 文件职责：验证桌面键盘自动补齐成对符号并把光标放到中间，手机交给输入法配对。 */
+/** 文件职责：验证成对符号补齐的两条路径——桌面键盘补齐半角与全角符号，手机输入单个符号同样补齐并把光标放到中间。 */
 import { afterEach, describe, expect, it } from 'vitest';
 import { EditorController } from './index';
 
@@ -25,13 +25,28 @@ async function type(instance: EditorController, inserted: string): Promise<void>
   await new Promise(resolve => setTimeout(resolve, 20));
 }
 
-describe('桌面键盘成对符号补全', () => {
-  it.each([['(', '()'], ['[', '[]'], ['{', '{}']])('输入 %s 补齐为 %s 并把光标放到中间', async (inserted, pair) => {
+/** 断言文档末尾补出整对符号，且光标停在开符号之后。 */
+function expectCentered(instance: EditorController, pair: string): void {
+  expect(instance.text).toBe(`- [ ] 任务${pair}`);
+  expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
+}
+
+const KEYBOARD_PAIRS = [['(', '()'], ['[', '[]'], ['{', '{}'], ['（', '（）'], ['［', '［］'], ['｛', '｛｝'], ['【', '【】'], ['《', '《》'], ['〈', '〈〉'], ['「', '「」'], ['『', '『』'], ['“', '“”'], ['‘', '‘’']];
+
+describe('成对符号补全', () => {
+  it.each(KEYBOARD_PAIRS)('桌面键盘输入 %s 补齐为 %s 并把光标放到中间', async (inserted, pair) => {
     const instance = editor('- [ ] 任务');
     instance.focusAt(instance.text.length);
     await type(instance, inserted);
-    expect(instance.text).toBe(`- [ ] 任务${pair}`);
-    expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
+    expectCentered(instance, pair);
+  });
+
+  it('桌面键盘不补齐尖括号，保留 Markdown 的 HTML 与自动链接写法', async () => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await type(instance, '<');
+    expect(instance.text).toBe('- [ ] 任务<');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务<'.length);
   });
 
   it('引号在词边界补齐，在单词内部不补齐以避免影响撇号', async () => {
@@ -46,27 +61,41 @@ describe('桌面键盘成对符号补全', () => {
     expect(insideWord.text).toBe("- [ ] don'");
   });
 
-  it('手机保留输入法配对，不额外补齐', async () => {
+  it.each([['(', '()'], ['（', '（）'], ['“', '“”']])('手机输入单个 %s 同样补齐为 %s 并把光标放到中间', async (inserted, pair) => {
     const instance = editor('- [ ] 任务', true);
     instance.focusAt(instance.text.length);
-    await type(instance, '(');
-    expect(instance.text).toBe('- [ ] 任务(');
-    expect(instance.state.selection.main.head).toBe('- [ ] 任务('.length);
+    await type(instance, inserted);
+    expectCentered(instance, pair);
   });
 
-  it('在补齐的闭符号前再输入闭符号时跳过，而不是重复插入', async () => {
-    const instance = editor('- [ ] 任务');
+  it('手机英文撇号在单词内部不补齐', async () => {
+    const instance = editor('- [ ] don', true);
     instance.focusAt(instance.text.length);
-    await type(instance, '(');
-    await type(instance, ')');
-    expect(instance.text).toBe('- [ ] 任务()');
-    expect(instance.state.selection.main.head).toBe('- [ ] 任务()'.length);
+    await type(instance, "'");
+    expect(instance.text).toBe("- [ ] don'");
+  });
+
+  it('手机在补齐的闭符号前再输入闭符号时移过去，而不是重复插入', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '（');
+    await type(instance, '）');
+    expect(instance.text).toBe('- [ ] 任务（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务（）'.length);
   });
 
   it('成对符号之间按 Backspace 一次删除整对', async () => {
     const instance = editor('- [ ] 任务');
     instance.focusAt(instance.text.length);
     await type(instance, '(');
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true, cancelable: true }));
+    expect(instance.text).toBe('- [ ] 任务');
+  });
+
+  it('手机按 Backspace 同样一次删除整对全角符号', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '【');
     instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true, cancelable: true }));
     expect(instance.text).toBe('- [ ] 任务');
   });

@@ -110,6 +110,7 @@
 /* 选区背景在正文后层绘制，前景标记单独反色，确保不透明选区仍可阅读。 */
 .cm-editor .fm-selected, .cm-editor .fm-selected * { color: var(--selection-ink) !important; }
 .cm-editor .fm-selected .fm-code, .cm-editor .fm-code.fm-selected { background: var(--selection); }
-.cm-editor .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
+/* 成对符号只用底色标记，描边会在中文全角符号上形成额外方框。 */
+.cm-editor .cm-matchingBracket { background: var(--accent-soft); }
 .cm-editor .cm-nonmatchingBracket { color: var(--danger); text-decoration: underline wavy; }
 :root[data-monochrome=true] .fm-drag-preview { opacity: 1; }

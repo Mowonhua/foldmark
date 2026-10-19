@@ -24,7 +24,7 @@ import { paragraphAt, paragraphLayout } from './paragraphs';
 import { contentVisibility } from './visibility';
 import { foldMotion } from './fold-motion';
 import { codeSelection } from './selection';
-import { pairedSymbols } from './paired-symbols';
+import { bracketCompletion, matchingBrackets, pairedSymbols, singleSymbolPairs } from './paired-symbols';
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
@@ -123,15 +123,16 @@ export class EditorController {
         return layout ? [transaction, layout] : transaction;
       }),
       // Android 由系统维护选字手柄与操作菜单；桌面选区绘制会隐藏原生选区，导致长按菜单消失。
-      history(), this.options.nativeSelection ? [] : [drawSelection(), codeSelection], bracketMatching(), indentOnInput(), syntaxHighlighting(themeHighlightStyle), pairedSymbols,
-      // 桌面键盘自动补全成对符号并把光标放在中间；Android 的配对由输入法完成，pairedSymbols 只负责居中。
-      this.options.nativeSelection ? [] : closeBrackets(),
+      history(), this.options.nativeSelection ? [] : [drawSelection(), codeSelection], bracketMatching({ brackets: matchingBrackets }), indentOnInput(), syntaxHighlighting(themeHighlightStyle), pairedSymbols,
+      // 桌面键盘用 closeBrackets 补齐成对符号；手机输入法不在编辑器内配对，改由 singleSymbolPairs 补齐。
+      // bracketCompletion 为两者提供含全角符号的配对表，并让 Backspace 一次删除整对。
+      this.options.nativeSelection ? singleSymbolPairs : closeBrackets(), bracketCompletion,
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position) }),
       documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion,
-      keymap.of([...taskKeymap, ...(this.options.nativeSelection ? [] : closeBracketsKeymap), ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
+      keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
       EditorView.updateListener.of(update => {

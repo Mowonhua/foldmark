@@ -16,6 +16,7 @@
 | 关键实现 | src-tauri/src/lib.rs::delete_managed_document |
 | 关键实现 | src/lib/editor/gestures.ts::MarkerGestures |
 | 关键实现 | src/lib/editor/paired-symbols.ts::pairedSymbols |
+| 关键实现 | src/lib/editor/paired-symbols.ts::singleSymbolPairs |
 | 关键实现 | src/lib/mobile-navigation.ts::registerDrawerGestures |
 | 关键实现 | src/App.svelte::dismissPopovers |
 
@@ -35,7 +36,7 @@
 | S-10 | 正常 | 图标辅助栏保持可见，短通知在窄屏保持单行并留出操作空间 | scripts/test-mobile-browser.mjs::<module> |
 | S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；弹窗外触屏关闭后焦点不落回正文，避免立即唤起输入法；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
 | S-12 | 正常 | 视口左侧 50% 范围内右滑展开导航，侧栏左滑收起；纵向滚动和右半屏横滑不触发 | scripts/test-mobile-navigation.mjs::<module> |
-| S-13 | 正常 | 输入法一次提交成对符号时光标落在符号中心，组合会话中提交同样生效；输入法已居中时不改动，单独符号保持默认光标 | src/lib/editor/paired-symbols.test.ts::输入法成对符号光标居中 |
+| S-13 | 正常 | 输入单个开符号（含全角与中文符号）补齐闭符号并把光标放在符号中心；输入法一次提交整对符号，包括组合会话中的提交，同样居中；引号只在词边界补齐，在补齐的闭符号前再输入闭符号会移过去而不是重复插入 | src/lib/editor/bracket-completion.test.ts::成对符号补全, src/lib/editor/paired-symbols.test.ts::输入法成对符号光标居中 |
 
 ## F-MOB-002 Android 应用更新
 
