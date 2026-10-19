@@ -79,9 +79,47 @@ describe('成对符号补全', () => {
     const instance = editor('- [ ] 任务', true);
     instance.focusAt(instance.text.length);
     await type(instance, '（');
+    // 回发窗口内、同一位置的闭符号按输入法回发处理，这里等窗口过去再按键，代表用户自己按闭符号。
+    await new Promise(resolve => setTimeout(resolve, 60));
     await type(instance, '）');
     expect(instance.text).toBe('- [ ] 任务（）');
     expect(instance.state.selection.main.head).toBe('- [ ] 任务（）'.length);
+  });
+
+  it('手机补齐后输入法把闭符号回发回来时保持居中，不重复插入', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '（');
+    await type(instance, '）');
+    expect(instance.text).toBe('- [ ] 任务（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务（'.length);
+  });
+
+  it('手机在没有配对开符号的位置输入闭符号时照常插入', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '）');
+    expect(instance.text).toBe('- [ ] 任务）');
+  });
+
+  it('手机在已补齐的开符号前再输入同一个开符号时不吞掉闭符号', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '（');
+    await type(instance, '（');
+    expect(instance.text).toBe('- [ ] 任务（（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务（（'.length);
+  });
+
+  it('手机补齐后输入法把光标推到闭符号之后时移回两符号之间', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '（');
+    // 输入法在编辑器写回文本之后会再回发一次内容相同的 textupdate，把插入点算到新文本末尾。
+    instance.view.dispatch({ selection: { anchor: instance.text.length }, userEvent: 'select' });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(instance.text).toBe('- [ ] 任务（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务（'.length);
   });
 
   it('成对符号之间按 Backspace 一次删除整对', async () => {

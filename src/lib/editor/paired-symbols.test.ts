@@ -63,4 +63,14 @@ describe('输入法成对符号光标居中', () => {
       expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + inserted.length);
     }
   });
+
+  it('输入法回发把光标推到闭符号之后时移回两符号之间', async () => {
+    const instance = editor('- [ ] 任务');
+    await commit(instance, '（）');
+    // 输入法在编辑器写回文本之后会再回发一次内容相同的 textupdate，把插入点算到新文本末尾。
+    instance.view.dispatch({ selection: { anchor: instance.text.length }, userEvent: 'select' });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(instance.text).toBe('- [ ] 任务（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
+  });
 });

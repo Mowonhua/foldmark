@@ -65,6 +65,104 @@ function movePast(view: EditorView, from: number, text: string, userEvent?: stri
 }
 
 /**
+ * 补齐之后需要守住的光标位置。
+ * 说明：闭符号是编辑器补的，输入法并不知情；它之后把插入点重新同步到新文本末尾时可能只改选区而没有输入事件，
+ *   这种同步会把刚补齐的光标推到闭符号之后，只能在事务层面移回去，后续输入才会落在两个符号之间。
+ */
+interface CaretTarget {
+  /** 光标被推到该位置即说明发生了回发，需要纠正。 */
+  tail: number;
+  /** 补齐后光标应停留的位置，即两个符号之间。 */
+  caret: number;
+  /** 过期时刻，超过后不再纠正，避免用户之后主动移走光标时被拉回。 */
+  expiresAt: number;
+  /** 剩余纠正次数，防止与输入法的回发互相覆盖。 */
+  attempts: number;
+}
+
+/** 保位窗口（毫秒）：覆盖一次输入法回发的延迟，又不至于干扰用户随后的光标操作。 */
+const CARET_GUARD_WINDOW = 300;
+
+/** 保位窗口内最多纠正的次数：输入法不回发时不会触发，反复回发时也不会形成死循环。 */
+const CARET_GUARD_ATTEMPTS = 2;
+
+const caretTargets = new WeakMap<EditorView, CaretTarget>();
+
+/**
+ * 最近一次补齐留下的回发预期。
+ * 说明：编辑器把输入法没有提交的闭符号写回 EditContext 之后，Android 会把这笔写入当成新的输入再回发一次 textupdate；
+ *   它的形态与用户真的输入同一个闭符号完全一致（位置在闭符号处，内容就是该闭符号），只能靠它紧跟在补齐之后来区分。
+ */
+interface EchoExpectation {
+  /** 闭符号的起始位置，也是刚补齐时光标所在的位置。 */
+  from: number;
+  /** 回发会提交的闭符号。 */
+  text: string;
+  /** 回发窗口的结束时刻，超出窗口的输入一律按用户输入处理。 */
+  expiresAt: number;
+}
+
+/** 回发窗口（毫秒）：编辑器写回之后的系统回发在几毫秒内到达，窗口只需覆盖这段延迟。 */
+const ECHO_WINDOW = 50;
+
+const echoExpectations = new WeakMap<EditorView, EchoExpectation>();
+
+/**
+ * 函数职责：识别并消化「系统把编辑器写回的闭符号当成新输入回发」的一次提交。
+ * 输入说明：只在回发窗口内、位置正好落在刚补的闭符号处、内容恰好是该闭符号的单字符提交才命中。
+ * 输出说明：命中时按等价改写在原位置重写闭符号，把光标留在两个符号之间并返回 true；否则返回 false，交给正常输入处理。
+ * 实现思路：等价改写而不新增字符，可让 EditContext 的文本与编辑器保持一致，同时不再触发新的回发；
+ *   窗口之外的同一位置提交按用户输入处理，因此用户真的按闭符号时仍然会跳到闭符号之后。
+ */
+function consumeEcho(view: EditorView, from: number, text: string, userEvent?: string): boolean {
+  const expectation = echoExpectations.get(view);
+  if (!expectation) return false;
+  if (performance.now() > expectation.expiresAt) {
+    echoExpectations.delete(view);
+    return false;
+  }
+  if (from !== expectation.from || text !== expectation.text) return false;
+  echoExpectations.delete(view);
+  view.dispatch({ changes: { from, to: from + text.length, insert: text }, selection: { anchor: from }, scrollIntoView: true, userEvent });
+  keepCaret(view, from, from + text.length);
+  return true;
+}
+
+/** 函数职责：登记一次保位，等待系统回发之后把光标移回两个符号之间。 */
+function keepCaret(view: EditorView, caret: number, tail: number): void {
+  caretTargets.set(view, { caret, tail, expiresAt: performance.now() + CARET_GUARD_WINDOW, attempts: CARET_GUARD_ATTEMPTS });
+}
+
+/**
+ * 函数职责：把被系统回发推到闭符号之后的光标移回两个符号之间。
+ * 输入说明：只处理保位窗口内、文档未变化、光标正好落在闭符号之后，且由系统选区变更（userEvent 为 select）触发的更新。
+ * 输出说明：同一处补齐最多纠正两次；指针选择（用户自己把光标移走）立即放弃保位。
+ * 实现思路：这类同步只改选区，因此纠正也用纯选区事务，只改光标不碰文本；
+ *   纠正延后一帧派发，避免在视图更新过程中嵌套派发事务；派发后光标若再次被推走才会再次纠正。
+ */
+export const pairingCaret = EditorView.updateListener.of(update => {
+  const target = caretTargets.get(update.view);
+  if (!target) return;
+  if (update.docChanged || performance.now() > target.expiresAt || target.attempts <= 0) {
+    caretTargets.delete(update.view);
+    return;
+  }
+  if (!update.selectionSet || !update.transactions.some(transaction => transaction.isUserEvent('select'))) return;
+  const { main } = update.state.selection;
+  if (!main.empty || main.head !== target.tail) return;
+  if (update.transactions.some(transaction => transaction.isUserEvent('select.pointer'))) {
+    caretTargets.delete(update.view);
+    return;
+  }
+  target.attempts -= 1;
+  requestAnimationFrame(() => {
+    const { main: current } = update.view.state.selection;
+    if (!current.empty || current.head !== target.tail) return;
+    update.view.dispatch({ selection: { anchor: target.caret }, scrollIntoView: true });
+  });
+});
+
+/**
  * 函数职责：识别输入法一次提交的成对符号并把光标放到中心。
  * 输入说明：只接管单光标、非只读的成对符号提交；输入法组合中的提交同样处理。
  * 输出说明：只派发一笔事务；输入法已居中时沿用默认插入，光标停在闭符号之后时改写为居中。
@@ -89,33 +187,46 @@ export const pairedSymbols = EditorView.inputHandler.of((view, from, to, text, i
     scrollIntoView: true,
     userEvent: inserted.annotation(Transaction.userEvent),
   }));
+  keepCaret(view, from + opening.length, from + text.length);
   return true;
 });
 
 /**
  * 函数职责：手机端输入单个开符号时补齐闭符号，并把光标放到两符号之间。
  * 输入说明：只接管单光标、空选区的单字符输入；整对提交由 pairedSymbols 处理，桌面键盘由 closeBrackets 处理。
- * 输出说明：补对或移过已有闭符号时派发一笔事务并返回 true；其余情况返回 false，交回默认插入。
+ * 输出说明：补对时派发一笔事务并返回 true；右侧已是同一闭符号时移过去，不产生新字符；
+ *   开符号右侧已经是它自己的闭符号时交回默认插入，不改写右侧字符。
  * 实现思路：手机输入法不在编辑器内配对，其事务必须带上文本改动才能同步插入点，因此补齐的文本与居中选区同笔派发；
- *   引号自配对时只在词边界补齐，避免打断 don't 这类撇号输入；右侧已是同一符号时移过去而不是重复插入。
+ *   引号自配对时只在词边界补齐，避免打断 don't 这类撇号输入；补齐后登记回发预期与保位，
+ *   前者消化输入法把写回的闭符号当成新输入的回发，后者兜住只改选区的插入点同步。
  */
 export const singleSymbolPairs = EditorView.inputHandler.of((view, from, to, text, insert) => {
   if (view.state.readOnly || from !== to || text.length !== 1 || view.state.selection.ranges.length !== 1) return false;
+  const userEvent = insert().annotation(Transaction.userEvent);
+  if (consumeEcho(view, from, text, userEvent)) return true;
   const close = OPENINGS.get(text);
   if (close === undefined && !CLOSINGS.has(text)) return false;
   const state = view.state;
   const after = nextChar(state, from);
-  const userEvent = insert().annotation(Transaction.userEvent);
-  // 闭符号、以及已经补齐的引号，右侧出现同一符号时都只把光标移过去。
-  if (after === (close ?? text)) {
+  if (close === undefined) {
+    // 闭符号：右侧已是同一符号时只把光标移过去，避免插入重复的闭符号；否则交回默认插入，用户单独按闭符号照常输入。
+    if (after !== text) return false;
     movePast(view, from, text, userEvent);
     return true;
   }
-  if (close === undefined) return false;
+  // 自配对引号：右侧已有同一枚引号（通常是刚补齐的那枚）时同样只移过去。
+  if (close === text && after === text) {
+    movePast(view, from, text, userEvent);
+    return true;
+  }
+  // 开符号右侧已经是它自己的闭符号：直接插入，不能改写右侧字符，否则会吞掉已有的闭符号。
+  if (after === close) return false;
   // 引号自配对只在词边界补齐：贴在单词前后都不补，避免打断 don't 这类撇号输入。
   if (close === text) {
     if (isWordChar(state, from, prevChar(state, from)) || isWordChar(state, from, after)) return false;
   } else if (after !== '' && !PAIRABLE_BEFORE.has(after) && !/\s/.test(after)) return false;
   view.dispatch({ changes: { from, insert: text + close }, selection: { anchor: from + text.length }, scrollIntoView: true, userEvent });
+  keepCaret(view, from + text.length, from + text.length + close.length);
+  echoExpectations.set(view, { from: from + text.length, text: close, expiresAt: performance.now() + ECHO_WINDOW });
   return true;
 });
