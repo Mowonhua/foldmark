@@ -60,6 +60,22 @@ try {
     return project && config.activeProjectId === project.id && JSON.parse(localStorage.getItem(`foldmark:file:${project.path}`)).text.includes('# 手机直接新建');
   });
   assert.equal(await page.getByRole('dialog').count(), 0, '手机无需选择路径即可创建项目');
+  assert(await page.evaluate(() => !document.querySelector('.cm-content')?.contains(document.activeElement)), '手机切换项目不主动聚焦编辑器，避免切换瞬间弹出输入法');
+  await page.getByRole('button', { name: '更多操作' }).tap();
+  await page.waitForSelector('.dropdown[data-more-menu]');
+  const blank = await page.evaluate(() => {
+    for (const x of [20, Math.round(innerWidth / 2), innerWidth - 20]) {
+      for (let y = 140; y < innerHeight - 20; y += 20) {
+        const element = document.elementFromPoint(x, y);
+        if (element?.closest('.cm-content')) return { x, y };
+      }
+    }
+    return null;
+  });
+  assert(blank, '正文应当留有可点击的空白区域');
+  await page.touchscreen.tap(blank.x, blank.y);
+  await page.waitForFunction(() => !document.querySelector('.dropdown[data-more-menu]'));
+  assert(await page.evaluate(() => !document.querySelector('.cm-content')?.contains(document.activeElement)), '点击空白处只关闭浮层，不把焦点交给编辑器');
   assert.deepEqual(failures, []);
-  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏与窄屏布局。');
+  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏、窄屏布局与浮层焦点。');
 } finally { await browser.close(); }

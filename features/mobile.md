@@ -35,9 +35,10 @@
 | S-08 | 正常 | 点击正文底部留白后输入出现在可见段落，隐藏归档保持不变 | src/lib/editor/empty-task-click.test.ts::<module>, scripts/test-mobile-input.mjs::<module>, scripts/test-mobile-native-fixes.mjs::<module> |
 | S-09 | 约束 | 删除手机项目清理私有正文和恢复草稿，拒绝删除目录外文件；删除失败保留项目 | src-tauri/src/lib.rs::tests::managed_delete_removes_private_document_and_draft_but_rejects_external_files, src/lib/session/app-integration.test.ts::<module>, scripts/test-mobile-native-fixes.mjs::<module> |
 | S-10 | 正常 | 图标辅助栏保持可见，短通知在窄屏保持单行并留出操作空间 | scripts/test-mobile-browser.mjs::<module> |
-| S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；弹窗外触屏关闭后焦点不落回正文，避免立即唤起输入法；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
+| S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；手机端关闭浮层的那次按下同时取消默认的焦点转移，浮层关闭与输入法唤起不同时发生；弹窗外触屏关闭后焦点同样不落回正文；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, scripts/test-mobile-browser.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
 | S-12 | 正常 | 视口左侧 50% 范围内右滑展开导航，侧栏左滑收起；纵向滚动和右半屏横滑不触发 | scripts/test-mobile-navigation.mjs::<module> |
 | S-13 | 正常 | 输入单个开符号（含全角与中文符号）补齐闭符号并把光标放在符号中心；输入法一次提交整对符号，包括组合会话中的提交，同样居中；输入法把编辑器写回的闭符号回发成新输入时保持居中，不把光标推到闭符号之后；英文单词内部的引号不补齐（避免影响撇号），汉字之后照常补齐；在一对符号内部再输入同一个开符号时补齐内层闭符号（`(` 得到 `(())`）；在补齐的闭符号前再输入闭符号会移过去而不是重复插入 | src/lib/editor/bracket-completion.test.ts::成对符号补全, src/lib/editor/bracket-completion.test.ts::手机补齐后输入法把闭符号回发回来时保持居中\，不重复插入, src/lib/editor/paired-symbols.test.ts::输入法成对符号光标居中 |
+| S-14 | 正常 | 切换项目或灵感会话后不主动聚焦正文，软键盘只在用户点按正文后出现 | scripts/test-mobile-browser.mjs::<module> |
 
 ## F-MOB-002 Android 应用更新
 

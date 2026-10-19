@@ -502,7 +502,8 @@
       editor!.restoreState(session.state, targetMode ? { ...session.ui, mode: targetMode } : session.ui); switching = false;
       version += 1; scheduleConfig();
       if (position !== undefined) { searchOpen = false; await tick(); editor!.focusAt(position); }
-      else editor!.view.focus();
+      // 手机端切换项目不主动聚焦编辑器：软键盘会在切换瞬间弹出，遮住刚打开的正文。
+      else if (!mobile) editor!.view.focus();
       if (!session.saver.hasProtectedRecovery) editor!.normalizeArchive();
       // 仅切换模式或定位不会触发正文回调，仍须同步会话，供标签状态和下次恢复使用。
       captureUI(); version += 1;
@@ -552,7 +553,8 @@
       // 新建文件时光标落到标题后的末尾，点开即可输入。
       const cursor = position ?? (firstCreate ? session.state.doc.length : undefined);
       if (cursor !== undefined) { searchOpen = false; await tick(); editor!.focusAt(cursor); }
-      else editor!.view.focus();
+      // 手机端点击灵感等入口切换会话同样不主动拉起键盘；新建文件时定位到标题末尾属于主动输入，保留聚焦。
+      else if (!mobile) editor!.view.focus();
       if (!session.saver.hasProtectedRecovery) editor!.normalizeArchive();
       captureUI(); version += 1;
     } catch (error) {
@@ -1069,16 +1071,22 @@
     }
   }
 
-  /** 捕获按下事件，避免编辑器阻止 click 冒泡导致浮层不关闭；触发按钮和浮层内部保留原操作。 */
+  /**
+   * 捕获按下事件，避免编辑器阻止 click 冒泡导致浮层不关闭；触发按钮和浮层内部保留原操作。
+   * 手机端关闭浮层的那一次按下同时取消默认行为：点击落在浮层下方的编辑器上时，
+   * 默认的焦点转移会立即唤起输入法，先关浮层、再点一次才进入编辑，与弹窗遮罩的处理一致。
+   */
   function dismissPopovers(event: MouseEvent): void {
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (!target.closest('[data-project-search]')) closeProjectSearch();
-    if (!target.closest('[data-global-search]')) searchOpen = false;
-    if (!target.closest('[data-more-menu]')) menuOpen = false;
-    if (!target.closest('[data-project-menu]')) projectMenu = null;
-    if (!target.closest('[data-crumb-menu]')) crumbMenu = null;
+    let dismissed = false;
+    if (projectSearchOpen && !target.closest('[data-project-search]')) { closeProjectSearch(); dismissed = true; }
+    if (searchOpen && !target.closest('[data-global-search]')) { searchOpen = false; dismissed = true; }
+    if (menuOpen && !target.closest('[data-more-menu]')) { menuOpen = false; dismissed = true; }
+    if (projectMenu && !target.closest('[data-project-menu]')) { projectMenu = null; dismissed = true; }
+    if (crumbMenu && !target.closest('[data-crumb-menu]')) { crumbMenu = null; dismissed = true; }
+    if (dismissed && mobile) event.preventDefault();
   }
 
   function keydown(event: KeyboardEvent): void {
