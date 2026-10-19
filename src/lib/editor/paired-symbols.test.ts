@@ -17,11 +17,13 @@ function editor(text: string): EditorController {
 /**
  * 模拟输入法一次提交：把整段文本写进 DOM 并派发普通 input 事件，再让编辑器读取这次 DOM 变更。
  * caret 是相对提交文本起点的光标位置，默认停在文本末尾，用于区分输入法是否已经居中。
+ * composing 为真时前后包上组合会话事件；中文输入法提交成对标点通常发生在组合会话内。
  */
-async function commit(instance: EditorController, inserted: string, caret = inserted.length): Promise<void> {
+async function commit(instance: EditorController, inserted: string, caret = inserted.length, composing = false): Promise<void> {
   instance.focusAt(instance.text.length);
   const end = instance.view.domAtPos(instance.text.length);
   const node = end.node as Text;
+  if (composing) instance.view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
   node.appendData(inserted);
   document.getSelection()!.collapse(node, node.length - inserted.length + caret);
   instance.view.contentDOM.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: inserted, bubbles: true }));
@@ -33,6 +35,13 @@ describe('输入法成对符号光标居中', () => {
     const instance = editor('- [ ] 任务');
     await commit(instance, inserted);
     expect(instance.text).toBe(`- [ ] 任务${inserted}`);
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
+  });
+
+  it('输入法组合会话中提交成对符号后光标同样落在两符号之间', async () => {
+    const instance = editor('- [ ] 任务');
+    await commit(instance, '（）', 2, true);
+    expect(instance.text).toBe('- [ ] 任务（）');
     expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
   });
 
