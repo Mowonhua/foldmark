@@ -1056,25 +1056,39 @@
     return activeOutlineFrom(positions, scroller.scrollTop, listed, scroller.scrollHeight - scroller.clientHeight);
   }
 
+  /** 关闭浮层的那次按下：正文获得焦点后，浏览器仍会按默认行为在 mousedown 上把焦点交给
+   *  编辑器并唤起输入法，只在 pointerdown 上取消默认行为盖不住它，需在紧随其后的 mousedown
+   *  再取消一次。只在该次按下后的短窗口内生效，触摸被取消等情况下不会误伤后续点击。 */
+  let suppressFocusPress = 0;
+
+  function suppressDismissFocus(event: MouseEvent): void {
+    if (performance.now() - suppressFocusPress > 500) return;
+    suppressFocusPress = 0;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   /** 在弹窗外按下鼠标即关闭；不能用 click 判定：弹窗内按下拖动选择文本、移出窗口松开时，
    *  浏览器会把 click 合成到窗口根节点，导致误关。捕获阶段先关闭已有弹窗，避免打开按钮的
    *  同一次点击立即将新弹窗关闭；桌面标题栏也算外部；仅主键关闭，与原 click 语义一致。
    *  设备同步面板与普通弹窗同为独立浮层，按下面板外空白处也直接关闭整个面板。
    *  手机端遮罩在按下瞬间移除，随后合成的 mousedown/click 会落到遮罩下方的编辑器并主动聚焦，
-   *  立即唤起输入法；取消这次 pointerdown 的默认行为即阻止该次焦点转移，弹窗仍只关闭一次。 */
+   *  立即唤起输入法；取消这次 pointerdown 的默认行为并停止传播，编辑器的轻触手势拿不到这次按下，
+   *  焦点不会转移，弹窗仍只关闭一次。 */
   function dismissDialog(event: PointerEvent): void {
     if ((!dialog && !syncOpen) || updateInstalling || projectActionBusy) return;
     if (event.button !== 0) return;
     if (event.target instanceof Element && !event.target.closest('[role="dialog"]')) {
       dialog = null; syncOpen = false;
-      if (mobile) event.preventDefault();
+      if (mobile) { event.preventDefault(); event.stopPropagation(); suppressFocusPress = performance.now(); }
     }
   }
 
   /**
    * 捕获按下事件，避免编辑器阻止 click 冒泡导致浮层不关闭；触发按钮和浮层内部保留原操作。
-   * 手机端关闭浮层的那一次按下同时取消默认行为：点击落在浮层下方的编辑器上时，
-   * 默认的焦点转移会立即唤起输入法，先关浮层、再点一次才进入编辑，与弹窗遮罩的处理一致。
+   * 手机端关闭浮层的那一次按下同时取消默认行为并停止传播：点击落在浮层下方的编辑器上时，
+   * 默认的焦点转移会立即唤起输入法，编辑器也可能把这次轻触当成点空白并主动聚焦；
+   * 两者都阻止后先关浮层、再点一次才进入编辑，与弹窗遮罩的处理一致。
    */
   function dismissPopovers(event: MouseEvent): void {
     if (event.button !== 0) return;
@@ -1086,7 +1100,7 @@
     if (menuOpen && !target.closest('[data-more-menu]')) { menuOpen = false; dismissed = true; }
     if (projectMenu && !target.closest('[data-project-menu]')) { projectMenu = null; dismissed = true; }
     if (crumbMenu && !target.closest('[data-crumb-menu]')) { crumbMenu = null; dismissed = true; }
-    if (dismissed && mobile) event.preventDefault();
+    if (dismissed && mobile) { event.preventDefault(); event.stopPropagation(); suppressFocusPress = performance.now(); }
   }
 
   function keydown(event: KeyboardEvent): void {
@@ -1242,7 +1256,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onclick={dismissPopovers} />
+<svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onmousedowncapture={suppressDismissFocus} onclick={dismissPopovers} />
 
 <div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null || syncOpen} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
 
