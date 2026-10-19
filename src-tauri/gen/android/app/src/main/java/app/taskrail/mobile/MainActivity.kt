@@ -1,4 +1,4 @@
-package app.foldmark.mobile
+package app.taskrail.mobile
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

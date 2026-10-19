@@ -1,4 +1,4 @@
-package app.foldmark.mobilebridge
+package app.taskrail.mobilebridge
 
 import android.Manifest
 import android.app.Activity
@@ -54,7 +54,7 @@ class MobilePlugin(private val activity: Activity) : Plugin(activity) {
         try {
             if (multicast?.isHeld != true) {
                 val wifi = activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                multicast = wifi.createMulticastLock("foldmark-sync").apply { setReferenceCounted(false); acquire() }
+                multicast = wifi.createMulticastLock("taskrail-sync").apply { setReferenceCounted(false); acquire() }
             }
             invoke.resolve()
         } catch (error: Exception) { invoke.reject(error.message ?: "无法启用局域网发现") }

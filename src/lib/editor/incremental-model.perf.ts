@@ -53,7 +53,7 @@ it('固定大文档映射与全树投影采用相同新树和源文', () => {
     expect(projection(fast!)).toEqual(projection(normal));
   }
   const report={
-    schema:'foldmark.incremental-model-performance.v1',recordedAt:new Date().toISOString(),
+    schema:'taskrail.incremental-model-performance.v1',recordedAt:new Date().toISOString(),
     command:'npx vitest run --config src/lib/editor/vitest.perf.config.ts src/lib/editor/incremental-model.perf.ts',
     workload:{taskCount:5000,utf8Bytes:new TextEncoder().encode(text).length,characters:text.length,maxListDepth:Math.max(...model.items.map(item=>item.depth))+1,headings:model.headings.length},
     environment:{node:process.version,os:platform(),osRelease:release(),cpu:cpus()[0]?.model,logicalProcessors:cpus().length},

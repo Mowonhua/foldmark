@@ -7,7 +7,7 @@ import { taskIsArchived, taskIsComplete } from './projection';
 export interface ArchiveSection { from: number; headingTo: number; to: number }
 
 /** 有此标记的归档延伸至文件末尾或下一系统归档，兼容旧镜像中的一级标题，整理后只保留二级至六级路径。 */
-const archiveMarker = '<!-- foldmark:archive -->';
+const archiveMarker = '<!-- taskrail:archive -->';
 type Heading = DocumentModel['headings'][number];
 
 /**

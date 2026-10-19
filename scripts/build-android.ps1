@@ -1,7 +1,7 @@
 param([switch]$Install, [string]$Device, [switch]$Publish)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
-foreach ($taskVariable in @('JAVA_HOME', 'ANDROID_HOME', 'NDK_HOME', 'FOLDMARK_ANDROID_KEYSTORE', 'FOLDMARK_ANDROID_PASSWORD_FILE')) {
+foreach ($taskVariable in @('JAVA_HOME', 'ANDROID_HOME', 'NDK_HOME', 'TASKRAIL_ANDROID_KEYSTORE', 'TASKRAIL_ANDROID_PASSWORD_FILE')) {
     $taskValue = [Environment]::GetEnvironmentVariable($taskVariable)
     if (-not $taskValue -or -not (Test-Path -LiteralPath $taskValue)) { throw "$taskVariable 未设置或路径不存在。" }
 }
@@ -20,12 +20,12 @@ if (-not $taskApk) { throw '未找到签名 APK。' }
 if ($LASTEXITCODE -ne 0) { throw 'APK 签名验证失败。' }
 $taskVersion = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
 New-Item -ItemType Directory -Path 'dist-android' -Force | Out-Null
-$taskOutput = Join-Path (Get-Location) "dist-android/Foldmark-$taskVersion-arm64.apk"
+$taskOutput = Join-Path (Get-Location) "dist-android/Taskrail-$taskVersion-arm64.apk"
 Copy-Item -LiteralPath $taskApk.FullName -Destination $taskOutput
 Write-Output "签名 APK：$taskOutput"
 if ($Publish) {
     # 只向已有版本追加 APK，不替换已经公开的资源；手机从该 Release 检查更新。
-    & gh release upload "v$taskVersion" $taskOutput --repo Mowonhua/foldmark
+    & gh release upload "v$taskVersion" $taskOutput --repo Mowonhua/taskrail
     if ($LASTEXITCODE -ne 0) { throw 'APK 发布失败，请检查对应 Release 是否存在及 GitHub 登录状态。' }
 }
 if ($Install) {

@@ -107,7 +107,7 @@ function report(): Record<string, unknown> {
     rawSamples: values,
   });
   return {
-    schema: 'foldmark.browser-interaction-performance.v1', generatedAt: new Date().toISOString(), phase,
+    schema: 'taskrail.browser-interaction-performance.v1', generatedAt: new Date().toISOString(), phase,
     environment: { userAgent: navigator.userAgent, hardwareConcurrency: navigator.hardwareConcurrency, language: navigator.language, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, visibility: document.visibilityState, timeOrigin: performance.timeOrigin, location: location.pathname },
     fixture: scene,
     measurementBoundaries: {
@@ -265,7 +265,7 @@ document.querySelector('#copy-report')!.addEventListener('click', () => {
 document.querySelector('#export-report')!.addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(report(), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a'); link.href = url; link.download = `foldmark-browser-performance-${new Date().toISOString().replace(/[:.]/g, '-')}.json`; link.click();
+  const link = document.createElement('a'); link.href = url; link.download = `taskrail-browser-performance-${new Date().toISOString().replace(/[:.]/g, '-')}.json`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 window.addEventListener('pagehide', () => { nativeObserver?.disconnect(); editor?.destroy(); });

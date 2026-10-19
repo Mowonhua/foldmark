@@ -30,7 +30,7 @@ export class SyncController {
   constructor(readonly engine: SyncEngine, readonly transport: SyncTransport, readonly desktop: boolean, private readonly changed: () => void) {}
   async start(): Promise<void> {
     await this.engine.load();
-    this.stopListener = await listen<{ id: string; envelope: SyncEnvelope }>('foldmark:sync-request', async event => {
+    this.stopListener = await listen<{ id: string; envelope: SyncEnvelope }>('taskrail:sync-request', async event => {
       try {
         if (this.stopped) throw new Error('应用正在关闭');
         const state = await this.transport.status();
@@ -48,7 +48,7 @@ export class SyncController {
       }
       this.changed();
     });
-    if (!this.desktop) this.stopWakeListener = await listen('foldmark:sync-wake', () => {
+    if (!this.desktop) this.stopWakeListener = await listen('taskrail:sync-wake', () => {
       if (this.busy) this.resyncRequested = true;
       else void this.sync();
     });

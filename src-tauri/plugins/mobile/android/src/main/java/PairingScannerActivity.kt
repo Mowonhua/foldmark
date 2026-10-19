@@ -1,4 +1,4 @@
-package app.foldmark.mobilebridge
+package app.taskrail.mobilebridge
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -24,7 +24,7 @@ class PairingScannerActivity : CaptureActivity() {
     private lateinit var scanner: DecoratedBarcodeView
 
     override fun initializeContent(): DecoratedBarcodeView {
-        setContentView(R.layout.foldmark_scanner)
+        setContentView(R.layout.taskrail_scanner)
         scanner = findViewById(R.id.zxing_barcode_scanner)
         return scanner
     }

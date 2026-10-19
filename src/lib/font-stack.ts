@@ -119,7 +119,7 @@ export function probeFontInstalled(family: string): boolean {
   if (typeof document !== 'undefined') {
     const context = document.createElement('canvas').getContext('2d');
     if (context) {
-      const text = 'foldmark 正文字体 0123';
+      const text = 'taskrail 正文字体 0123';
       for (const control of PROBE_CONTROLS) {
         context.font = `72px ${control}`;
         const baseline = context.measureText(text).width;

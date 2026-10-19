@@ -19,12 +19,12 @@ let paused = false; let breakpoint;
 page.on('Debugger.paused', () => { paused = true; });
 page.on('Debugger.resumed', () => { paused = false; });
 try {
-  assert.equal(await invoke('plugin:app|identifier'), 'app.foldmark.syncvalidation');
+  assert.equal(await invoke('plugin:app|identifier'), 'app.taskrail.syncvalidation');
   const before = await invoke('sync_load_state');
   const record = before.records[documentId]; assert(record?.binding?.enabled);
   assert(!record.document.revisions[record.document.head].content.text.includes(marker), '必须使用新的验收标记');
   const config = await invoke('load_config'); const project = config.projects.find(project => project.id === record.binding.localId);
-  assert(project.path.replaceAll('\\', '/').includes('/foldmark/test-results/'), '只能验证专用文档');
+  assert(project.path.replaceAll('\\', '/').includes('/taskrail/test-results/'), '只能验证专用文档');
   // 原生调用入口不可改写。协议 3 的确认回包不再携带正文，改为停在状态保存调用上：
   // 第一次命中是写入日志保存（正文尚未落盘），第二次命中是正文落盘后的最终保存，此时确认尚未发出。
   await page.call('Debugger.enable');
@@ -38,10 +38,10 @@ try {
   await wait(async () => paused, 180000);
   const saved = await readFile(project.path, 'utf8'); assert(saved.includes(marker));
   const savedTime = (await stat(project.path, { bigint: true })).mtimeNs;
-  android('shell', 'am', 'force-stop', 'app.foldmark.mobile'); phoneStopped = true;
+  android('shell', 'am', 'force-stop', 'app.taskrail.mobile'); phoneStopped = true;
   await page.call('Debugger.removeBreakpoint', { breakpointId: breakpoint }); breakpoint = undefined;
   await page.call('Debugger.resume');
-  android('shell', 'monkey', '-p', 'app.foldmark.mobile', '-c', 'android.intent.category.LAUNCHER', '1'); phoneStopped = false;
+  android('shell', 'monkey', '-p', 'app.taskrail.mobile', '-c', 'android.intent.category.LAUNCHER', '1'); phoneStopped = false;
   await wait(async () => {
     const next = await invoke('sync_load_state'); const r = next.records[documentId];
     return r.binding.acknowledged === r.document.head && !r.conflict && r.document.revisions[r.document.head].content.text.includes(marker);
@@ -55,6 +55,6 @@ try {
   if (breakpoint) await page.call('Debugger.removeBreakpoint', { breakpointId: breakpoint }).catch(() => {});
   if (paused) await page.call('Debugger.resume').catch(() => {});
   await page.call('Debugger.disable').catch(() => {});
-  if (phoneStopped) android('shell', 'monkey', '-p', 'app.foldmark.mobile', '-c', 'android.intent.category.LAUNCHER', '1');
+  if (phoneStopped) android('shell', 'monkey', '-p', 'app.taskrail.mobile', '-c', 'android.intent.category.LAUNCHER', '1');
   page.close();
 }

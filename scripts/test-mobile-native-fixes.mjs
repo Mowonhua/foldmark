@@ -12,8 +12,8 @@ async function wait(check) { const end = Date.now() + 60000; while (Date.now() <
 const click = async name => phone.evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')??b.textContent).trim()===${JSON.stringify(name)}); if(!b) throw Error('按钮未找到：'+${JSON.stringify(name)}); b.click(); })()`);
 const capture = name => writeFileSync(`test-results/${name}.png`, execFileSync(adb, ['-s', serial, 'exec-out', 'screencap', '-p'], { maxBuffer: 20_000_000 }));
 try {
-  assert.equal(await invoke(desktop, 'plugin:app|identifier'), 'app.foldmark.syncvalidation');
-  assert.equal(await invoke(phone, 'plugin:app|identifier'), 'app.foldmark.mobile');
+  assert.equal(await invoke(desktop, 'plugin:app|identifier'), 'app.taskrail.syncvalidation');
+  assert.equal(await invoke(phone, 'plugin:app|identifier'), 'app.taskrail.mobile');
   await phone.evaluate(`document.querySelector('button[aria-label="关闭同步面板"]')?.click()`);
   await click('更多操作'); await pause(50); await click('新增项目');
   await wait(() => phone.evaluate(`!!document.querySelector('.modal input')`));
@@ -26,13 +26,13 @@ try {
   const source = '# 留白验收\n\n- [ ] 待办\n\n# 归档\n\n- [x] 完成\n';
   await phone.evaluate(`(() => { const v=document.querySelector('.cm-content').cmTile.view; v.dispatch({changes:{from:0,to:v.state.doc.length,insert:${JSON.stringify(source)}},selection:{anchor:0}}); v.contentDOM.blur(); })()`);
   await pause(900);
-  run('shell', 'rm', '-f', '/sdcard/foldmark-test-ui.xml');
-  try { run('shell', 'uiautomator', 'dump', '/sdcard/foldmark-test-ui.xml'); }
+  run('shell', 'rm', '-f', '/sdcard/taskrail-test-ui.xml');
+  try { run('shell', 'uiautomator', 'dump', '/sdcard/taskrail-test-ui.xml'); }
   catch (error) {
     // 部分真机会在成功写入后终止 UIAutomator；只接受明确完成的输出，随后仍核对实际 WebView。
-    if (!String(error.stdout).includes('UI hierchary dumped to: /sdcard/foldmark-test-ui.xml')) throw error;
+    if (!String(error.stdout).includes('UI hierchary dumped to: /sdcard/taskrail-test-ui.xml')) throw error;
   }
-  const xml = run('shell', 'cat', '/sdcard/foldmark-test-ui.xml');
+  const xml = run('shell', 'cat', '/sdcard/taskrail-test-ui.xml');
   const bounds = /class="android.webkit.WebView"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/.exec(xml);
   assert(bounds, '无法确认 WebView 的屏幕偏移');
   const point = await phone.evaluate(`(() => { const r=document.querySelector('.cm-scroller').getBoundingClientRect();return {x:(r.left+r.width/2)*devicePixelRatio,y:(r.bottom-70)*devicePixelRatio}; })()`);

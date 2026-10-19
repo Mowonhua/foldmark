@@ -2,7 +2,7 @@
  * 文件职责：承载 Android 更新检查、受控下载及系统安装器交接。
  * 定义范围：稳定版候选、版本规则和原生更新会话。
  */
-package app.foldmark.mobilebridge
+package app.taskrail.mobilebridge
 
 import android.app.Activity
 import android.content.Intent
@@ -80,7 +80,7 @@ internal object AndroidUpdateRules {
                 val name = asset.optString("name").lowercase()
                 val url = asset.optString("browser_download_url")
                 if (!name.endsWith(".apk") || !(name.contains("arm64") || name.contains("aarch64"))) continue
-                if (!url.startsWith("https://github.com/Mowonhua/foldmark/releases/download/") || asset.optLong("size") <= 0) continue
+                if (!url.startsWith("https://github.com/Mowonhua/taskrail/releases/download/") || asset.optLong("size") <= 0) continue
                 selected = AndroidUpdateCandidate(version, release.optString("body"), url, asset.getLong("size"))
                 break
             }
@@ -118,7 +118,7 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
     fun check(invoke: Invoke) {
         run(invoke) { token ->
             val current = installed().versionName ?: error("无法读取当前版本")
-            val json = request("https://api.github.com/repos/Mowonhua/foldmark/releases?per_page=30", token) { response, status ->
+            val json = request("https://api.github.com/repos/Mowonhua/taskrail/releases?per_page=30", token) { response, status ->
                 check(status == 200) { "更新服务器返回 HTTP $status" }
                 response.inputStream.bufferedReader().use { reader ->
                     val body = StringBuilder()
@@ -355,7 +355,7 @@ internal class AndroidUpdater(private val activity: Activity, private val progre
                 response.connectTimeout = 20_000
                 response.readTimeout = 30_000
                 response.instanceFollowRedirects = false
-                response.setRequestProperty("User-Agent", "Foldmark-Android")
+                response.setRequestProperty("User-Agent", "Taskrail-Android")
                 response.setRequestProperty("Accept", if (url.host == "api.github.com") "application/vnd.github+json" else "application/octet-stream")
                 prepare(response)
                 val status = response.responseCode

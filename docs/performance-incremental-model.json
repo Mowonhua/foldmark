@@ -1,5 +1,5 @@
 {
-  "schema": "foldmark.incremental-model-performance.v1",
+  "schema": "taskrail.incremental-model-performance.v1",
   "recordedAt": "2026-09-06T06:33:02.760Z",
   "command": "npx vitest run --config src/lib/editor/vitest.perf.config.ts src/lib/editor/incremental-model.perf.ts",
   "workload": {

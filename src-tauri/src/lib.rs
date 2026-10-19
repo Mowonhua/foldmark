@@ -237,7 +237,7 @@ fn watch_file(
 ) -> Result<u64, FileError> {
     let watch_id = state.next_watch.fetch_add(1, Ordering::Relaxed);
     let watcher = watch_path(Path::new(&path), move || {
-        let _ = app.emit("foldmark:file-change", watch_id);
+        let _ = app.emit("taskrail:file-change", watch_id);
     })?;
     state
         .watchers
@@ -290,7 +290,7 @@ fn unwatch_file(watch_id: u64, state: State<'_, FileState>) -> Result<(), FileEr
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "windows")]
-    let _instance = match single_instance::acquire().expect("无法仲裁 Foldmark 启动实例") {
+    let _instance = match single_instance::acquire().expect("无法仲裁 Taskrail 启动实例") {
         Some(instance) => instance,
         None => return,
     };
@@ -307,7 +307,7 @@ pub fn run() {
         .0
         .get_mut("updater")
         .expect("更新配置缺失")["endpoints"] = serde_json::json!([format!(
-        "https://raw.githubusercontent.com/Mowonhua/foldmark/updates/{channel}.json"
+        "https://raw.githubusercontent.com/Mowonhua/taskrail/updates/{channel}.json"
     )]);
     #[cfg(target_os = "windows")]
     let window_key = _instance.window_key();
@@ -319,7 +319,7 @@ pub fn run() {
         #[cfg(not(target_os = "android"))]
         window_state::restore(app);
         #[cfg(target_os = "android")]
-        app.handle().plugin(tauri_plugin_foldmark_mobile::init())?;
+        app.handle().plugin(tauri_plugin_taskrail_mobile::init())?;
         Ok(())
     });
     #[cfg(not(target_os = "android"))]
@@ -355,7 +355,7 @@ pub fn run() {
             window_material::set_window_material
         ])
         .run(context)
-        .expect("无法启动 Foldmark 桌面窗口");
+        .expect("无法启动 Taskrail 桌面窗口");
 }
 
 #[cfg(test)]

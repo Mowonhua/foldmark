@@ -1113,36 +1113,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "foldmark"
-version = "0.7.5"
-dependencies = [
- "fontdb",
- "if-addrs",
- "mdns-sd",
- "notify",
- "rand",
- "rcgen",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "similar",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-foldmark-mobile",
- "tauri-plugin-fs",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-updater",
- "tempfile",
- "url",
- "window-vibrancy 0.6.0",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4140,6 +4110,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
+name = "taskrail"
+version = "0.7.5"
+dependencies = [
+ "fontdb",
+ "if-addrs",
+ "mdns-sd",
+ "notify",
+ "rand",
+ "rcgen",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "similar",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-taskrail-mobile",
+ "tauri-plugin-updater",
+ "tempfile",
+ "url",
+ "window-vibrancy 0.6.0",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "tauri"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4303,14 +4303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-foldmark-mobile"
-version = "0.1.0"
-dependencies = [
- "tauri",
- "tauri-plugin",
-]
-
-[[package]]
 name = "tauri-plugin-fs"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4361,6 +4353,14 @@ name = "tauri-plugin-process"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74ae3d8549ae564c0397377373e262f340908eb23a5b9fbe03f2a00007dc0038"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-taskrail-mobile"
+version = "0.1.0"
 dependencies = [
  "tauri",
  "tauri-plugin",

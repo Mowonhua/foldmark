@@ -8,7 +8,7 @@
     <application android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.foldmark"
+        android:theme="@style/Theme.taskrail"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"

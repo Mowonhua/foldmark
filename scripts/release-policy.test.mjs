@@ -31,7 +31,7 @@ test('真实摘要、完整签名及版本下载地址共同约束资源包', ()
   const missing = new Map(files);
   missing.delete(`${installerName}.sig`);
   assert.throws(() => verifyReleaseFiles(missing, repository, version), /资源/);
-  assert.throws(() => verifyReleaseFiles(files, 'other/foldmark', version), /地址/);
+  assert.throws(() => verifyReleaseFiles(files, 'other/taskrail', version), /地址/);
   assert.throws(() => verifyReleaseFiles(files, repository, '0.1.0-alpha.2'), /版本|资源/);
 });
 
@@ -48,7 +48,7 @@ test('预发布只提升 preview，正式版可提升两频道，补发旧版本
 });
 
 test('更新清单拒绝空签名、路径注入和非版本安装包名', () => {
-  const input = { repository: 'Mowonhua/foldmark', version: '0.1.0', installerName: 'Foldmark_0.1.0_x64-setup.exe', signature: 'signed', notes: '', publishedAt: '2026-09-12T00:00:00Z' };
+  const input = { repository: 'Mowonhua/taskrail', version: '0.1.0', installerName: 'Taskrail_0.1.0_x64-setup.exe', signature: 'signed', notes: '', publishedAt: '2026-09-12T00:00:00Z' };
   assert.throws(() => createUpdateManifest({ ...input, signature: ' ' }), /签名/);
   assert.throws(() => createUpdateManifest({ ...input, repository: '../other' }), /仓库/);
   assert.throws(() => createUpdateManifest({ ...input, installerName: '../installer.exe' }), /安装包/);
@@ -57,7 +57,7 @@ test('更新清单拒绝空签名、路径注入和非版本安装包名', () =>
 test('v0.7.1 起缺少、损坏或版本错误的 Android APK 阻止完整发布，旧版本保持兼容', () => {
   for (const version of ['0.7.1', '0.7.1-rc.1']) {
     const fixture = releaseFixture(version);
-    const apk = `Foldmark-${version}-arm64.apk`;
+    const apk = `Taskrail-${version}-arm64.apk`;
     assert.deepEqual(verifyReleaseFiles(fixture.files, fixture.repository, version), fixture.manifest);
     const missing = new Map(fixture.files);
     missing.delete(apk);
@@ -66,7 +66,7 @@ test('v0.7.1 起缺少、损坏或版本错误的 Android APK 阻止完整发布
     assert.throws(() => verifyReleaseFiles(corrupt, fixture.repository, version), /摘要/);
     const wrongVersion = new Map(fixture.files);
     wrongVersion.delete(apk);
-    wrongVersion.set('Foldmark-0.7.0-arm64.apk', Buffer.from('old'));
+    wrongVersion.set('Taskrail-0.7.0-arm64.apk', Buffer.from('old'));
     assert.throws(() => verifyReleaseFiles(wrongVersion, fixture.repository, version), /资源/);
   }
   const legacy = releaseFixture('0.7.0');

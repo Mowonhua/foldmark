@@ -3,7 +3,7 @@
   "recorded_at_utc": "2026-09-06T05:55:48.9672581Z",
   "purpose": "Windows 原生功能验证与已运行进程内存抽样；这是开发过程证据，不是最终验收报告。",
   "tested_build": {
-    "product": "Foldmark",
+    "product": "Taskrail",
     "version": "0.1.0",
     "profile": "release",
     "platform": "windows-x86_64",
@@ -14,7 +14,7 @@
     "source_commit": null,
     "source_commit_note": "构建来自开发中的工作区；不能将后续源码提交或最终安装包归为此测量对象。",
     "installer": {
-      "name": "Foldmark_0.1.0_x64-setup.exe",
+      "name": "Taskrail_0.1.0_x64-setup.exe",
       "build_succeeded": true,
       "size_bytes": 3320166,
       "sha256": "9fa85b3ebe04ab0958ef45426971d0009536750463b3403c6fa64b5a7bbaf4f5",
@@ -104,7 +104,7 @@
     "sample_count": 20,
     "sampling_loop_duration_seconds": 25.527,
     "requested_delay_between_samples_ms": 1000,
-    "process_discovery": "每次查询 Win32_Process，从唯一 Foldmark 主进程按 ParentProcessId 递归收集后代，仅累计主进程与其 msedgewebview2.exe 后代。",
+    "process_discovery": "每次查询 Win32_Process，从唯一 Taskrail 主进程按 ParentProcessId 递归收集后代，仅累计主进程与其 msedgewebview2.exe 后代。",
     "root_pid": 22884,
     "root_present_in_all_samples": true,
     "process_count_min": 7.0,
@@ -150,7 +150,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -218,7 +218,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -286,7 +286,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -354,7 +354,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -422,7 +422,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -490,7 +490,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -558,7 +558,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -626,7 +626,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -694,7 +694,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -762,7 +762,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -830,7 +830,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -898,7 +898,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -966,7 +966,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1034,7 +1034,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1102,7 +1102,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1170,7 +1170,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1238,7 +1238,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1306,7 +1306,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1374,7 +1374,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312
@@ -1442,7 +1442,7 @@
           {
             "pid": 22884,
             "parent_pid": 37200,
-            "name": "foldmark.exe",
+            "name": "taskrail.exe",
             "working_set_bytes": 30879744,
             "private_memory_bytes": 6668288,
             "process_lifetime_peak_working_set_bytes": 36749312

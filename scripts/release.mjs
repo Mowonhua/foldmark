@@ -22,7 +22,7 @@ export async function readReleaseVersion(root, tag) {
   );
   const npmLock = JSON.parse(npmLockText);
   const cargoPackage = cargoText.split('[package]')[1]?.split(/\r?\n\[/)[0];
-  const cargoLockPackage = cargoLockText.split('[[package]]').find((block) => /^name\s*=\s*"foldmark"\s*$/m.test(block));
+  const cargoLockPackage = cargoLockText.split('[[package]]').find((block) => /^name\s*=\s*"taskrail"\s*$/m.test(block));
   return validateReleaseVersions({
     npm: JSON.parse(npmText).version,
     'package-lock.json': npmLock.version,
@@ -41,7 +41,7 @@ export async function readReleaseVersion(root, tag) {
  */
 export async function prepareRelease({ root, repository, tag, output }) {
   const { version } = await readReleaseVersion(root, tag);
-  const installerName = `Foldmark_${version}_x64-setup.exe`;
+  const installerName = `Taskrail_${version}_x64-setup.exe`;
   const bundle = join(root, 'src-tauri/target/release/bundle/nsis');
   const [installer, signature, notes] = await Promise.all([
     readFile(join(bundle, installerName)),
@@ -56,7 +56,7 @@ export async function prepareRelease({ root, repository, tag, output }) {
   ]);
   // 旧标签仍可恢复发布；新版本必须在公开前把两个平台的产物纳入同一份摘要。
   if (compareVersions(version, '0.7.1-0') >= 0) {
-    const apkName = `Foldmark-${version}-arm64.apk`;
+    const apkName = `Taskrail-${version}-arm64.apk`;
     files.set(apkName, await readFile(join(root, 'dist-android', apkName)));
   }
   const sums = [...files].map(([name, bytes]) => `${createHash('sha256').update(bytes).digest('hex')}  ${name}`).join('\n');

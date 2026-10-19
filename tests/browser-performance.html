@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Foldmark · 浏览器性能验收</title>
+  <title>Taskrail · 浏览器性能验收</title>
   <style>
     :root { --text: #303b33; --muted: #657569; --accent: #426a4d; --surface: #fffef9; --surface-alt: #eeefe7; --border: #d5ddcf; --editor-font: 'Segoe UI', 'Microsoft YaHei', sans-serif; --editor-font-size: 16px; --editor-width: 850px; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; color: var(--text); background: #f4f5ee; }
     * { box-sizing: border-box; } body { margin: 0; } button, input { font: inherit; } button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); padding: 8px 12px; cursor: pointer; } button:hover { background: #e7ede2; } button:disabled { cursor: default; opacity: .5; } button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -12,7 +12,7 @@
 </head>
 <body>
   <header>
-    <h1>Foldmark 浏览器性能验收</h1>
+    <h1>Taskrail 浏览器性能验收</h1>
     <p class="lead">固定场景：当前文档 5,000 条任务；19 个后台项目各 250 条任务。仅挂载一个实际 EditorController。</p>
     <p id="measurement-note">采集真实 beforeinput → 下一次 rAF、同步文档 dispatch。下一次 rAF 不是最终像素呈现；此页不测 Tauri 冷启动、WebView2 总内存或磁盘保存。</p>
     <div class="toolbar">

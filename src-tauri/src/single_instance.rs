@@ -57,7 +57,7 @@ fn instance_key(executable: &Path) -> io::Result<Vec<u16>> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "程序路径包含无效 Unicode"))?;
     let identity = crate::storage::file_identity(path);
     let hash = crate::storage::fingerprint(identity.as_bytes());
-    Ok(format!("Foldmark.Instance.{hash}")
+    Ok(format!("Taskrail.Instance.{hash}")
         .encode_utf16()
         .chain([0])
         .collect())
@@ -201,8 +201,8 @@ mod tests {
         let second = directory.path().join("second");
         std::fs::create_dir_all(&first).unwrap();
         std::fs::create_dir_all(&second).unwrap();
-        let program = first.join("foldmark.exe");
-        let copy = second.join("foldmark.exe");
+        let program = first.join("taskrail.exe");
+        let copy = second.join("taskrail.exe");
         let renamed = first.join("other.exe");
         for path in [&program, &copy, &renamed] {
             std::fs::write(path, "same executable bytes").unwrap();
@@ -210,9 +210,9 @@ mod tests {
         let identity = instance_key(&program).unwrap();
         assert_eq!(
             identity,
-            instance_key(&first.join(".\\foldmark.exe")).unwrap()
+            instance_key(&first.join(".\\taskrail.exe")).unwrap()
         );
-        assert_eq!(identity, instance_key(&first.join("FOLDMARK.EXE")).unwrap());
+        assert_eq!(identity, instance_key(&first.join("TASKRAIL.EXE")).unwrap());
         assert_ne!(identity, instance_key(&copy).unwrap());
         assert_ne!(identity, instance_key(&renamed).unwrap());
     }

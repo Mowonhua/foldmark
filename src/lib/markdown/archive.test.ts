@@ -10,7 +10,7 @@ const normalize = (text: string, completedFrom: readonly number[] = []): string 
 
 describe('managed archive layout', () => {
   it('已有归档中的一级标题移除，但直属正文、任务和二级子路径保留', () => {
-    const source = '# 项目\n\n## 本周\n\n- [ ] open\n\n# 归档\n<!-- foldmark:archive -->\n\n# 项目\n\n归档备注\n\n- [x] direct\n\n## 本周\n\n### 开发\n\n- [x] nested\n\n# 其他\n\n- [x] other\n';
+    const source = '# 项目\n\n## 本周\n\n- [ ] open\n\n# 归档\n<!-- taskrail:archive -->\n\n# 项目\n\n归档备注\n\n- [x] direct\n\n## 本周\n\n### 开发\n\n- [x] nested\n\n# 其他\n\n- [x] other\n';
     const result = normalize(source);
     const archived = result.slice(archiveSections(parseDocument(result))[0].headingTo);
     expect(archived).not.toMatch(/^# /m);
@@ -39,7 +39,7 @@ describe('managed archive layout', () => {
     expect(restored.slice(0, restored.indexOf('# B'))).not.toContain('- [ ] b');
     expect(normalize(result)).toBe(result);
     expect(normalize(restored)).toBe(restored);
-    const legacy = normalize('# 归档\n<!-- foldmark:archive -->\n\n# A\n\n## X\n\n- [x] a\n\n# B\n\n### Y\n\n- [x] b\n');
+    const legacy = normalize('# 归档\n<!-- taskrail:archive -->\n\n# A\n\n## X\n\n- [x] a\n\n# B\n\n### Y\n\n- [x] b\n');
     expect(legacy.indexOf('### Y')).toBeLessThan(legacy.indexOf('## X'));
     expect(normalize(legacy)).toBe(legacy);
   });
@@ -133,7 +133,7 @@ describe('managed archive layout', () => {
     expect(normalize(result)).toBe(result);
   });
   it('恢复无末尾换行的深层任务时，不吞掉后续章节标题和正文', () => {
-    const source = '# A\n\n## B\n\n# Other\n\nuntouched prose\n\n# 归档\n<!-- foldmark:archive -->\n\n# A\n\n## B\n\n- [ ] restored';
+    const source = '# A\n\n## B\n\n# Other\n\nuntouched prose\n\n# 归档\n<!-- taskrail:archive -->\n\n# A\n\n## B\n\n- [ ] restored';
     const result = normalize(source);
     expect(result).toContain('## B\n\n- [ ] restored\n\n# Other\n\nuntouched prose');
     expect(parseDocument(result).headings.some(heading => heading.text === 'Other')).toBe(true);

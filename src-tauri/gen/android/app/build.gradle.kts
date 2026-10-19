@@ -16,22 +16,22 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 37
-    namespace = "app.foldmark.mobile"
+    namespace = "app.taskrail.mobile"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "app.foldmark.mobile"
+        applicationId = "app.taskrail.mobile"
         minSdk = 26
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
-    // FOLDMARK_SIGNING：密钥与密码只从仓库外的文件读取。
-    val foldmarkKeystore = System.getenv("FOLDMARK_ANDROID_KEYSTORE")
-    if (!foldmarkKeystore.isNullOrBlank()) {
-        signingConfigs.create("foldmarkRelease") {
-            storeFile = file(foldmarkKeystore)
-            keyAlias = System.getenv("FOLDMARK_ANDROID_KEY_ALIAS") ?: "foldmark"
-            val passwordFile = requireNotNull(System.getenv("FOLDMARK_ANDROID_PASSWORD_FILE")) { "Missing Android signing password file" }
+    // TASKRAIL_SIGNING：密钥与密码只从仓库外的文件读取。
+    val taskrailKeystore = System.getenv("TASKRAIL_ANDROID_KEYSTORE")
+    if (!taskrailKeystore.isNullOrBlank()) {
+        signingConfigs.create("taskrailRelease") {
+            storeFile = file(taskrailKeystore)
+            keyAlias = System.getenv("TASKRAIL_ANDROID_KEY_ALIAS") ?: "taskrail"
+            val passwordFile = requireNotNull(System.getenv("TASKRAIL_ANDROID_PASSWORD_FILE")) { "Missing Android signing password file" }
             val password = file(passwordFile).readText().trim()
             storePassword = password
             keyPassword = password
@@ -40,8 +40,8 @@ android {
 
     buildTypes {
         getByName("debug") {
-            // FOLDMARK_DEBUG_SIGNING：验收包与正式包使用同一签名，可保留数据升级。
-            if (!foldmarkKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("foldmarkRelease")
+            // TASKRAIL_DEBUG_SIGNING：验收包与正式包使用同一签名，可保留数据升级。
+            if (!taskrailKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("taskrailRelease")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
@@ -54,7 +54,7 @@ android {
             }
         }
         getByName("release") {
-            if (!foldmarkKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("foldmarkRelease")
+            if (!taskrailKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("taskrailRelease")
             optimization {
                enable = true
             }

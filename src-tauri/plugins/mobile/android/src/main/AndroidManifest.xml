@@ -7,10 +7,10 @@
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application>
-        <activity android:name="app.foldmark.mobilebridge.PairingScannerActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.FoldmarkScanner" />
-        <provider android:name="app.foldmark.mobilebridge.UpdateFileProvider"
+        <activity android:name="app.taskrail.mobilebridge.PairingScannerActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.TaskrailScanner" />
+        <provider android:name="app.taskrail.mobilebridge.UpdateFileProvider"
             android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/foldmark_update_paths" />
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/taskrail_update_paths" />
         </provider>
     </application>
 </manifest>

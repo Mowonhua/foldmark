@@ -1,12 +1,12 @@
 [package]
-name = "foldmark"
+name = "taskrail"
 version = "0.7.5"
 description = "Markdown task editor"
 license = "MIT"
 edition = "2021"
 
 [lib]
-name = "foldmark_lib"
+name = "taskrail_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -34,7 +34,7 @@ if-addrs = "0.13"
 tauri-plugin-fs = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
-tauri-plugin-foldmark-mobile = { path = "plugins/mobile" }
+tauri-plugin-taskrail-mobile = { path = "plugins/mobile" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tauri-plugin-updater = "2.13.1"

@@ -32,7 +32,7 @@ function updateFailureMessage(error: unknown): string {
  * 实现思路：只在 invoke 边界转换错误，业务分支仍由调用方判断。
  */
 async function invokeUpdate<T>(command: string): Promise<T> {
-  try { return await invoke<T>(`plugin:foldmark-mobile|${command}`); }
+  try { return await invoke<T>(`plugin:taskrail-mobile|${command}`); }
   catch (error) { throw new Error(updateFailureMessage(error)); }
 }
 
@@ -57,7 +57,7 @@ export class AndroidUpdatePort implements UpdatePort {
     return {
       version: result.version, currentVersion: result.currentVersion, body: result.body, keepsAppRunning: true,
       async download(onProgress) {
-        const listener = await addPluginListener<UpdateProgress>('foldmark-mobile', 'updateProgress', onProgress);
+        const listener = await addPluginListener<UpdateProgress>('taskrail-mobile', 'updateProgress', onProgress);
         try { onProgress(await invokeUpdate<UpdateProgress>('downloadUpdate')); }
         finally { await listener.unregister(); }
       },

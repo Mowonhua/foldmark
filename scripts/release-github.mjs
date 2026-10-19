@@ -19,7 +19,7 @@ function githubApi(repository, token, request) {
         Authorization: `Bearer ${token}`,
         Accept: binary ? 'application/octet-stream' : 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'Foldmark-release',
+        'User-Agent': 'Taskrail-release',
         ...(body ? { 'Content-Type': Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json' } : {}),
       },
       body: body ? Buffer.isBuffer(body) ? body : JSON.stringify(body) : undefined,
@@ -92,7 +92,7 @@ export async function publishRelease({ repository, tag, directory, token, reques
   const api = githubApi(repository, token, request);
   let release = await api(`/releases/tags/${encodeURIComponent(tag)}`, { optional: true });
   if (!release) {
-    release = await api('/releases', { method: 'POST', body: { tag_name: tag, name: `Foldmark ${tag}`, body: localManifest.notes, draft: true, prerelease, make_latest: 'false' } });
+    release = await api('/releases', { method: 'POST', body: { tag_name: tag, name: `Taskrail ${tag}`, body: localManifest.notes, draft: true, prerelease, make_latest: 'false' } });
   }
   if (release.tag_name !== tag || release.prerelease !== prerelease) throw new Error('已有 Release 的标签或预发布状态与当前版本不一致');
   if (release.draft) {

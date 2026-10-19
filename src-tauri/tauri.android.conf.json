@@ -1,7 +1,7 @@
 {
-  "identifier": "app.foldmark.mobile",
+  "identifier": "app.taskrail.mobile",
   "app": {
-    "windows": [{ "label": "main", "title": "Foldmark", "fullscreen": false, "visible": true, "transparent": false, "decorations": true }]
+    "windows": [{ "label": "main", "title": "Taskrail", "fullscreen": false, "visible": true, "transparent": false, "decorations": true }]
   },
   "bundle": { "targets": "all", "createUpdaterArtifacts": false, "android": { "minSdkVersion": 26 } }
 }

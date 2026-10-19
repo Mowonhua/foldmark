@@ -113,7 +113,7 @@ pub fn backup_corrupt_bytes(path: &Path, bytes: &[u8]) -> Result<PathBuf, FileEr
         .filter(|value| !value.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let mut backup = tempfile::Builder::new()
-        .prefix(".foldmark.corrupt-")
+        .prefix(".taskrail.corrupt-")
         .suffix(".backup")
         .tempfile_in(parent)
         .map_err(FileError::io)?;

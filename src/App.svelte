@@ -307,7 +307,7 @@
   function startProjectDrag(event: DragEvent, id: string): void {
     if (!event.dataTransfer) return;
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('application/x-foldmark-project', id);
+    event.dataTransfer.setData('application/x-taskrail-project', id);
     draggedProjectId = id;
     projectDropTarget = null;
   }
@@ -1244,7 +1244,7 @@
             afterInstallHandoff: () => { updateInstalling = false; },
             onStatus: status => {
               updateStatus = status;
-              if (status.kind === 'ready') notify($t("Foldmark {version} 已下载，可在更新面板安装。", { version: status.version ?? packageInfo.version }));
+              if (status.kind === 'ready') notify($t("Taskrail {version} 已下载，可在更新面板安装。", { version: status.version ?? packageInfo.version }));
             },
           });
           if (config.preferences.autoCheckUpdates ?? true) void updater.check();
@@ -1280,7 +1280,7 @@
     <!-- 固定侧栏内容宽度，由外层裁切随网格收放，避免动画期间文字和按钮反复换行。 -->
     <div class="sidebar-slot">
     <aside class="sidebar" aria-label={outlineVisible ? $t("大纲目录") : $t("项目导航")} inert={!sidebar || cardMode} transition:fly={{ x: -16, duration: reducedMotion || cardTransitioning ? 0 : 180, easing: cubicOut }}>
-      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Foldmark</span><button class="icon-button sidebar-close" onclick={closeSidebar} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
+      <div class="brand" data-tauri-drag-region={desktop ? true : undefined}><img src={appIcon} width="32" height="32" alt="" draggable={false} /><span>Taskrail</span><button class="icon-button sidebar-close" onclick={closeSidebar} aria-label={$t("收起项目导航")}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 4-6 6 6 6"/></svg></button></div>
       {#if outlineVisible}
         {#key previewMode}
           <nav class="outline-list" aria-label={$t("大纲目录")}>

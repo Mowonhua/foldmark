@@ -1,14 +1,14 @@
 /** 在真实触屏浏览器中验证浮层外部关闭与导航手势。 */
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-const browser = await chromium.launch({ channel: process.env.FOLDMARK_BROWSER ?? 'msedge', headless: true });
+const browser = await chromium.launch({ channel: process.env.TASKRAIL_BROWSER ?? 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 await page.addInitScript(() => {
-  localStorage.setItem('foldmark:file:navigation.md', JSON.stringify({ path: 'navigation.md', text: '# 手机导航\n\n- [ ] 任务\n', revision: 'initial' }));
-  localStorage.setItem('foldmark:config', JSON.stringify({ projects: [{ id: 'navigation', name: '手机导航', path: 'navigation.md' }], activeProjectId: 'navigation', preferences: { theme: 'light' }, projectViews: {} }));
+  localStorage.setItem('taskrail:file:navigation.md', JSON.stringify({ path: 'navigation.md', text: '# 手机导航\n\n- [ ] 任务\n', revision: 'initial' }));
+  localStorage.setItem('taskrail:config', JSON.stringify({ projects: [{ id: 'navigation', name: '手机导航', path: 'navigation.md' }], activeProjectId: 'navigation', preferences: { theme: 'light' }, projectViews: {} }));
 });
 try {
-  await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/?mobile-preview`);
+  await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/?mobile-preview`);
   await page.waitForSelector('.app-shell.booted');
   for (const [trigger, popup] of [['更多操作', '[data-more-menu][role="menu"]'], ['搜索', '.search-panel'], ['切换项目', '.crumb-menu']]) {
     await page.getByRole('button', { name: trigger, exact: true }).tap();

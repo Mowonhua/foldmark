@@ -70,7 +70,7 @@ export function compareVersions(left, right) {
 export function createUpdateManifest({ repository, version, installerName, signature, notes, publishedAt }) {
   parseVersion(version);
   if (!/^[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('GitHub 仓库名称无效');
-  if (installerName !== `Foldmark_${version}_x64-setup.exe`) throw new Error('安装包文件名与版本不一致');
+  if (installerName !== `Taskrail_${version}_x64-setup.exe`) throw new Error('安装包文件名与版本不一致');
   if (typeof signature !== 'string' || signature.trim().length === 0) throw new Error('缺少更新签名正文');
   if (typeof notes !== 'string' || !Number.isFinite(Date.parse(publishedAt))) throw new Error('发布说明或日期无效');
   return {
@@ -93,9 +93,9 @@ export function createUpdateManifest({ repository, version, installerName, signa
  * 实现思路：按版本确定完整资源集合，保留旧版四项资源兼容，再验证摘要，再对照清单中的版本、下载地址及签名。
  */
 export function verifyReleaseFiles(files, repository, version) {
-  const installerName = `Foldmark_${version}_x64-setup.exe`;
+  const installerName = `Taskrail_${version}_x64-setup.exe`;
   const names = [installerName, `${installerName}.sig`, 'latest.json'];
-  if (compareVersions(version, '0.7.1-0') >= 0) names.push(`Foldmark-${version}-arm64.apk`);
+  if (compareVersions(version, '0.7.1-0') >= 0) names.push(`Taskrail-${version}-arm64.apk`);
   if (files.size !== names.length + 1 || [...names, 'SHA256SUMS'].some((name) => !files.get(name)?.length)) throw new Error('发布资源缺失或包含意外文件');
   const rows = files.get('SHA256SUMS').toString('utf8').trim().split(/\r?\n/);
   if (rows.length !== names.length) throw new Error('资源摘要数量不正确');

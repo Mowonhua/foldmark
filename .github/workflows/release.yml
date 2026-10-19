@@ -11,7 +11,7 @@ permissions:
 
 # 所有版本共用发布锁；已经开始的版本不能被新标签取消到一半。
 concurrency:
-  group: foldmark-release
+  group: taskrail-release
   cancel-in-progress: false
 
 jobs:
@@ -61,25 +61,25 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_BASE64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_PASSWORD) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_ALIAS)) {
             throw '缺少 Android 签名 secrets。'
           }
-          $taskKeystore = Join-Path $env:RUNNER_TEMP 'foldmark-android.jks'
-          $taskPassword = Join-Path $env:RUNNER_TEMP 'foldmark-android.password'
+          $taskKeystore = Join-Path $env:RUNNER_TEMP 'taskrail-android.jks'
+          $taskPassword = Join-Path $env:RUNNER_TEMP 'taskrail-android.password'
           [IO.File]::WriteAllBytes($taskKeystore, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
           [IO.File]::WriteAllText($taskPassword, $env:ANDROID_KEYSTORE_PASSWORD)
-          "FOLDMARK_ANDROID_KEYSTORE=$taskKeystore" >> $env:GITHUB_ENV
-          "FOLDMARK_ANDROID_PASSWORD_FILE=$taskPassword" >> $env:GITHUB_ENV
-          "FOLDMARK_ANDROID_KEY_ALIAS=$env:ANDROID_KEY_ALIAS" >> $env:GITHUB_ENV
+          "TASKRAIL_ANDROID_KEYSTORE=$taskKeystore" >> $env:GITHUB_ENV
+          "TASKRAIL_ANDROID_PASSWORD_FILE=$taskPassword" >> $env:GITHUB_ENV
+          "TASKRAIL_ANDROID_KEY_ALIAS=$env:ANDROID_KEY_ALIAS" >> $env:GITHUB_ENV
       - name: Build and verify signed APK
         run: ./scripts/build-android.ps1
       - name: Remove temporary signing files
         if: always()
         run: |
           # 只清理当前 runner 临时目录内的两个固定文件，不操作签名来源。
-          foreach ($taskName in @('foldmark-android.jks', 'foldmark-android.password')) {
+          foreach ($taskName in @('taskrail-android.jks', 'taskrail-android.password')) {
             Remove-Item -LiteralPath (Join-Path $env:RUNNER_TEMP $taskName) -Force -ErrorAction SilentlyContinue
           }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: foldmark-android-arm64
+          name: taskrail-android-arm64
           path: dist-android/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -123,21 +123,21 @@ jobs:
       # APK 必须在整理资源前下载，两个平台共同通过摘要校验后才能公开版本。
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: foldmark-android-arm64
+          name: taskrail-android-arm64
           path: dist-android
       - name: Prepare and verify release files
         id: prepare
         env:
-          RELEASE_DIR: ${{ runner.temp }}/foldmark-release
+          RELEASE_DIR: ${{ runner.temp }}/taskrail-release
         run: node scripts/release.mjs prepare
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: foldmark-${{ steps.version.outputs.version }}-release
-          path: ${{ runner.temp }}/foldmark-release/*
+          name: taskrail-${{ steps.version.outputs.version }}-release
+          path: ${{ runner.temp }}/taskrail-release/*
           if-no-files-found: error
           retention-days: 14
       - name: Publish verified release and update channels
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_DIR: ${{ runner.temp }}/foldmark-release
+          RELEASE_DIR: ${{ runner.temp }}/taskrail-release
         run: node scripts/release-github.mjs

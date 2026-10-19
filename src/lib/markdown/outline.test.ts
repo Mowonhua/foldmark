@@ -20,7 +20,7 @@ describe('outline entries', () => {
   });
 
   it('托管标记让归档章节延伸到文件尾，其后一级标题仍属归档区', () => {
-    const model = parseDocument('# 归档\n<!-- foldmark:archive -->\n\n## 旧\n\n# 其他\n');
+    const model = parseDocument('# 归档\n<!-- taskrail:archive -->\n\n## 旧\n\n# 其他\n');
     expect(outlineEntries(model, 'archive').map(entry => entry.text)).toEqual(['归档', '旧', '其他']);
     expect(outlineEntries(model, 'todo')).toEqual([]);
   });

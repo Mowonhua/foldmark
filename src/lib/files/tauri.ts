@@ -72,7 +72,7 @@ export class TauriFilePort implements FilePort {
   }
   async watch(path: string, onChange: () => void): Promise<() => void> {
     let watchId: number | undefined;
-    const unlisten = await listen<number>('foldmark:file-change', event => {
+    const unlisten = await listen<number>('taskrail:file-change', event => {
       if (event.payload === watchId) onChange();
     });
     try { watchId = await command<number>('watch_file', { path }); }

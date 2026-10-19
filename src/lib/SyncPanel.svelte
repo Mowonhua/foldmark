@@ -56,8 +56,8 @@
     qr = await QRCode.toDataURL(encodePairingOffer(offer), { width: 480, margin: 4, errorCorrectionLevel: 'L' });
   }
   async function scan(): Promise<void> {
-    await invoke('plugin:foldmark-mobile|prepare');
-    const result = await invoke<{ content: string | null }>('plugin:foldmark-mobile|scan');
+    await invoke('plugin:taskrail-mobile|prepare');
+    const result = await invoke<{ content: string | null }>('plugin:taskrail-mobile|scan');
     if (result.content) await controller.pair(decodePairingOffer(result.content));
   }
   async function toggle(id: string, enabled: boolean, kind: 'project' | 'inspiration' = 'project'): Promise<void> {
@@ -167,7 +167,7 @@
           <div class="sync-pairing-content">
             <div class="sync-device-icon">{@render icon(controller.desktop ? 'phone' : 'desktop', 30)}</div>
             <h3>{controller.desktop ? '连接手机' : '连接电脑'}</h3>
-            <p>{controller.desktop ? '在手机上扫描配对二维码' : '打开电脑上的 Foldmark 配对二维码'}</p>
+            <p>{controller.desktop ? '在手机上扫描配对二维码' : '打开电脑上的 Taskrail 配对二维码'}</p>
             {#if controller.desktop}<button class="primary sync-button" disabled={working} onclick={() => act(showOffer)}>{@render icon('qr', 18)}{qr ? '刷新二维码' : '显示配对二维码'}</button>
             {:else}<button class="primary sync-button" disabled={working} onclick={() => act(scan)}>{@render icon('qr', 18)}扫描电脑二维码</button>{/if}
             {#if current.status === '等待电脑确认'}<span class="sync-waiting" role="status">等待电脑确认</span>{/if}
@@ -175,7 +175,7 @@
         </section>
         {#if connection.pending}<section class="sync-pair-request"><div><strong>手机请求连接</strong><span>{connection.pending.slice(0, 8)}</span></div><div class="sync-inline-actions"><button class="sync-button" disabled={working} onclick={() => act(async () => { await controller.transport.approve(false); qr = ''; await controller.sync(); })}>拒绝</button><button class="primary sync-button" disabled={working} onclick={() => act(async () => { await controller.transport.approve(true); qr = ''; await controller.sync(); })}>允许连接</button></div></section>{/if}
         {#if controller.desktop && offer}<details class="sync-details"><summary>连接选项</summary>{#if (offer.addresses?.length ?? 0) > 1}<label>电脑地址<select bind:value={offer.address} onchange={() => act(async () => { qr = await QRCode.toDataURL(encodePairingOffer(offer!), { width: 480, margin: 4, errorCorrectionLevel: 'L' }); })}>{#each offer.addresses ?? [] as endpoint}<option value={endpoint}>{endpoint}</option>{/each}</select></label>{:else}<p class="sync-address">{offer.address}</p>{/if}<button class="sync-text-button" disabled={working} onclick={() => act(async () => { const { writeText } = await import('@tauri-apps/plugin-clipboard-manager'); await writeText(encodePairingOffer(offer!)); })}>复制配对信息</button></details>
-        {:else if !controller.desktop}<details class="sync-details"><summary>手动输入配对信息</summary><textarea aria-label="配对信息" class="sync-pair-input" placeholder="粘贴电脑的配对信息" bind:value={input}></textarea><button class="sync-button" disabled={working || !input.trim()} onclick={() => act(async () => { await invoke('plugin:foldmark-mobile|prepare'); await controller.pair(decodePairingOffer(input)); })}>连接</button></details>{/if}
+        {:else if !controller.desktop}<details class="sync-details"><summary>手动输入配对信息</summary><textarea aria-label="配对信息" class="sync-pair-input" placeholder="粘贴电脑的配对信息" bind:value={input}></textarea><button class="sync-button" disabled={working || !input.trim()} onclick={() => act(async () => { await invoke('plugin:taskrail-mobile|prepare'); await controller.pair(decodePairingOffer(input)); })}>连接</button></details>{/if}
       {:else}
         <section class="sync-device">
           <div class="sync-device-icon">{@render icon(controller.desktop ? 'phone' : 'desktop', 26)}</div>

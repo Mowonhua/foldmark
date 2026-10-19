@@ -7,7 +7,7 @@ import { DEFAULT_FONT_STACK } from './font-stack';
 import type { AppConfig, FilePort, FileSnapshot, RecoveryDraft } from './contracts';
 
 export const defaultPreferences = { theme: 'system' as const, themeId: 'paper', fontFamily: DEFAULT_FONT_STACK, fontSize: 16, contentWidth: 800, autoCheckUpdates: true, autoDownloadUpdates: true, keepTransparentOnBlur: false, headingAdd: false };
-export const welcomeText = '# 留一点空间，给接下来要做的事\n\n在这里写下想法，也把它们变成一件件可以完成的小事。\n\n## 今天\n\n- [ ] 整理一个清晰的开始\n\n  直接编辑正文。用 **粗体** 强调重点，用 `代码` 记录细节。\n\n  - [ ] 写下第一步\n  - [x] 为新的想法留出位置\n\n- [ ] 试试折叠一段长笔记\n\n  鼠标移到复选框左边，展开或收起正文。按住复选框拖动可以调整同级任务顺序。\n\n  ```ts\n  const next = "从一件小事开始";\n  ```\n\n- [ ] 留下一条有公式的想法\n\n  把复杂的事情拆开：$E = mc^2$。\n\n## 慢慢来\n\n- [ ] 关联自己的 Markdown 文件\n\n  项目菜单中可以关联已有清单。你的文件仍保留在原来的位置。\n\n- [x] 了解 Foldmark 的归档方式\n\n  完成后，任务和正文一起移到文件末尾的 # 归档 章节。你可以随时恢复到待办末尾。\n';
+export const welcomeText = '# 留一点空间，给接下来要做的事\n\n在这里写下想法，也把它们变成一件件可以完成的小事。\n\n## 今天\n\n- [ ] 整理一个清晰的开始\n\n  直接编辑正文。用 **粗体** 强调重点，用 `代码` 记录细节。\n\n  - [ ] 写下第一步\n  - [x] 为新的想法留出位置\n\n- [ ] 试试折叠一段长笔记\n\n  鼠标移到复选框左边，展开或收起正文。按住复选框拖动可以调整同级任务顺序。\n\n  ```ts\n  const next = "从一件小事开始";\n  ```\n\n- [ ] 留下一条有公式的想法\n\n  把复杂的事情拆开：$E = mc^2$。\n\n## 慢慢来\n\n- [ ] 关联自己的 Markdown 文件\n\n  项目菜单中可以关联已有清单。你的文件仍保留在原来的位置。\n\n- [x] 了解 Taskrail 的归档方式\n\n  完成后，任务和正文一起移到文件末尾的 # 归档 章节。你可以随时恢复到待办末尾。\n';
 
 /**
  * 接口职责：实现浏览器沙盒中的 FilePort。
@@ -15,7 +15,7 @@ export const welcomeText = '# 留一点空间，给接下来要做的事\n\n在�
  * 实现要求：明确提示浏览器文件是导入副本，不声称已写回本地原文件。
  */
 export class BrowserFilePort implements FilePort {
-  private key(path: string): string { return `foldmark:file:${path}`; }
+  private key(path: string): string { return `taskrail:file:${path}`; }
   async read(path: string): Promise<FileSnapshot> {
     const value = localStorage.getItem(this.key(path));
     if (value === null) throw new Error(`FILE_NOT_FOUND: ${translate('文件无法读取，请重新定位')}`);
@@ -33,14 +33,14 @@ export class BrowserFilePort implements FilePort {
     localStorage.setItem(this.key(path), JSON.stringify(snapshot)); return snapshot;
   }
   async loadConfig(): Promise<AppConfig | null> {
-    const value = localStorage.getItem('foldmark:config'); return value ? JSON.parse(value) as AppConfig : null;
+    const value = localStorage.getItem('taskrail:config'); return value ? JSON.parse(value) as AppConfig : null;
   }
-  async saveConfig(config: AppConfig): Promise<void> { localStorage.setItem('foldmark:config', JSON.stringify(config)); }
+  async saveConfig(config: AppConfig): Promise<void> { localStorage.setItem('taskrail:config', JSON.stringify(config)); }
   async loadRecovery(path: string): Promise<RecoveryDraft | null> {
-    const value = localStorage.getItem(`foldmark:recovery:${path}`); return value ? JSON.parse(value) as RecoveryDraft : null;
+    const value = localStorage.getItem(`taskrail:recovery:${path}`); return value ? JSON.parse(value) as RecoveryDraft : null;
   }
-  async saveRecovery(draft: RecoveryDraft): Promise<void> { localStorage.setItem(`foldmark:recovery:${draft.path}`, JSON.stringify(draft)); }
-  async clearRecovery(path: string): Promise<void> { localStorage.removeItem(`foldmark:recovery:${path}`); }
+  async saveRecovery(draft: RecoveryDraft): Promise<void> { localStorage.setItem(`taskrail:recovery:${draft.path}`, JSON.stringify(draft)); }
+  async clearRecovery(path: string): Promise<void> { localStorage.removeItem(`taskrail:recovery:${path}`); }
   async chooseFile(create: boolean): Promise<string | null> {
     if (create) return `${translate('浏览器')}/${translate('清单')}-${Date.now()}.md`;
     return new Promise(resolve => {

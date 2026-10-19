@@ -39,10 +39,10 @@ it('真实编辑器归档省略一级标题，预览、分区源码、搜索和�
   expect(instance.view.contentDOM.textContent).toContain('开发');
   expect(instance.view.contentDOM.textContent).toContain('甲');
   expect(instance.view.contentDOM.textContent).not.toContain('其他');
-  expect(instance.view.contentDOM.textContent).not.toContain('foldmark:archive');
+  expect(instance.view.contentDOM.textContent).not.toContain('taskrail:archive');
   expect(searchTasks(instance.model, '甲', true)[0].heading).toBe('开发');
   instance.toggleSource();
-  expect(instance.view.contentDOM.textContent).toContain('<!-- foldmark:archive -->');
+  expect(instance.view.contentDOM.textContent).toContain('<!-- taskrail:archive -->');
   expect(instance.view.contentDOM.textContent).toContain('## 开发');
   expect(instance.view.contentDOM.textContent).not.toContain('# 工作');
   expect(instance.view.contentDOM.textContent).not.toContain('乙');

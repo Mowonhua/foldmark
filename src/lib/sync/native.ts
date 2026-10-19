@@ -9,7 +9,7 @@ export const nativeSyncTransport: SyncTransport = {
   status: () => invoke('sync_status'), offer: () => invoke('sync_offer'),
   pair: offer => invoke('sync_pair', { offer }), approve: accept => invoke('sync_approve', { accept }),
   unpair: () => invoke('sync_unpair'), probe: async () => {
-    await invoke('plugin:foldmark-mobile|activate');
+    await invoke('plugin:taskrail-mobile|activate');
     await invoke('sync_probe');
   },
   exchange: envelope => invoke('sync_exchange', { envelope }),

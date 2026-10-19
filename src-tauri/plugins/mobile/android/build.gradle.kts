@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 android {
-    namespace = "app.foldmark.mobilebridge"
+    namespace = "app.taskrail.mobilebridge"
     compileSdk = 36
     defaultConfig { minSdk = 26 }
     compileOptions {

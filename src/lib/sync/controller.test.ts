@@ -131,7 +131,7 @@ it('前台空闲后电脑通知立即送达手机并完成双方确认', async (
     await vi.advanceTimersByTimeAsync(60000);
     expect(f.controller.error).toBe('');
     desktopText = '电脑编辑';
-    await listeners.get('foldmark:sync-wake')?.({ payload: null });
+    await listeners.get('taskrail:sync-wake')?.({ payload: null });
     await vi.advanceTimersByTimeAsync(0);
     expect(phoneText).toBe('电脑编辑');
     await vi.advanceTimersByTimeAsync(1);
@@ -183,7 +183,7 @@ it('交换过程中收到电脑通知，结束后立即跟进且不重复轮询'
     const blocked = new Promise<void>(resolve => { release = resolve; });
     const exchange = vi.spyOn(f.transport, 'exchange').mockImplementationOnce(async value => { await blocked; return value; });
     const running = f.controller.sync(); await vi.advanceTimersByTimeAsync(0);
-    await listeners.get('foldmark:sync-wake')?.({ payload: null });
+    await listeners.get('taskrail:sync-wake')?.({ payload: null });
     release(); await running; await vi.advanceTimersByTimeAsync(1);
     expect(exchange).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1000); expect(exchange).toHaveBeenCalledTimes(2);

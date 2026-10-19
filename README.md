@@ -9,10 +9,10 @@
 <p align="center">跨项目查看待办，完成后整组归档，需要时恢复。</p>
 
 <p align="center">
-  <a href="https://github.com/Mowonhua/foldmark/releases">下载</a> ·
+  <a href="https://github.com/Mowonhua/taskrail/releases">下载</a> ·
   <a href="./docs/使用.md">使用指南</a> ·
   <a href="./docs/主题.md">自制主题</a> ·
-  <a href="https://github.com/Mowonhua/foldmark/issues">反馈问题</a>
+  <a href="https://github.com/Mowonhua/taskrail/issues">反馈问题</a>
 </p>
 
 <p align="center">Windows x64 · Android · 本地文件 · MIT</p>
@@ -49,7 +49,7 @@
 
 ## 开始使用
 
-1. 从 [GitHub Releases](https://github.com/Mowonhua/foldmark/releases) 下载并安装 Windows x64 的 `-setup.exe`。
+1. 从 [GitHub Releases](https://github.com/Mowonhua/taskrail/releases) 下载并安装 Windows x64 的 `-setup.exe`。
 2. 打开应用，点击“新增项目”，关联已有 Markdown 文件或新建清单。
 3. 输入 `- [ ]` 创建任务。按 `Enter` 创建下一项；在空任务上再按一次 `Enter` 退出列表。
 
@@ -82,7 +82,7 @@ npm run tauri -- dev
 只预览前端可运行 `npm run dev`。浏览器预览导入的是文件副本；关联原文件和系统文件监听需要桌面版。
 
 <p>
-  <a href="https://github.com/Mowonhua/foldmark/actions/workflows/ci.yml"><img src="https://github.com/Mowonhua/foldmark/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows CI 状态"></a>
+  <a href="https://github.com/Mowonhua/taskrail/actions/workflows/ci.yml"><img src="https://github.com/Mowonhua/taskrail/actions/workflows/ci.yml/badge.svg?branch=main" alt="Windows CI 状态"></a>
 </p>
 
 [构建、测试与性能采样](./docs/开发.md) · [产品与技术方案](./docs/方案.md)

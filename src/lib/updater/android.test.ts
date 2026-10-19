@@ -29,7 +29,7 @@ it('未知来源授权不足时保留候选允许重试，系统安装器接管�
   await expect(candidate.install()).rejects.toThrow('安装权限');
   await expect(candidate.install()).resolves.toBeUndefined();
   await candidate.close();
-  expect(native.invoke).toHaveBeenLastCalledWith('plugin:foldmark-mobile|closeUpdate');
+  expect(native.invoke).toHaveBeenLastCalledWith('plugin:taskrail-mobile|closeUpdate');
 });
 it('原生没有新版本时不创建下载会话', async () => {
   native.invoke.mockResolvedValueOnce({ available: false, currentVersion: '0.7.0' });

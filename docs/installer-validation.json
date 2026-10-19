@@ -5,12 +5,12 @@
   "started_at_utc": "2026-09-06T06:56:31.6579002Z",
   "completed_at_utc": "2026-09-06T07:12:09.3027563Z",
   "build": {
-    "product": "Foldmark",
+    "product": "Taskrail",
     "version": "0.1.0",
     "architecture": "x64",
     "release_binary_written_at_utc": "2026-09-06T06:50:31.6489616Z",
     "installer": {
-      "name": "Foldmark_0.1.0_x64-setup.exe",
+      "name": "Taskrail_0.1.0_x64-setup.exe",
       "size_bytes": 3350856,
       "sha256": "8b85ff82855902a9cd249ec9c61412cbe9f4d88916812774cefda30806fc76d6"
     },
@@ -26,53 +26,53 @@
       {
         "hive": "CurrentUser",
         "view": "Registry64",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "existed": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry64",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "existed": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry32",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "existed": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry32",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "existed": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry64",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "existed": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry64",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "existed": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry32",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "existed": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry32",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "existed": false
       }
     ],
-    "no_foldmark_process_before_install": true,
+    "no_taskrail_process_before_install": true,
     "new_destination_verified_within_workspace": true,
     "install_directory": "src-tauri/target/install-smoke/run-878b6b7-20260906-145631",
     "existing_reading_preferences_backed_up": true
@@ -159,68 +159,68 @@
       "/S"
     ],
     "exit_code": 0,
-    "no_foldmark_process_before_uninstall": true,
+    "no_taskrail_process_before_uninstall": true,
     "target_revalidated_inside_install_smoke": true,
     "main_exe_removed": true,
     "installation_directory_removed": true,
     "uninstall_registration_removed": true,
     "residual_test_product_key_removed": true,
     "new_empty_manufacturer_key_removed": true,
-    "residual_key_cleanup_guard": "只删除测试前不存在、默认值严格等于测试安装目录且无其他子键的 HKCU Software/foldmark/Foldmark；仅在测试新建父键为空时删除父键。",
+    "residual_key_cleanup_guard": "只删除测试前不存在、默认值严格等于测试安装目录且无其他子键的 HKCU Software/taskrail/Taskrail；仅在测试新建父键为空时删除父键。",
     "registry_after": [
       {
         "hive": "CurrentUser",
         "view": "Registry64",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "exists": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry64",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "exists": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry32",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "exists": false
       },
       {
         "hive": "CurrentUser",
         "view": "Registry32",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "exists": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry64",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "exists": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry64",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "exists": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry32",
-        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Foldmark",
+        "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Taskrail",
         "exists": false
       },
       {
         "hive": "LocalMachine",
         "view": "Registry32",
-        "key": "Software\\foldmark\\Foldmark",
+        "key": "Software\\taskrail\\Taskrail",
         "exists": false
       }
     ],
     "app_data_delete_option_selected": false
   },
   "configuration_preservation": {
-    "file": "%APPDATA%/app.foldmark.desktop/config.json",
+    "file": "%APPDATA%/app.taskrail.desktop/config.json",
     "before_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
     "after_install_sha256": "9a662fcda7f5feae1b0a482f7d36f47d5a86bbacbb67ffd60c6d2db1968a8087",
     "after_native_ui_before_restore_sha256": "92b1c6d69720828472b941e5a4ed98f00b0a1dc34d40331fcb325ceb8aff0236",
@@ -240,7 +240,7 @@
   "portable_ime_supplement": {
     "status": "passed",
     "source_commit": "878b6b78b5cb07abd90c6a115e3762e311f0f80a",
-    "executable": "portable release/foldmark.exe",
+    "executable": "portable release/taskrail.exe",
     "portable_sha256": "8c7f1da8bdd2f958145cfbab3bc06e4313a2cc3090cac360e04bbe67eaef67f2",
     "same_source_as_installation_test": true,
     "started_at_utc": "2026-09-06T07:19:36.7532617Z",

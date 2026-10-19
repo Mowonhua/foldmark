@@ -79,7 +79,7 @@ it('完成子任务经过自动保存、文件监听重载及重启仍保留父�
   const baseline = await files.read(firstProject.path);
   const external = expected.replace('- [ ] 父', '- [ ] 外部父');
   await files.write(firstProject.path, external, baseline.revision);
-  window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+  window.dispatchEvent(new StorageEvent('storage', { key: `taskrail:file:${firstProject.path}` }));
   await vi.waitFor(() => expect(documentInput().textContent).toContain('外部父'));
   await new Promise(resolve => setTimeout(resolve, 750));
   expect((await files.read(firstProject.path)).text).toBe(external);
@@ -1055,8 +1055,8 @@ describe('App 顶部工具栏窗口控制', () => {
     expect(controls).not.toBeNull();
     expect(controls?.closest('.topbar')).not.toBeNull();
     expect(document.querySelector('.window-titlebar')).toBeNull();
-    expect(document.body.textContent?.match(/Foldmark/g)).toHaveLength(1);
-    expect(document.querySelector('.sidebar .brand')?.textContent).toContain('Foldmark');
+    expect(document.body.textContent?.match(/Taskrail/g)).toHaveLength(1);
+    expect(document.querySelector('.sidebar .brand')?.textContent).toContain('Taskrail');
     button('最小化').click();
     await vi.waitFor(() => expect(desktopBoundary.minimize).toHaveBeenCalledOnce());
     button('最大化').click();
@@ -1520,7 +1520,7 @@ describe('App 真实编辑与文件闭环', () => {
     button('完成任务').click(); await tick();
     await vi.waitFor(async () => {
       const text = (await files.read(firstProject.path)).text;
-      expect(text).toContain('# 归档\n<!-- foldmark:archive -->\n\n## 开发\n\n### 本周\n\n- [x] 保留路径\n  正文');
+      expect(text).toContain('# 归档\n<!-- taskrail:archive -->\n\n## 开发\n\n### 本周\n\n- [x] 保留路径\n  正文');
       expect(text.slice(text.indexOf('# 归档'))).not.toContain('# 工作');
     });
     await remount();
@@ -1602,7 +1602,7 @@ describe('App 真实编辑与文件闭环', () => {
     await savedText(firstProject, normalized);
     const baseline = await files.read(firstProject.path);
     await files.write(firstProject.path, '- [x] 外部完成\n- [ ] 新待办\n', baseline.revision);
-    window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+    window.dispatchEvent(new StorageEvent('storage', { key: `taskrail:file:${firstProject.path}` }));
     await savedText(firstProject, '- [ ] 新待办\n\n# 归档\n\n- [x] 外部完成\n');
     expect(documentInput().textContent).toContain('新待办');
   });
@@ -1686,7 +1686,7 @@ describe('项目操作失败与聚合视图边界', () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Android');
     const remove = vi.spyOn(AndroidFilePort.prototype, 'removeOwned').mockImplementation(async path => {
       if (fail) throw new Error('私有文件删除失败');
-      localStorage.removeItem(`foldmark:file:${path}`);
+      localStorage.removeItem(`taskrail:file:${path}`);
       await files.clearRecovery(path);
     });
     await start(['甲正文', '乙正文']);
@@ -1700,7 +1700,7 @@ describe('项目操作失败与聚合视图边界', () => {
       expect((await files.read(firstProject.path)).text).toBe('甲正文');
     } else {
       await vi.waitFor(async () => expect((await files.loadConfig())?.projects.some(project => project.id === firstProject.id)).toBe(false));
-      expect(localStorage.getItem(`foldmark:file:${firstProject.path}`)).toBeNull();
+      expect(localStorage.getItem(`taskrail:file:${firstProject.path}`)).toBeNull();
       expect(await files.loadRecovery(firstProject.path)).toBeNull();
     }
     expect((await files.read(secondProject.path)).text).toBe('乙正文');
@@ -1788,12 +1788,12 @@ describe('跨项目反馈和搜索范围', () => {
 
 describe('完整搜索结果、失效路径和退出保存', () => {
   it('损坏配置不会因初始化失败而被默认配置覆盖', async () => {
-    const raw = '{ this is invalid config'; localStorage.setItem('foldmark:config', raw);
+    const raw = '{ this is invalid config'; localStorage.setItem('taskrail:config', raw);
     const writes = vi.spyOn(BrowserFilePort.prototype, 'saveConfig');
     mounted = mount(App, { target: container }); await tick();
     await vi.waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull());
     await new Promise(resolve => setTimeout(resolve, 350));
-    expect(writes).not.toHaveBeenCalled(); expect(localStorage.getItem('foldmark:config')).toBe(raw);
+    expect(writes).not.toHaveBeenCalled(); expect(localStorage.getItem('taskrail:config')).toBe(raw);
   });
 
   it('损坏恢复数据不会阻止完好的原文件打开，并保留独立提示', async () => {
@@ -1840,7 +1840,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     const baseline = await files.read(firstProject.path);
     const external = '- [x] 外部完成\n- [ ] 外部待办\n';
     await files.write(firstProject.path, external, baseline.revision);
-    window.dispatchEvent(new StorageEvent('storage', { key: `foldmark:file:${firstProject.path}` }));
+    window.dispatchEvent(new StorageEvent('storage', { key: `taskrail:file:${firstProject.path}` }));
     await vi.waitFor(() => expect(document.querySelector('.conflict-banner')).not.toBeNull());
     button('比较并处理').click(); await tick();
     pointerDown(document.querySelector<HTMLElement>('.modal-backdrop')!); await tick();
@@ -1885,7 +1885,7 @@ describe('完整搜索结果、失效路径和退出保存', () => {
     vi.spyOn(BrowserFilePort.prototype,'chooseFile').mockResolvedValue(secondProject.path);
     await insertTask(); await paste('迁移时不能丢的草稿');
     const draft = '# 原清单\n- [ ] 迁移时不能丢的草稿\n\n- [ ] 旧任务\n';
-    localStorage.removeItem(`foldmark:file:${firstProject.path}`);
+    localStorage.removeItem(`taskrail:file:${firstProject.path}`);
     await shortcut('s');
     await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('FILE_NOT_FOUND'));
     button('重新定位文件').click(); await tick();
@@ -1922,7 +1922,7 @@ describe('灵感簿', () => {
     await start(['- [ ] 甲一\n']);
     shortcut('I');
     await vi.waitFor(() => expect(crumbName()).toBe('灵感'));
-    await vi.waitFor(() => expect(localStorage.getItem('foldmark:file:浏览器/灵感.md')).not.toBeNull());
+    await vi.waitFor(() => expect(localStorage.getItem('taskrail:file:浏览器/灵感.md')).not.toBeNull());
     await insertTask(); await paste('随手记下的灵感');
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('随手记下的灵感'));
     // 等待配置防抖落盘，重启后验证“上次停留界面”恢复到灵感簿。
@@ -1973,7 +1973,7 @@ describe('灵感簿', () => {
     await insertTask(); await paste('将被删除的灵感');
     await vi.waitFor(async () => expect((await files.read('浏览器/灵感.md')).text).toContain('将被删除的灵感'));
     await new Promise(resolve => setTimeout(resolve, 1000));
-    localStorage.removeItem('foldmark:file:浏览器/灵感.md');
+    localStorage.removeItem('taskrail:file:浏览器/灵感.md');
     if (mounted) await unmount(mounted);
     mounted = mount(App, { target: container }); await tick();
     await vi.waitFor(() => expect(document.querySelector('.error-banner')).not.toBeNull());

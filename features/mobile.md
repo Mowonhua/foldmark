@@ -2,7 +2,7 @@
 
 ## F-MOB-001 Android 离线编辑
 
-手机使用应用私有文件，共用 Markdown 编辑规则，导入副本并允许导出。
+手机以 `app.taskrail.mobile` 作为应用标识，使用应用私有文件，共用 Markdown 编辑规则，导入副本并允许导出。
 
 创建提交：-
 
@@ -25,7 +25,7 @@
 
 | 编号 | 类型 | 场景与预期 | 测试 |
 |---|---|---|---|
-| S-01 | 约束 | Android 不调用桌面窗口控制、桌面更新插件和系统字体扫描 | src/lib/platform.test.ts::Android 原生环境不具备桌面窗口能力 |
+| S-01 | 约束 | Android 应用标识为 app.taskrail.mobile，不调用桌面窗口控制、桌面更新插件和系统字体扫描 | src/lib/platform.test.ts::Android 原生环境不具备桌面窗口能力, scripts/test-mobile-native-fixes.mjs::<module> |
 | S-02 | 正常 | 导入文件生成私有副本，编辑不回写来源，导出保留正文 | src/lib/files/android.test.ts::导入系统文档只复制到私有目录\，不回写来源, src/lib/files/android.test.ts::导出使用用户选择的 URI\，取消时不写入 |
 | S-03 | 正常 | 触屏可插入任务、缩进、排序及撤销，长按正文保留系统选字 | scripts/test-mobile-browser.mjs::<module> |
 | S-04 | 异常 | 应用被终止后可恢复已持久化草稿 | - |
@@ -42,7 +42,7 @@
 
 ## F-MOB-002 Android 应用更新
 
-启动时检查并按偏好下载较新的稳定版 APK，校验安装包身份，保存文档后交给 Android 系统确认安装。
+启动时从 `Mowonhua/taskrail` 检查并按偏好下载较新的稳定版 APK，校验安装包身份，保存文档后交给 Android 系统确认安装。
 
 创建提交：e6e2b91
 

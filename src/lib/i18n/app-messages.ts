@@ -192,7 +192,7 @@ export const appMessages: Readonly<Record<string, string>> = {
   "文件监听暂不可用：{error}": "File watching is temporarily unavailable: {error}",
   "{name}（自制）": "{name} (custom)",
   "恢复项目：{name}": "Restore project: {name}",
-  "Foldmark {version} 已下载，可在更新面板安装。": "Foldmark {version} has been downloaded. Install it from the update panel.",
+  "Taskrail {version} 已下载，可在更新面板安装。": "Taskrail {version} has been downloaded. Install it from the update panel.",
   "纸面": "Paper",
   "纯粹": "Pure",
   "新拟物": "Neumorphic",

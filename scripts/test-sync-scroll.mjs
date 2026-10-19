@@ -2,14 +2,14 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-const browser = await chromium.launch({ channel: process.env.FOLDMARK_BROWSER ?? 'msedge', headless: true });
+const browser = await chromium.launch({ channel: process.env.TASKRAIL_BROWSER ?? 'msedge', headless: true });
 try {
  for (const mobile of [true, false]) {
   const platform = mobile ? '手机' : '桌面';
   const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 }, isMobile: mobile, hasTouch: mobile });
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
-  await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/tests/browser-sync-scroll.html${mobile ? '?mobile' : ''}`);
+  await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/browser-sync-scroll.html${mobile ? '?mobile' : ''}`);
   await page.getByRole('button', { name: '验证阅读位置' }).click();
   await page.waitForFunction(() => document.getElementById('result')?.textContent?.includes('"pass"'));
   const result = JSON.parse(await page.locator('#result').textContent());

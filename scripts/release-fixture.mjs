@@ -7,8 +7,8 @@ import { compareVersions, createUpdateManifest } from './release-policy.mjs';
 
 /** 生成指定版本的完整资源集合；安装包和签名为测试字节，不可作为实际安装产物。 */
 export function releaseFixture(version = '0.1.0-alpha.1') {
-  const repository = 'Mowonhua/foldmark';
-  const installerName = `Foldmark_${version}_x64-setup.exe`;
+  const repository = 'Mowonhua/taskrail';
+  const installerName = `Taskrail_${version}_x64-setup.exe`;
   const signature = Buffer.from('untrusted comment: signature from minisign secret key\nRWQtest\n').toString('base64');
   const manifest = createUpdateManifest({ repository, version, installerName, signature, notes: '发布说明', publishedAt: '2026-09-12T00:00:00Z' });
   const files = new Map([
@@ -16,7 +16,7 @@ export function releaseFixture(version = '0.1.0-alpha.1') {
     [`${installerName}.sig`, Buffer.from(signature)],
     ['latest.json', Buffer.from(JSON.stringify(manifest))],
   ]);
-  if (compareVersions(version, '0.7.1-0') >= 0) files.set(`Foldmark-${version}-arm64.apk`, Buffer.from('test signed APK bytes'));
+  if (compareVersions(version, '0.7.1-0') >= 0) files.set(`Taskrail-${version}-arm64.apk`, Buffer.from('test signed APK bytes'));
   const sums = [...files].map(([name, bytes]) => `${createHash('sha256').update(bytes).digest('hex')}  ${name}`).join('\n');
   files.set('SHA256SUMS', Buffer.from(`${sums}\n`));
   return { repository, version, manifest, files, installerName };

@@ -11,7 +11,7 @@ use tauri::{Emitter, Manager};
 mod connection;
 
 const LIMIT: usize = 8 * 1024 * 1024;
-const SERVICE: &str = "_foldmark._tcp.local.";
+const SERVICE: &str = "_taskrail._tcp.local.";
 type Result<T> = std::result::Result<T, String>;
 #[derive(Clone, Serialize, Deserialize)]
 struct Peer { id: String, secret: String, address: String, certificate: Vec<u8> }
@@ -65,7 +65,7 @@ fn runtime(app: &tauri::AppHandle, state: &SyncState) -> Result<Arc<Runtime>> {
     let credentials = match storage::load_json(&directory.join("identity.json")).map_err(|e| e.message)? {
         Some(value) => serde_json::from_value(value).map_err(err)?,
         None => {
-            let cert = rcgen::generate_simple_self_signed(vec!["foldmark.local".into()]).map_err(err)?;
+            let cert = rcgen::generate_simple_self_signed(vec!["taskrail.local".into()]).map_err(err)?;
             Credentials { certificate: cert.cert.der().to_vec(), key: cert.key_pair.serialize_der(), id: random(), secret: random(), peer: None }
         }
     };
@@ -98,7 +98,7 @@ fn start(app: &tauri::AppHandle, runtime: &Arc<Runtime>) -> Result<()> {
     let port = listener.local_addr().map_err(err)?.port();
     let fingerprint = storage::fingerprint(&inner.credentials.certificate);
     if let Ok(daemon) = ServiceDaemon::new() {
-        if let Ok(info) = ServiceInfo::new(SERVICE, &format!("Foldmark-{}", &fingerprint[..12]), "foldmark.local.", "", port, [("identity", fingerprint.as_str())].as_slice()) {
+        if let Ok(info) = ServiceInfo::new(SERVICE, &format!("Taskrail-{}", &fingerprint[..12]), "taskrail.local.", "", port, [("identity", fingerprint.as_str())].as_slice()) {
             let _ = daemon.register(info.enable_addr_auto());
         }
         inner.daemon = Some(daemon);
@@ -160,7 +160,7 @@ fn handle(app: &tauri::AppHandle, runtime: &Runtime, request: Value) -> Result<V
 fn frontend_exchange(app: &tauri::AppHandle, runtime: &Runtime, envelope: Value) -> Result<Value> {
     let id = random(); let (sender, receiver) = mpsc::sync_channel(1);
     runtime.responses.lock().map_err(err)?.insert(id.clone(), sender);
-    if let Err(error) = app.emit("foldmark:sync-request", json!({ "id": id, "envelope": envelope })) {
+    if let Err(error) = app.emit("taskrail:sync-request", json!({ "id": id, "envelope": envelope })) {
         runtime.responses.lock().map_err(err)?.remove(&id); return Err(err(error));
     }
     let result = receiver.recv_timeout(Duration::from_secs(30)).map_err(|_| "同步超时，内容保留，稍后重试".to_string()).and_then(|value| value);
@@ -170,7 +170,7 @@ fn frontend_exchange(app: &tauri::AppHandle, runtime: &Runtime, envelope: Value)
 fn open_connection(peer: &Peer) -> Result<StreamOwned<ClientConnection, TcpStream>> {
     let mut roots = RootCertStore::empty(); roots.add(CertificateDer::from(peer.certificate.clone())).map_err(err)?;
     let config = ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-    let connection = ClientConnection::new(Arc::new(config), ServerName::try_from("foldmark.local").map_err(err)?).map_err(err)?;
+    let connection = ClientConnection::new(Arc::new(config), ServerName::try_from("taskrail.local").map_err(err)?).map_err(err)?;
     let socket = TcpStream::connect_timeout(&address(&peer.address)?, Duration::from_secs(3)).map_err(err)?;
     socket.set_read_timeout(Some(Duration::from_secs(35))).map_err(err)?; socket.set_write_timeout(Some(Duration::from_secs(35))).map_err(err)?;
     Ok(StreamOwned::new(connection, socket))
@@ -287,9 +287,9 @@ fn ensure_connection(app: &tauri::AppHandle, runtime: &Arc<Runtime>, epoch: usiz
     let (id, commands) = install_connection(runtime, &peer.secret, &stream.sock, Some(epoch))?;
     let runtime = runtime.clone(); let app = app.clone();
     std::thread::spawn(move || {
-        let _ = connection::client(&mut stream, commands, || connection_current(&runtime, &id, &peer.secret), || { let _ = app.emit("foldmark:sync-wake", ()); });
+        let _ = connection::client(&mut stream, commands, || connection_current(&runtime, &id, &peer.secret), || { let _ = app.emit("taskrail:sync-wake", ()); });
         // 意外断线唤醒控制器更新状态并按既有错误策略重试；主动关闭已经移除了代次。
-        if remove_connection(&runtime, Some(&id)) { let _ = app.emit("foldmark:sync-wake", ()); }
+        if remove_connection(&runtime, Some(&id)) { let _ = app.emit("taskrail:sync-wake", ()); }
     });
     Ok(())
 }
@@ -437,7 +437,7 @@ mod tests {
     }
     #[test]
     fn tls_round_trip_verifies_the_paired_certificate() {
-        let certificate = rcgen::generate_simple_self_signed(vec!["foldmark.local".into()]).unwrap();
+        let certificate = rcgen::generate_simple_self_signed(vec!["taskrail.local".into()]).unwrap();
         let config = ServerConfig::builder().with_no_client_auth().with_single_cert(
             vec![certificate.cert.der().clone()], PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certificate.key_pair.serialize_der()))).unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn tls_stream_reuses_connection_after_idle_and_delivers_both_directions() {
         use std::sync::atomic::AtomicBool;
-        let certificate = rcgen::generate_simple_self_signed(vec!["foldmark.local".into()]).unwrap();
+        let certificate = rcgen::generate_simple_self_signed(vec!["taskrail.local".into()]).unwrap();
         let config = ServerConfig::builder().with_no_client_auth().with_single_cert(
             vec![certificate.cert.der().clone()], PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certificate.key_pair.serialize_der()))).unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();

@@ -2,7 +2,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-const browser = await chromium.launch({ channel: process.env.FOLDMARK_BROWSER ?? 'msedge', headless: true });
+const browser = await chromium.launch({ channel: process.env.TASKRAIL_BROWSER ?? 'msedge', headless: true });
 const failures = [];
 await mkdir('test-results', { recursive: true });
 try {
@@ -10,7 +10,7 @@ try {
     const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1200, height: 850 }, isMobile: mobile, hasTouch: mobile });
     page.on('pageerror', error => failures.push(error.message));
     for (const scenario of ['paired', 'unpaired', 'incoming', 'conflict', 'conflict-many', 'error']) {
-      await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?case=${scenario}${mobile ? '&mobile' : ''}`);
+      await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?case=${scenario}${mobile ? '&mobile' : ''}`);
       await page.getByRole('dialog', { name: '设备同步' }).waitFor();
       if (scenario === 'unpaired' && !mobile) await page.getByRole('button', { name: '显示配对二维码' }).click();
       if (scenario === 'conflict') {
@@ -74,13 +74,13 @@ try {
         assert.equal(await page.locator('textarea[aria-label="对端正文"]').inputValue(), '新文档');
       }
     }
-    await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?case=incoming${mobile ? '&mobile' : ''}`);
+    await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?case=incoming${mobile ? '&mobile' : ''}`);
     await page.getByRole('button', { name: '接收文档', exact: true }).click();
     await page.getByRole('combobox', { name: '接收文档保存到' }).waitFor();
     await page.evaluate(() => window.dispatchEvent(new Event('withdraw-preview')));
     await page.getByRole('heading', { name: '设备同步', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '接收文档', exact: true }).count(), 0, '撤回时关闭正在打开的接收表单');
-    await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?long${mobile ? '&mobile' : ''}`);
+    await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?long${mobile ? '&mobile' : ''}`);
     const close = page.getByRole('button', { name: '关闭同步面板' }); await close.waitFor(); const before = await close.boundingBox();
     const connection = page.locator('.sync-connection-settings summary'); const connectionBefore = await connection.boundingBox();
     await page.locator(mobile ? '.sync-document-scroll' : '.sync-body').evaluate(node => { node.scrollTop = node.scrollHeight; });
@@ -94,7 +94,7 @@ try {
       await page.screenshot({ path: 'test-results/sync-mobile-fixed-settings.png' });
     }
     for (const theme of ['paper', 'mono', 'neumorphic', 'liquid-glass', 'frosted-glass']) for (const mode of ['light', 'dark']) {
-      await page.goto(`${process.env.FOLDMARK_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?theme=${theme}&mode=${mode}${mobile ? '&mobile' : ''}`);
+      await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?theme=${theme}&mode=${mode}${mobile ? '&mobile' : ''}`);
       await page.getByRole('dialog').waitFor();
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme}/${mode} 不得横向溢出`);
       assert(await page.evaluate(() => {

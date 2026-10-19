@@ -4,12 +4,12 @@ import tls from 'node:tls';
 import { randomBytes, X509Certificate, createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { connectWebview } from './native-cdp.mjs';
-const page = await connectWebview(Number(process.env.FOLDMARK_CDP_PORT ?? 9223));
+const page = await connectWebview(Number(process.env.TASKRAIL_CDP_PORT ?? 9223));
 const invoke = (command, args = {}) => page.evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},${JSON.stringify(args)})`);
-assert.equal(await invoke('plugin:app|identifier'), 'app.foldmark.lanvalidation', '只能使用独立验收数据目录');
+assert.equal(await invoke('plugin:app|identifier'), 'app.taskrail.lanvalidation', '只能使用独立验收数据目录');
 const config = await invoke('load_config');
 const path = config.projects[0]?.path;
-assert(path?.replaceAll('\\', '/').endsWith('/foldmark/test-results/native-lan.md'), '只能写入专用验收文件');
+assert(path?.replaceAll('\\', '/').endsWith('/taskrail/test-results/native-lan.md'), '只能写入专用验收文件');
 const wait = async expression => {
   const end = Date.now() + 20000;
   while (Date.now() < end) { if (await page.evaluate(expression)) return; await new Promise(resolve => setTimeout(resolve, 200)); }
@@ -25,7 +25,7 @@ const id = randomBytes(32).toString('hex'), secret = randomBytes(32).toString('h
 function exchange(payload) {
   return new Promise((resolve, reject) => {
     const [host, port] = offer.address.split(':'); let buffer = Buffer.alloc(0);
-    const socket = tls.connect({ host, port: Number(port), servername: 'foldmark.local', ca: new X509Certificate(Buffer.from(offer.certificate)).toString() }, () => {
+    const socket = tls.connect({ host, port: Number(port), servername: 'taskrail.local', ca: new X509Certificate(Buffer.from(offer.certificate)).toString() }, () => {
       const bytes = Buffer.from(JSON.stringify({ protocol: 1, id, secret, ...payload })); const header = Buffer.alloc(4); header.writeUInt32BE(bytes.length); socket.write(Buffer.concat([header, bytes]));
     });
     socket.setTimeout(35000, () => socket.destroy(new Error('同步响应超时')));
