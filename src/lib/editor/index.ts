@@ -3,7 +3,6 @@
  * 定义范围：编辑状态生命周期、公共编辑命令、界面状态恢复。
  */
 import { translate, locale } from '../i18n';
-import { diffChars } from 'diff';
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo, undo, isolateHistory, indentMore, indentLess } from '@codemirror/commands';
@@ -16,6 +15,7 @@ import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory,
 import { previewField, headingAddHover } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
+import { isSyncStreamUpdate, SyncStream, syncArrivalExtension } from './sync-stream';
 import { captureSourcePosition, restoreSourcePosition, setSourceReturn, sourcePositionHistory, sourceReturnField } from './source-position';
 import { markerGestures } from './gestures';
 import { draftFencedBlocksField, draftFencedBlockHistory } from './fenced-block-state';
@@ -64,6 +64,9 @@ export class EditorController {
   private readonly options: EditorOptions;
   private groupPrompt: HTMLElement | null = null;
   private positionGeneration = 0;
+  /** 分段接收落定后的应用侧回调；新的接收、整份替换或项目切换都会替换或丢弃它。 */
+  private pendingSettle?: () => void;
+  private streamInstance?: SyncStream;
   private readonly contextMenu?: EditorContextMenu;
 
   constructor(parent: HTMLElement, options: EditorOptions) {
@@ -82,6 +85,11 @@ export class EditorController {
   get state(): EditorState { return this.view.state; }
   get text(): string { return this.state.doc.toString(); }
   get model(): DocumentModel { return getDocumentModel(this.state); }
+
+  private get stream(): SyncStream {
+    this.streamInstance ??= new SyncStream(this.view, { settled: () => this.settleSynchronizedText() });
+    return this.streamInstance;
+  }
 
   /** 触屏辅助栏复用键盘命令；组合输入尚未结束时不提交结构变更。 */
   mobileCommand(command: 'task' | 'indent' | 'outdent' | 'up' | 'down' | 'undo' | 'redo'): void {
@@ -132,7 +140,7 @@ export class EditorController {
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position) }),
-      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion,
+      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
@@ -140,7 +148,14 @@ export class EditorController {
         // 焦点变化不会撤销剪贴板意图；真正改变目标或视图契约的事务必须关闭菜单。
         if (update.docChanged || !update.state.selection.eq(update.startState.selection)
           || update.transactions.some(transaction => transaction.reconfigured)) this.contextMenu?.invalidate();
-        if (update.docChanged) this.options.onChange(update.state.doc.toString());
+        // 分段接收的中间帧不是用户编辑：不触发正文与界面回调，应用侧会话正文已按最终文本记录，
+        // 逐帧回调会让保存、版本比较和折叠键匹配看到尚未写完的正文。
+        if (update.docChanged && isSyncStreamUpdate(update)) return;
+        if (update.docChanged) {
+          // 用户或其他命令在接收过程中改动了正文：剩余差异按当时的正文重新计算后立即写入。
+          this.stream.interrupt();
+          this.options.onChange(update.state.doc.toString());
+        }
         else if (update.state.field(expandedCompletedGroupsField) !== update.startState.field(expandedCompletedGroupsField)
           || update.state.field(foldsField) !== update.startState.field(foldsField)) this.options.onUIChange?.();
       }),
@@ -223,42 +238,40 @@ export class EditorController {
 
   /**
    * 函数职责：接收对端版本并替换当前正文。
-   * 输入说明：text 为合并后的完整文档；组合输入期间拒绝执行。
-   * 输出说明：只替换差异区间并恢复阅读锚点，折叠状态按折叠键保留；接收内容不进入撤销历史。
-   * 实现思路：按字符级差异生成增量事务，避免整份重建视图。
+   * 输入说明：text 为合并后的完整文档；settled 在目标文本全部落到视图后调用，用于刷新应用侧的会话正文；
+   * 组合输入期间拒绝执行。
+   * 输出说明：按差异区间分段写入并恢复阅读锚点，折叠状态按折叠键保留；接收内容不进入撤销历史。
+   * 实现思路：首段同步写入保证接收立即生效，其余差异逐帧写入，避免整篇在同一帧内跳变。
    */
-  setSynchronizedText(text: string): void {
+  setSynchronizedText(text: string, settled?: () => void): void {
     if (this.view.composing) throw new Error('SYNC_BUSY: 正在组合输入');
-    const ui = this.getUIState();
-    const parts = diffChars(this.text, text, { timeout: 100, maxEditLength: 10000 });
-    const edits: { from: number; to: number; insert: string }[] = [];
-    let offset = 0;
-    for (const part of parts ?? []) {
-      if (part.removed) { edits.push({ from: offset, to: offset + part.value.length, insert: '' }); offset += part.value.length; }
-      else if (part.added) edits.push({ from: offset, to: offset, insert: part.value });
-      else offset += part.value.length;
-    }
-    const changes = this.state.changes(parts ? edits : [{ from: 0, to: this.text.length, insert: text }]);
-    const map = (position: number) => changes.mapPos(Math.min(position, this.text.length), 1);
-    ui.cursor = map(ui.cursor);
-    if (ui.sourceReturn) ui.sourceReturn = { ...ui.sourceReturn, cursor: map(ui.sourceReturn.cursor), anchor: map(ui.sourceReturn.anchor) };
     this.contextMenu?.invalidate();
-    // 增量替换正文而不是重建 EditorState：重建会销毁全部视图插件与可见行 DOM，可见区域在测量完成前塌缩，
-    // 随后滚动位置被连续改写，在手机上表现为画面抽搐。
-    // 接收内容不进入撤销历史，用户无法把已确认的对端版本整体回滚；源码范围必须显式重算，否则会沿用旧文件的隐藏坐标。
-    this.view.dispatch({
-      changes,
-      // 快照以行块而非光标矩形记录像素偏移，并随正文差异映射到新坐标。
-      // 由 CodeMirror 在同轮布局测量中恢复，不能再追加异步 scrollTop 校正：
-      // 光标矩形与行块高度存在差异，分帧校正会让正文先偏移几个像素再被拉回。
-      effects: [refreshSourceScope.of(null), this.view.scrollSnapshot().map(changes)!],
-      annotations: Transaction.addToHistory.of(false),
-    });
-    this.applyUIState(ui, false);
+    this.pendingSettle = settled;
+    this.stream.run(text);
+  }
+
+  /**
+   * 函数职责：分段写入落定后重新对齐界面状态。
+   * 输入说明：无；折叠键只能在最终正文上匹配，中途各帧按位置映射的折叠会落到相邻条目。
+   * 输出说明：不写像素滚动；补做分段期间跳过的归档整理，再按界面状态恢复折叠与选区。
+   */
+  private settleSynchronizedText(): void {
+    // 分段写入为了保持后续差异坐标有效而关闭了事务过滤，归档整理改在这里按最终正文补一次；
+    // 整理结果进入正文回调，由保存流程写入磁盘，与外部修改后的处理方式一致。
+    if (this.state.facet(modeFacet) !== 'source') {
+      const layout = archiveLayoutSpec(this.state);
+      if (layout) this.view.dispatch({ ...layout, annotations: Transaction.addToHistory.of(false), filter: false });
+    }
+    this.applyUIState(this.getUIState(), false);
+    const settled = this.pendingSettle;
+    this.pendingSettle = undefined;
+    settled?.();
   }
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
   setText(text: string, resetHistory = false): void {
+    this.stream.abandon();
+    this.pendingSettle = undefined;
     this.contextMenu?.invalidate();
     this.positionGeneration++;
     const ui = this.getUIState();
@@ -268,6 +281,9 @@ export class EditorController {
   }
   restoreState(state: EditorState, ui?: ProjectView): void {
     // 单一视图跨项目复用，即使恢复同一状态对象，也必须取消此前项目的异步剪贴板动作。
+    // 未写完整的分段接收随旧状态一起丢弃，应用侧正文已在接收时按最终文本记录。
+    this.stream.abandon();
+    this.pendingSettle = undefined;
     this.contextMenu?.invalidate();
     this.positionGeneration++;
     this.closeGroupPrompt(); this.view.setState(state);
@@ -508,6 +524,8 @@ export class EditorController {
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
   destroy(): void {
+    this.streamInstance?.destroy();
+    this.pendingSettle = undefined;
     this.contextMenu?.destroy();
     this.unsubscribeLocale();
     this.positionGeneration++; this.closeGroupPrompt();

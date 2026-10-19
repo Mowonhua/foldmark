@@ -114,3 +114,10 @@
 .cm-editor .cm-matchingBracket { background: var(--accent-soft); }
 .cm-editor .cm-nonmatchingBracket { color: var(--danger); text-decoration: underline wavy; }
 :root[data-monochrome=true] .fm-drag-preview { opacity: 1; }
+
+/* 同步接收的到达行：底色在正文后层淡出，改动越靠下出现越晚，形成连续写入的观感。
+   只过渡背景色，不改变行高、盒模型或字体，逐帧写入时阅读位置保持稳定。 */
+.cm-editor .cm-line.fm-sync-arrival { animation: fm-sync-arrival .62s var(--fm-sync-delay, 0s) ease-out both; }
+@keyframes fm-sync-arrival { from { background-color: var(--accent-soft); } to { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .cm-editor .cm-line.fm-sync-arrival { animation: none; } }
+

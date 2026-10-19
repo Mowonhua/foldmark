@@ -623,8 +623,23 @@
       canReload: () => active?.project.id !== project.id || !editor?.view.composing,
       reload: (text, reason) => {
         if (active?.project.id === project.id && editor) {
-          switching = true; if (reason === 'sync') editor.setSynchronizedText(text); else editor.setText(text, true); current.state = editor.state; switching = false;
-          if (reason === 'external' && !current.saver.hasProtectedRecovery) editor.normalizeArchive();
+          const target = editor;
+          switching = true;
+          try {
+            if (reason !== 'sync') { target.setText(text, true); current.state = target.state; }
+            // 同步接收按差异逐帧写入视图；会话正文立即按最终文本记录，保存与版本比较都以最终文档为准，
+            // 不把逐帧中间状态当作本地修改，也不让再次接收读到中间文本。
+            else {
+              current.state = target.createState(text, current.ui.mode);
+              target.setSynchronizedText(text, () => {
+                if (active?.project.id !== project.id) return;
+                current.state = target.state; version += 1;
+              });
+            }
+          } finally {
+            switching = false;
+          }
+          if (reason === 'external' && !current.saver.hasProtectedRecovery) target.normalizeArchive();
         } else if (editor) current.state = editor.createState(text, current.ui.mode);
         version += 1; scheduleIndex();
       },

@@ -16,6 +16,7 @@
 | 关键实现 | src/lib/sync/merge.ts::diffHunks |
 | 关键实现 | src/lib/session/sync-documents.ts::SessionSyncDocuments |
 | 关键实现 | src/lib/editor/index.ts::EditorController.setSynchronizedText |
+| 关键实现 | src/lib/editor/sync-stream.ts::SyncStream |
 
 ### 行为场景
 
@@ -35,7 +36,7 @@
 | S-12 | 正常 | 本机输入防抖四百毫秒后通过长连接触发交换；传输期间新增输入快速跟进，对端通知不丢失；空闲仅兜底轮询，离线逐步退避，缺少增量基线时全量重试 | src/lib/sync/controller.test.ts::输入后防抖自动同步\，不等待轮询, src/lib/sync/controller.test.ts::长连接空闲仅兜底轮询\，离线逐步退避且新输入快速跟进, src/lib/sync/controller.test.ts::传输占用超过输入防抖时\，完成后四百毫秒内发送新输入, src/lib/sync/controller.test.ts::交换过程中收到电脑通知\，结束后立即跟进且不重复轮询, src/lib/sync/controller.test.ts::对端缺少增量基线时用全量版本重试一次 |
 | S-13 | 约束 | 打开项目未修改时按基线指纹跳过重复读盘，远端写入仍按磁盘基线校验 | src/lib/session/sync-documents.test.ts::同步文档端口 > 打开项目未修改时按基线指纹跳过重复读盘 |
 | S-14 | 正常 | 接收对端版本并成功保存后立即确认，失败时不确认；手机接收或合并新版本后立即回传，使电脑确认不等待下轮轮询；合并版本仍须得到对端确认 | src/lib/sync/engine.test.ts::同步持久化 > 收到对端版本并成功写入后立即确认\，写入失败不能确认, src/lib/sync/engine.test.ts::同步持久化 > 自动合并产生的新版本必须等待对端确认, src/lib/sync/controller.test.ts::前台空闲后电脑通知立即送达手机并完成双方确认 |
-| S-15 | 正常 | 手机与桌面接收对端版本按差异增量替换正文，替换过程与结果都保持视口顶部原文行与像素偏移；末尾追加、上方插入、上方删除、多处修改及连续接收均不跳动，源码视图同样保持阅读位置，中间帧不丢失锚点行，位移不超过 1 像素 | scripts/test-sync-scroll.mjs::<module> |
+| S-15 | 正常 | 手机与桌面接收对端版本按差异分段逐帧写入正文并标注到达行，替换过程与结果都保持视口顶部原文行与像素偏移；会缩短阅读位置上方正文的删除与替换随首帧一次写入，长段插入逐行组依次出现；末尾追加、上方插入、上方删除、多处修改、长段插入及连续接收均不跳动，源码视图同样保持阅读位置，中间帧不丢失锚点行，位移不超过 1 像素 | scripts/test-sync-scroll.mjs::<module> |
 | S-16 | 并发 | 两端各自新增内容与任务归档、排序等结构变化按并集合并，双方改动都保留且结果与调用顺序无关 | src/lib/sync/merge.test.ts::同步三方合并 > 两端各自新增与任务归档移动都保留, src/lib/sync/merge.test.ts::同步三方合并 > 排序移动与并行说明修改合并\,搬运覆盖另一端改动时保留冲突, src/lib/sync/merge.test.ts::同步三方合并 > 同一位置的两端新增都保留且与调用顺序无关 |
 | S-17 | 并发 | 冲突按差异块逐处给出本机、对端及可并存的两端内容，两端改动结果相同的差异块直接采纳，每处可选择来源并重建合并结果 | src/lib/sync/merge.test.ts::同步三方合并 > 差异块按类型给出默认选择并支持逐块改用另一端, src/lib/sync/merge.test.ts::同步三方合并 > 两端改动结果相同时差异块直接采纳, src/lib/sync/merge.test.ts::同步三方合并 > 两端改动同一段已有内容时差异块必须选择 |
 

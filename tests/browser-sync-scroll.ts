@@ -35,7 +35,7 @@ function offsetOf(text: string): number | null {
 /** 中间帧与最终布局仅允许像素取整误差，小幅位移也会表现为闪烁或抽搐。 */
 const SETTLE_LIMIT = 1;
 
-async function verify(name: string, next: string): Promise<Record<string, unknown>> {
+async function verify(name: string, next: string, staged = false): Promise<Record<string, unknown>> {
   const scroll = editor.view.scrollDOM;
   scroll.scrollTop = (scroll.scrollHeight - scroll.clientHeight) * 0.5;
   await settled();
@@ -43,11 +43,14 @@ async function verify(name: string, next: string): Promise<Record<string, unknow
   editor.setSynchronizedText(next);
   // 逐帧采样锚点行的屏幕偏移：接收替换若发生整份重建，锚点行会短暂离开视口再被拉回，
   // 只看最终状态无法发现这种中间抖动。采样只读布局，不写入滚动位置。
+  // 分段写入期间正文会逐帧靠近目标，因此同时统计尚未写完的帧数。
   const drift: (number | null)[] = [];
+  let stagedFrames = 0;
   for (let count = 0; count < 16; count++) {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const offset = offsetOf(before.text);
     drift.push(offset === null ? null : offset - before.offset);
+    if (editor.text !== next) stagedFrames++;
   }
   const after = offsetOf(before.text);
   const top = topVisibleLine();
@@ -55,8 +58,9 @@ async function verify(name: string, next: string): Promise<Record<string, unknow
   const lostFrames = drift.filter(value => value === null).length;
   const peakDrift = drift.reduce<number>((peak, value) => Math.max(peak, value === null ? Number.POSITIVE_INFINITY : Math.abs(value)), 0);
   return {
-    name, before, after, offsetDifference, peakDrift, lostFrames, drift, sameTopLine: top.text === before.text,
-    pass: after !== null && Math.abs(offsetDifference) <= SETTLE_LIMIT && top.text === before.text && lostFrames === 0 && peakDrift <= SETTLE_LIMIT,
+    name, before, after, offsetDifference, peakDrift, lostFrames, stagedFrames, drift, sameTopLine: top.text === before.text,
+    pass: after !== null && Math.abs(offsetDifference) <= SETTLE_LIMIT && top.text === before.text && lostFrames === 0
+      && peakDrift <= SETTLE_LIMIT && editor.text === next && (!staged || stagedFrames > 0),
   };
 }
 
@@ -71,6 +75,8 @@ button.addEventListener('click', async () => {
     // 锚点上方整段删除，锚点行内容不变时屏幕位置仍须保持。
     scenarios.push(await verify('上方删除', editor.text.slice(editor.text.indexOf('第 5 项说明'))));
     scenarios.push(await verify('上方多处修改', editor.text.replace('任务 010', '修改后的任务 010').replace('任务 020', '修改后的任务 020')));
+    // 分段呈现：长段插入必须跨多帧陆续写入，同时不得让锚点行偏移或离开视口。
+    scenarios.push(await verify('长段插入分段写入', editor.text + '\n\n' + '长段插入的一行正文\n\n'.repeat(12), true));
     // 连续接收不能留下上一轮延迟校正，干扰下一轮阅读位置。
     for (let index = 0; index < 3; index++) scenarios.push(await verify(`连续接收 ${index + 1}`, `第 ${index} 轮新增\n\n` + editor.text));
     editor.toggleSource(); await settled();
