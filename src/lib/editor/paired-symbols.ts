@@ -199,8 +199,8 @@ export const pairedSymbols = EditorView.inputHandler.of((view, from, to, text, i
 /**
  * 函数职责：手机端输入单个开符号时补齐闭符号，并把光标放到两符号之间。
  * 输入说明：只接管单光标、空选区的单字符输入；整对提交由 pairedSymbols 处理，桌面键盘由 closeBrackets 处理。
- * 输出说明：补对时派发一笔事务并返回 true；右侧已是同一闭符号时移过去，不产生新字符；
- *   开符号右侧已经是它自己的闭符号时交回默认插入，不改写右侧字符。
+ * 输出说明：补对时派发一笔事务并返回 true；右侧已是同一闭符号且输入的就是该闭符号时移过去，不产生新字符；
+ *   在一对符号内部再次输入同一个开符号时补齐内层闭符号，右侧原有闭符号不受影响。
  * 实现思路：手机输入法不在编辑器内配对，其事务必须带上文本改动才能同步插入点，因此补齐的文本与居中选区同笔派发；
  *   引号自配对时只在词边界补齐，避免打断 don't 这类撇号输入；补齐后登记回发预期与保位，
  *   前者消化输入法把写回的闭符号当成新输入的回发，后者兜住只改选区的插入点同步。
@@ -224,13 +224,13 @@ export const singleSymbolPairs = EditorView.inputHandler.of((view, from, to, tex
     movePast(view, from, text, userEvent);
     return true;
   }
-  // 开符号右侧已经是它自己的闭符号：直接插入，不能改写右侧字符，否则会吞掉已有的闭符号。
-  if (after === close) return false;
   // 引号自配对只在词边界补齐：紧跟 ASCII 字母或数字时按撇号缩写处理（don't）不补，
   // 汉字之后是中文写作里输入引号的常见位置，照常补齐；右侧紧跟词字符（含汉字）时也不补，避免把词拆开。
   if (close === text) {
     if (isAsciiWordChar(prevChar(state, from)) || isWordChar(state, from, after)) return false;
   } else if (after !== '' && !PAIRABLE_BEFORE.has(after) && !/\s/.test(after)) return false;
+  // 走到这里的开符号一律补齐：右侧为空、空白或停顿标点（含闭符号）都算可插入位置，
+  // 后者覆盖在一对符号内部再次输入同一个开符号的情况（`(|)` 输入 `(` 得到 `(())`），右侧原有闭符号保持不动。
   view.dispatch({ changes: { from, insert: text + close }, selection: { anchor: from + text.length }, scrollIntoView: true, userEvent });
   keepCaret(view, from + text.length, from + text.length + close.length);
   echoExpectations.set(view, { from: from + text.length, text: close, expiresAt: performance.now() + ECHO_WINDOW });

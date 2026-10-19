@@ -116,13 +116,22 @@ describe('成对符号补全', () => {
     expect(instance.text).toBe('- [ ] 任务）');
   });
 
-  it('手机在已补齐的开符号前再输入同一个开符号时不吞掉闭符号', async () => {
+  it('手机在一对全角符号内部再输入同一个开符号时补齐内层闭符号', async () => {
     const instance = editor('- [ ] 任务', true);
     instance.focusAt(instance.text.length);
     await type(instance, '（');
     await type(instance, '（');
-    expect(instance.text).toBe('- [ ] 任务（（）');
+    expect(instance.text).toBe('- [ ] 任务（（））');
     expect(instance.state.selection.main.head).toBe('- [ ] 任务（（'.length);
+  });
+
+  it('手机在一对半角符号内部再输入同一个开符号时补齐内层闭符号', async () => {
+    const instance = editor('- [ ] 任务', true);
+    instance.focusAt(instance.text.length);
+    await type(instance, '(');
+    await type(instance, '(');
+    expect(instance.text).toBe('- [ ] 任务(())');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务(('.length);
   });
 
   it('手机补齐后输入法把光标推到闭符号之后时移回两符号之间', async () => {
