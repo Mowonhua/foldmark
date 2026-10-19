@@ -9,10 +9,16 @@
   const scenario = params.get('case') ?? 'paired';
   const projects = Array.from({ length: params.has('long') ? 30 : 3 }, (_, i) => ({ id: `local-${i}`, name: ['工作清单', '产品设计笔记', '旅行计划'][i] ?? `项目 ${i + 1}` }));
   let version = $state(0); let ready = $state(false);
-  const content = new Map<string, DocumentContent>(projects.map(project => [project.id, { text: '# 工作清单\n\n整理本周的设计反馈。\n', name: project.name, archived: false }]));
+  const content = new Map<string, DocumentContent>(projects.map(project => [project.id, { text: '# 工作清单\n\n整理本周的设计反馈。\n\n## 下周\n\n提交发布说明。\n', name: project.name, archived: false }]));
   content.set('inspiration', { text: '一个新想法', name: '灵感', archived: false });
   // 两端各有独立正文：共用一份会让修改互相可见，构造不出真实的并发冲突。
   const peerContent = new Map<string, DocumentContent>([...content].map(([id, value]) => [id, { ...value }]));
+  // 多处冲突场景需要更长的正文：下面两端各自改动其中三段，另有一处改动相同、一处新增任务。
+  if (scenario === 'conflict-many') {
+    const many = '# 工作清单\n\n整理本周的设计反馈。\n\n讨论下周的排期。\n\n- [ ] 甲\n- [ ] 乙\n\n## 下周\n\n提交发布说明。\n\n准备演示文稿。\n\n以上是本周重点。\n';
+    content.set('local-0', { text: many, name: '工作清单', archived: false });
+    peerContent.set('local-0', { text: many, name: '工作清单', archived: false });
+  }
   const engine = new SyncEngine({ read: async id => content.get(id)!, apply: async (id, _, next) => { content.set(id, next); }, accept: async () => null }, { load: async () => null, save: async () => {} }, () => version++);
   const peer = new SyncEngine({ read: async id => peerContent.get(id)!, apply: async (id, _, next) => { peerContent.set(id, next); }, accept: async () => null }, { load: async () => null, save: async () => {} }, () => version++);
   const transport: SyncTransport = {
@@ -33,9 +39,17 @@
     await peer.accept(ids[0], 'local-0'); await peer.accept(ids[1], 'local-1');
     await engine.receive(await peer.offer());
     controller.status = '已同步';
-    if (scenario === 'conflict') {
-      content.set('local-0', { text: '# 工作清单\n\n本机整理后的设计反馈。\n', name: '工作清单', archived: false });
-      peerContent.set('local-0', { text: '# 工作清单\n\n手机整理后的设计反馈。\n', name: '工作清单', archived: false });
+    if (scenario === 'conflict' || scenario === 'conflict-many') {
+      // 两端同时改同一句（无法自动取舍），又各自在文末补充一段（两端可以并存）；
+      // 多处冲突场景再各改两段：三段改动不同、一处改动相同、一端多出一条任务。
+      const many = scenario === 'conflict-many';
+      const sides: [string, string] = many
+        ? ['# 工作清单\n\n本机整理后的设计反馈。\n\n本机讨论下周的排期。\n\n- [ ] 甲\n- [ ] 乙\n\n## 下周\n\n提交发布说明，附上更新日志。\n\n本机准备演示文稿。\n\n以上是本周重点。\n\n本机补充的说明。\n',
+           '# 工作清单\n\n手机整理后的设计反馈。\n\n手机讨论下周的排期。\n\n- [ ] 甲\n- [ ] 乙\n- [ ] 丙\n\n## 下周\n\n提交发布说明，附上更新日志。\n\n手机准备演示文稿。\n\n以上是本周重点。\n\n手机补充的说明。\n']
+        : ['# 工作清单\n\n本机整理后的设计反馈。\n\n## 下周\n\n提交发布说明。\n\n本机补充的说明。\n',
+           '# 工作清单\n\n手机整理后的设计反馈。\n\n## 下周\n\n提交发布说明。\n\n手机补充的说明。\n'];
+      content.set('local-0', { text: sides[0], name: '工作清单', archived: false });
+      peerContent.set('local-0', { text: sides[1], name: '工作清单', archived: false });
       // 两端必须在看到对方版本之前各自生成版本；先发后收会被自动合并，留下的是冲突之外的结果。
       const local = await engine.offer(); const remote = await peer.offer();
       await engine.receive(remote); await peer.receive(local);

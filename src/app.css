@@ -554,6 +554,18 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .sync-version-meta{font-size:12px;color:var(--muted);margin:0 0 8px;overflow-wrap:anywhere}
 .sync-merge-version{margin-top:16px}
 .sync-version .sync-merge{height:220px}
+.sync-conflict-title .sync-inline-actions{margin-left:auto}
+.sync-hunks{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.sync-hunk{border:1px solid var(--divider-color,var(--line));border-radius:var(--control-radius,5px);padding:8px 12px 12px;min-width:0}
+.sync-hunk-needs{border-color:var(--accent)}
+.sync-hunk-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px}
+.sync-hunk-heading h4{font-size:12px;font-weight:550;margin:0;color:var(--muted);overflow-wrap:anywhere}
+.sync-hunk-choices{display:flex;gap:4px;padding:3px;background:var(--canvas);border-radius:var(--control-radius,5px)}
+.sync-hunk-choices button{padding:5px 10px;font-size:12px;color:var(--muted);border-radius:var(--control-radius,5px)}
+.sync-hunk-choices button[aria-pressed=true]{background:var(--nav-active-background,var(--accent-soft));color:var(--accent)}
+.sync-hunk-sides{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.sync-hunk-side{margin:0;font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto}
+.sync-hunk-side b{display:block;font-weight:550;color:var(--muted)}
 .sync-compare-tabs{display:none}
 .sync-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 28px;border-top:1px solid var(--divider-color,var(--line));flex-shrink:0}
 @media(max-width:600px){
@@ -586,6 +598,9 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
   .sync-tab-inactive{display:none}
   .sync-merge-version{margin-top:0}
   .sync-version textarea,.sync-version .sync-merge{height:clamp(180px,40dvh,420px)}
+  .sync-hunk-heading{flex-wrap:wrap}
+  .sync-hunk-sides{grid-template-columns:1fr}
+  .sync-hunk-choices button{min-height:40px;padding:8px 12px}
   .sync-footer{padding:12px 20px}
   .sync-footer .primary{flex:1}
 }

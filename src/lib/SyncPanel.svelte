@@ -5,6 +5,7 @@
   import { errorMessage } from './session/save-coordinator';
   import { encodePairingOffer, decodePairingOffer } from './sync/pairing-code';
   import type { SyncController } from './sync/controller';
+  import { assembleMerge, commonAncestor, defaultChoices, diffHunks, type MergeChoice, type MergeHunk, type MergeHunkKind } from './sync/merge';
   import type { DocumentContent, PairingOffer, SyncRecord } from './sync/contracts';
   let { controller, revision, projects, ensureInspiration, focus, onClose }: {
     controller: SyncController; revision: number; projects: { id: string; name: string }[];
@@ -20,9 +21,20 @@
   const selected = $derived(records.filter(record => record.binding?.enabled).length);
   let qr = $state(''); let offer = $state<PairingOffer | null>(null); let input = $state(''); let address = $state('');
   let error = $state(''); let working = $state(false);
-  let conflict = $state<{ id: string; local: string; remote: string; mine: DocumentContent; theirs: DocumentContent } | null>(null);
+  let conflict = $state<{ id: string; local: string; remote: string; base: string; mine: DocumentContent; theirs: DocumentContent } | null>(null);
+  let hunks = $state<MergeHunk[]>([]);
+  let choices = $state<(MergeChoice | null)[]>([]);
   let mergedText = $state(''); let mergedName = $state(''); let mergedArchived = $state(false);
-  let comparisonTab = $state<'mine' | 'theirs' | 'merge'>('merge');
+  let comparisonTab = $state<'mine' | 'theirs' | 'merge'>('mine');
+  /** 未决定的差异块在合并结果中的占位文本；它不是正文内容，出现时不允许保存。 */
+  const pendingMark = '〔两端改了同一段内容：请在该处选择保留哪一侧〕';
+  const hunkLabels: Record<MergeHunkKind, string> = { local: '仅本机改动', remote: '仅对端改动', same: '两端改动相同', union: '两端改动可以并存', overlap: '两端改了同一段内容' };
+  /** 差异块一侧没有内容时的显示文本，用于区分“没有改动”和“删除了本段”。 */
+  const emptySide = '（无）';
+  /** 差异块尚未决定时不能保存：此时的合并结果含占位文本，保存等于丢弃未选择的一侧。 */
+  const unresolved = $derived(choices.some(choice => choice === null));
+  /** 合并结果为空时不能保存：空框只表示用户还没有决定保留什么，此时写入会把文档清空。 */
+  const mergeReady = $derived(!!mergedName.trim() && !!mergedText.trim() && !unresolved);
   let receiving = $state<string | null>(null);
   let receiveTarget = $state('');
   // 对端撤回尚未接收的文档时，已打开的位置选择页也必须退出，不能保留空接收表单。
@@ -54,10 +66,36 @@
     else if (entry) await controller.engine.disable(entry.document.id);
     await controller.sync();
   }
+  /**
+   * 函数职责：打开冲突文档并计算逐块合并的初始状态。
+   * 输入说明：id 必须是当前快照中已记录冲突的文档。
+   * 输出说明：有共同祖先时列出差异块并给出默认选择，否则退回两端全文对照的整篇模式。
+   * 实现思路：差异块只覆盖两端改动过的区间，其余内容由 assembleMerge 取自共同祖先；
+   *   默认选择不预填任一端，只有两端改了同一段内容的差异块留空等待用户决定。
+   */
   function compare(id: string): void {
     const record = snapshot.records[id]; if (!record.conflict) return;
-    conflict = { id, ...record.conflict, mine: record.document.revisions[record.conflict.local].content, theirs: record.document.revisions[record.conflict.remote].content };
-    mergedText = conflict.mine.text; mergedName = conflict.mine.name; mergedArchived = conflict.mine.archived;
+    const mine = record.document.revisions[record.conflict.local].content;
+    const theirs = record.document.revisions[record.conflict.remote].content;
+    const base = commonAncestor(record.document, record.conflict.local, record.conflict.remote);
+    let list: MergeHunk[] | null = null;
+    // 差异无法按行比较时退回整篇对照，避免把祖先原文当成合并结果交给用户。
+    if (base) { try { list = diffHunks(base.content.text, mine.text, theirs.text); } catch { list = null; } }
+    conflict = { id, ...record.conflict, base: base?.content.text ?? '', mine, theirs };
+    hunks = list ?? [];
+    choices = list ? defaultChoices(list) : [];
+    mergedText = base && list ? assembleMerge(base.content.text, list, choices, pendingMark) : '';
+    mergedName = mine.name; mergedArchived = mine.archived; comparisonTab = 'mine';
+  }
+  /**
+   * 函数职责：改变一个差异块的来源并重新拼装合并结果。
+   * 输入说明：index 对应 hunks 的下标，choice 只能是该差异块支持的来源。
+   * 输出说明：合并结果按“所有差异块的选择 + 共同祖先的未改动内容”整体重建，覆盖此前的正文编辑。
+   */
+  function pick(index: number, choice: MergeChoice): void {
+    if (!conflict) return;
+    choices[index] = choice;
+    mergedText = assembleMerge(conflict.base, hunks, choices, pendingMark);
   }
   async function resolve(content: DocumentContent): Promise<void> {
     if (!conflict) return;
@@ -93,7 +131,25 @@
           <label>保存到<select aria-label="接收文档保存到" bind:value={receiveTarget}><option value="">新建项目</option>{#each availableProjects as project}<option value={project.id}>关联：{project.name}</option>{/each}</select></label>
         </section>
       {:else if conflict}
-        <div class="sync-conflict-title"><h3>{conflict.mine.name}</h3><span class="sync-badge needs-attention">需合并</span></div>
+        <div class="sync-conflict-title"><h3>{conflict.mine.name}</h3><span class="sync-badge needs-attention">需合并</span>
+          {#if hunks.length}<div class="sync-inline-actions"><button class="sync-text-button" disabled={working} onclick={() => act(() => resolve(conflict!.mine))}>选用本机</button><button class="sync-text-button" disabled={working} onclick={() => act(() => resolve(conflict!.theirs))}>选用对端</button></div>{/if}
+        </div>
+        {#if hunks.length}
+          <div class="sync-hunks">
+            {#each hunks as hunk, index (index)}
+              <section class="sync-hunk" class:sync-hunk-needs={hunk.kind === 'overlap'}>
+                <div class="sync-hunk-heading"><h4>第 {index + 1} 处 · {hunkLabels[hunk.kind]}</h4>
+                  <div class="sync-hunk-choices" role="group" aria-label="第 {index + 1} 处采用的改动">
+                    <button aria-pressed={choices[index] === 'local'} disabled={working} onclick={() => pick(index, 'local')}>本机</button>
+                    <button aria-pressed={choices[index] === 'remote'} disabled={working} onclick={() => pick(index, 'remote')}>对端</button>
+                    {#if hunk.union !== undefined}<button aria-pressed={choices[index] === 'union'} disabled={working} onclick={() => pick(index, 'union')}>两端</button>{/if}
+                  </div>
+                </div>
+                <div class="sync-hunk-sides"><p class="sync-hunk-side"><b>本机</b>{hunk.local || emptySide}</p><p class="sync-hunk-side"><b>对端</b>{hunk.remote || emptySide}</p></div>
+              </section>
+            {/each}
+          </div>
+        {:else}
         <div class="sync-compare-tabs" role="tablist" aria-label="文档版本">
           {#each [['mine', '本机'], ['theirs', '对端'], ['merge', '合并结果']] as tab}<button role="tab" aria-selected={comparisonTab === tab[0]} onclick={() => comparisonTab = tab[0] as typeof comparisonTab}>{tab[1]}</button>{/each}
         </div>
@@ -101,7 +157,8 @@
           <section class="sync-version" class:sync-tab-inactive={comparisonTab !== 'mine'}><div class="sync-version-heading"><h4>本机</h4><button disabled={working} onclick={() => act(() => resolve(conflict!.mine))}>选用本机</button></div>{#if conflict.mine.name !== conflict.theirs.name || conflict.mine.archived !== conflict.theirs.archived}<p class="sync-version-meta">{conflict.mine.name} · {conflict.mine.archived ? '已归档' : '未归档'}</p>{/if}<textarea aria-label="本机正文" readonly value={conflict.mine.text}></textarea></section>
           <section class="sync-version" class:sync-tab-inactive={comparisonTab !== 'theirs'}><div class="sync-version-heading"><h4>对端</h4><button disabled={working} onclick={() => act(() => resolve(conflict!.theirs))}>选用对端</button></div>{#if conflict.mine.name !== conflict.theirs.name || conflict.mine.archived !== conflict.theirs.archived}<p class="sync-version-meta">{conflict.theirs.name} · {conflict.theirs.archived ? '已归档' : '未归档'}</p>{/if}<textarea aria-label="对端正文" readonly value={conflict.theirs.text}></textarea></section>
         </div>
-        <section class="sync-version sync-merge-version" class:sync-tab-inactive={comparisonTab !== 'merge'}><div class="sync-version-heading"><h4>合并结果</h4></div><textarea aria-label="合并结果" class="sync-merge" bind:value={mergedText}></textarea>
+        {/if}
+        <section class="sync-version sync-merge-version" class:sync-tab-inactive={!hunks.length && comparisonTab !== 'merge'}><div class="sync-version-heading"><h4>合并结果</h4></div><textarea aria-label="合并结果" class="sync-merge" readonly={unresolved} bind:value={mergedText}></textarea>
           <details class="sync-details"><summary>名称与归档状态</summary><label>项目名称<input bind:value={mergedName}/></label><label class="check-label"><input class="sync-check-input" type="checkbox" bind:checked={mergedArchived}/><span class="fm-task-checkbox sync-checkmark" data-checked={mergedArchived} aria-hidden="true"></span>项目已归档</label></details>
         </section>
       {:else if !connection.paired}
@@ -145,6 +202,6 @@
       </details>
     {/if}
     {#if receiving}<footer class="sync-footer"><button class="sync-button" onclick={() => receiving = null}>取消</button><button class="primary sync-button" disabled={working} onclick={() => act(async () => { const id = receiving!; await controller.engine.accept(id, receiveTarget || undefined); receiving = null; await controller.sync(); if (controller.engine.snapshot().records[id]?.conflict) compare(id); })}>{receiveTarget ? '关联项目' : '新建并接收'}</button></footer>
-    {:else if conflict}<footer class="sync-footer"><button class="sync-button" onclick={() => conflict = null}>暂不处理</button><button class="primary sync-button" disabled={working || !mergedName.trim()} onclick={() => act(() => resolve({ text: mergedText, name: mergedName, archived: mergedArchived }))}>保存合并</button></footer>{/if}
+    {:else if conflict}<footer class="sync-footer"><button class="sync-button" onclick={() => conflict = null}>暂不处理</button><button class="primary sync-button" disabled={working || !mergeReady} onclick={() => act(() => resolve({ text: mergedText, name: mergedName, archived: mergedArchived }))}>保存合并</button></footer>{/if}
   </div>
 </div>
