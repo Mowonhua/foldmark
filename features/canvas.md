@@ -1,10 +1,18 @@
 # Markdown 画布
 
+> 模块职责：正文内嵌画布、共享图片附件和含附件的文档搬运。
+
 ## F-CAN-001 内嵌自由白板
 
 在 Markdown 中创建独立画布，收起时按本机阅读偏好显示内容预览，展开后在全页编辑文字、图形、连线、手绘和图片。
 
-创建提交：587fdcf81d9218087133b64f28c5e9c9b4eec9ce
+创建提交：587fdcf
+
+### 功能关系
+
+| 类型 | 功能编号 |
+|---|---|
+| 依赖 | F-CAN-002 |
 
 ### 实现
 
@@ -38,7 +46,7 @@
 | S-12 | 边界 | 引擎默认字段含 undefined 时，保存队列仍可提交，JSON 省略 undefined 并保留图形 | src/lib/editor/canvas.test.ts::保存队列传入引擎的 undefined 默认字段时\，真实会话仍能提交并保留图形 |
 | S-13 | 异常 | 关闭前等待画布队列及文档保存；保存失败保留全页编辑现场，不关闭画布 | src/lib/session/app-integration.test.ts::收起画布等待正文落盘时锁住引擎\，保存失败恢复编辑且重试保留最新图形, src/lib/session/app-integration.test.ts::桌面关闭等待画布正文落盘时锁住引擎\，保存失败恢复编辑且成功后才销毁窗口 |
 | S-14 | 边界 | 待办文末导航将光标放入隐藏归档后，插入画布仍落在待办末尾、归档标题之前，保存与关闭后卡片保持可见 | src/lib/editor/canvas.test.ts::待办的 todo 隐藏归档光标插入画布时落在归档标题前, src/lib/session/app-integration.test.ts::待办 Ctrl+End 落到隐藏归档后插入画布\，关闭和保存后卡片仍在待办可见区域 |
-| S-15 | 正常 | 真实应用中插入、提交、关闭及重启保留画布和正文 | src/lib/session/app-integration.test.ts::首次无配置欢迎文档插入画布后\，自动保存与关闭不能恢复初始欢迎正文, src/lib/session/app-integration.test.ts::插入画布后提交图形与标题\，关闭\、外部检查及重启都保留同一份正文 |
+| S-15 | 正常 | 真实应用中插入、提交、关闭及重启保留画布和正文 | src/lib/session/app-integration.test.ts::首次无配置欢迎文档插入画布后\，自动保存与关闭不能恢复初始欢迎正文, src/lib/session/app-integration.test.ts::插入画布后提交图形与标题\，关闭、外部检查及重启都保留同一份正文 |
 | S-16 | 正常 | 设置中的画布预览三档即时生效并持久化，旧配置默认紧凑；重启和源码切换不改变正文 | src/lib/session/app-integration.test.ts::画布预览三档即时应用并持久化\，重启与源码切换不修改正文, src/lib/config-validation.test.ts::画布预览档位兼容旧配置并拒绝非法值 |
 | S-17 | 约束 | 预览呈现文字和真实连线路径；重复图片去重读取，卸载释放资源，过期异步读取不创建图片 URL | src/lib/canvas/thumbnail.test.ts::呈现真实文字与线条路径\，忽略已删除内容\，转义不可信文字, src/lib/canvas/thumbnail.test.ts::重复图片只读取一次\，卸载释放 URL\，读取完成前卸载不创建 URL |
 | S-18 | 正常 | 更多操作与右键插入菜单共用画布插入命令，插入后直接打开，一次撤销恢复原文 | src/lib/editor/canvas.test.ts::右键插入菜单复用画布命令并直接打开\，一次撤销恢复原文 |
@@ -47,7 +55,7 @@
 
 画布接收 PNG、JPEG 和 WebP 图片，以内容摘要命名，保存在 Markdown 同目录的共享 `.assets/` 中。
 
-创建提交：587fdcf81d9218087133b64f28c5e9c9b4eec9ce
+创建提交：587fdcf
 
 ### 实现
 
@@ -66,7 +74,7 @@
 | 编号 | 类型 | 场景与预期 | 测试 |
 |---|---|---|---|
 | S-01 | 正常 | 同目录文档共享内容相同的图片；重命名 Markdown 不改变相对引用，重复或并发导入不覆盖已有附件 | src/lib/canvas/assets.test.ts::同目录文档和新端口复用已持久化图片\，重命名文档不改变引用, src/lib/canvas/assets.test.ts::并发导入同一图片复用首次写入记录\，Windows 路径按目录共享 |
-| S-02 | 约束 | 仅接收单张不超过 20 MiB 的 PNG、JPEG 和 WebP，拒绝路径逃逸、格式伪装和损坏图片 | src/lib/canvas/assets.test.ts::拒绝路径逃逸\、格式伪装与超大图片\，读取损坏附件时报告错误, src/lib/canvas/model.test.ts::附件路径必须被摘要约束\，序列化拒绝非法持久化数据, src/lib/canvas/save-queue.test.ts::超大内嵌图片在 Base64 解码之前被拒绝 |
+| S-02 | 约束 | 仅接收单张不超过 20 MiB 的 PNG、JPEG 和 WebP，拒绝路径逃逸、格式伪装和损坏图片 | src/lib/canvas/assets.test.ts::拒绝路径逃逸、格式伪装与超大图片\，读取损坏附件时报告错误, src/lib/canvas/model.test.ts::附件路径必须被摘要约束\，序列化拒绝非法持久化数据, src/lib/canvas/save-queue.test.ts::超大内嵌图片在 Base64 解码之前被拒绝 |
 | S-03 | 约束 | 图片完整保存后才向正文提交相对引用；Markdown 不保存图片 data URL，附件失败时保持旧正文 | src/lib/canvas/save-queue.test.ts::先保存图片再提交引用\，Markdown 不含 data URL, src/lib/canvas/save-queue.test.ts::附件写入失败不提交正文\，重试保留同一场景, src/lib/canvas/save-queue.test.ts::相同 fileId 的图片字节改变时重新保存\，不误用旧摘要 |
 | S-04 | 并发 | 保存图片期间的新编辑按顺序继续提交，已经保存的图片不重复写入 | src/lib/canvas/save-queue.test.ts::保存期间的新变化仍按顺序提交\，复用已保存图片 |
 | S-05 | 约束 | 正文提交保留图片恢复引用，连续提交和撤销不丢失图片路径 | src/lib/editor/canvas.test.ts::多行快照第一次保存归并成一行\，连续提交和关闭仍保留图片恢复引用 |
@@ -78,7 +86,7 @@
 
 将 Markdown 和正文实际引用的画布附件导出为 ZIP，导入时先验证并保存附件，再创建文档。
 
-创建提交：587fdcf81d9218087133b64f28c5e9c9b4eec9ce
+创建提交：587fdcf
 
 ### 功能关系
 
