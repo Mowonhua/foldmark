@@ -344,6 +344,8 @@ pub fn run() {
     let builder = tauri::Builder::default().setup(move |app| {
         #[cfg(target_os = "windows")]
         single_instance::mark_window(app, &window_key)?;
+        #[cfg(target_os = "windows")]
+        window_material::disable_transitions(app).map_err(std::io::Error::other)?;
         // 窗口此时尚未显示，恢复上次几何不会露出移动过程。
         #[cfg(not(target_os = "android"))]
         window_state::restore(app);

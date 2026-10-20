@@ -7,6 +7,36 @@ use tauri::{Theme, WebviewWindow};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 
+/// 在主窗口首次显示前关闭 DWM 过渡，并保持到窗口销毁。
+/// 恢复消息到达时系统可能已开始动画，因此不能等到恢复时再设置。
+/// 此设置只控制当前窗口的过渡，不改变透明背景或 Acrylic 材质。
+#[cfg(target_os = "windows")]
+pub fn disable_transitions(app: &tauri::App) -> Result<(), String> {
+    use tauri::Manager;
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED,
+    };
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "无法关闭窗口过渡：主窗口不存在。".to_owned())?;
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    // Win32 BOOL 为四字节；Rust bool 的大小不符合此接口契约。
+    let disabled: i32 = 1;
+    let result = unsafe {
+        DwmSetWindowAttribute(
+            hwnd.0 as HWND,
+            DWMWA_TRANSITIONS_FORCEDISABLED as u32,
+            (&disabled as *const i32).cast(),
+            std::mem::size_of_val(&disabled) as u32,
+        )
+    };
+    if result < 0 {
+        return Err(format!("无法关闭窗口过渡：HRESULT 0x{:08X}。", result as u32));
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 const KEEP_TRANSPARENCY_SUBCLASS_ID: usize = 1;
 

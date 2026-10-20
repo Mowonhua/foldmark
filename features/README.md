@@ -22,6 +22,7 @@
 
 | 模块 | 文档 | 职责说明 |
 |---|---|---|
+| 桌面窗口 | [window.md](window.md) | Windows 窗口材质与显示过渡 |
 | 移动编辑 | [mobile.md](mobile.md) | Android 平台隔离、托管文件、触屏导航和应用更新 |
 | 局域网同步 | [sync.md](sync.md) | 配对、版本合并、持久化与文档接收 |
 | Markdown 画布 | [canvas.md](canvas.md) | 内嵌自由白板、共享图片附件和完整文档搬运 |
