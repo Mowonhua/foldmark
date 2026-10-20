@@ -80,6 +80,7 @@
 | 角色 | 代码符号 |
 |---|---|
 | 主入口 | src/lib/SyncPanel.svelte::<module> |
+| 关键实现 | src/lib/SyncPanel.svelte::listedProjects |
 | 关键实现 | src/lib/sync/controller.ts::SyncController.attention |
 | 关键实现 | src/App.svelte::<module> |
 
@@ -94,3 +95,4 @@
 | S-05 | 约束 | 同步面板与普通弹窗一致：打开时启用正文背景模糊，按下面板外空白处关闭整个面板 | - |
 | S-06 | 约束 | 底部栏只在存在冲突、待接收文档或可处理的同步失败时出现；已配对但等待对端、传输中或对端未打开时不出现，同步完成后不闪现已同步 | src/lib/sync/controller.test.ts::已配对且确认完成时底栏不呈现同步状态, src/lib/sync/controller.test.ts::对端不可达时不为离线输入固化发送版本, src/lib/sync/controller.test.ts::原生权限拒绝保留可读原因\，不显示对象占位文字 |
 | S-07 | 约束 | 合并视图按差异块逐处选择保留本机、对端或两端内容，合并结果可编辑；多处差异分别选择，无法自动取舍的差异块不预填任一端，选择完成前不能保存 | scripts/test-sync-ui.mjs::<module> |
+| S-08 | 约束 | 同步文档清单和接收时的关联选择都不列出已归档项目；仍在同步的归档项目保留一行，状态照常显示并可取消选择 | scripts/test-sync-ui.mjs::<module> |

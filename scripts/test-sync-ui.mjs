@@ -12,6 +12,10 @@ try {
     for (const scenario of ['paired', 'unpaired', 'incoming', 'conflict', 'conflict-many', 'error']) {
       await page.goto(`${process.env.TASKRAIL_URL ?? 'http://127.0.0.1:1420'}/tests/sync-preview.html?case=${scenario}${mobile ? '&mobile' : ''}`);
       await page.getByRole('dialog', { name: '设备同步' }).waitFor();
+      if (scenario === 'paired') {
+        assert.deepEqual(await page.locator('.sync-document-name').allTextContents(), ['工作清单', '产品设计笔记', '旅行计划', '灵感'], '已归档项目不出现在同步清单，仍在同步的归档项目保留一行');
+        assert(await page.locator('.sync-document-row').filter({ hasText: '产品设计笔记' }).getByRole('checkbox').isChecked(), '仍在同步的归档项目仍可取消选择');
+      }
       if (scenario === 'unpaired' && !mobile) await page.getByRole('button', { name: '显示配对二维码' }).click();
       if (scenario === 'conflict') {
         await page.getByRole('button', { name: '比较并处理' }).click();

@@ -8,7 +8,7 @@
   import { assembleMerge, commonAncestor, defaultChoices, diffHunks, type MergeChoice, type MergeHunk, type MergeHunkKind } from './sync/merge';
   import type { DocumentContent, PairingOffer, SyncRecord } from './sync/contracts';
   let { controller, revision, projects, ensureInspiration, focus, onClose }: {
-    controller: SyncController; revision: number; projects: { id: string; name: string }[];
+    controller: SyncController; revision: number; projects: { id: string; name: string; archived?: boolean }[];
     ensureInspiration: () => Promise<void>; onClose: () => void;
     focus: (node: HTMLElement) => { destroy(): void };
   } = $props();
@@ -39,7 +39,12 @@
   let receiveTarget = $state('');
   // 对端撤回尚未接收的文档时，已打开的位置选择页也必须退出，不能保留空接收表单。
   $effect(() => { if (receiving && !snapshot.records[receiving]) receiving = null; });
-  const availableProjects = $derived(projects.filter(project => !records.some(record => record.binding?.localId === project.id)));
+  const availableProjects = $derived(projects.filter(project => !project.archived && !records.some(record => record.binding?.localId === project.id)));
+  /**
+   * 同步文档清单隐藏已归档项目，但仍在参与同步的归档项目保留一行。
+   * 归档不停止同步（两端靠交换传播归档状态），这类项目若从清单消失就无法再取消选择。
+   */
+  const listedProjects = $derived(projects.filter(project => !project.archived || records.some(record => record.binding?.localId === project.id && record.binding.enabled)));
   function documentStatus(record?: SyncRecord): string {
     if (!record?.binding?.enabled) return '仅本机';
     if (record.conflict) return '需合并';
@@ -186,7 +191,7 @@
         {#if pending.length}<section class="sync-section"><div class="sync-section-heading"><h3>待接收</h3><span>{pending.length}</span></div>{#each pending as record (record.document.id)}<div class="sync-receive-row"><span class="sync-file-icon">{@render icon('document', 19)}</span><strong>{record.document.revisions[record.document.head].content.name}</strong><button class="sync-button" disabled={working} onclick={() => { if (record.document.kind === 'inspiration') void act(async () => { await controller.engine.accept(record.document.id); await controller.sync(); }); else { receiveTarget = ''; receiving = record.document.id; } }}>接收文档</button></div>{/each}</section>{/if}
         {#if attention.length}<section class="sync-section"><div class="sync-section-heading"><h3>待处理</h3><span>{attention.length}</span></div>{#each attention as record (record.document.id)}<div class="sync-attention-row"><div class="sync-attention-title"><span class="sync-alert-icon">{@render icon('alert', 18)}</span><strong>{record.document.revisions[record.document.head].content.name}</strong>{#if record.conflict}<button class="sync-text-button" disabled={working} onclick={() => compare(record.document.id)}>比较并处理 {@render icon('chevron', 14)}</button>{/if}</div>{#if record.error}<details class="sync-error-detail"><summary>同步未完成</summary><p>{record.error}</p></details>{/if}</div>{/each}</section>{/if}
         <section class="sync-section"><div class="sync-section-heading"><h3>同步文档</h3><span>{selected} 项已选择</span></div>
-          <div class="sync-documents">{#each [...projects, { id: 'inspiration', name: '灵感' }] as project}
+          <div class="sync-documents">{#each [...listedProjects, { id: 'inspiration', name: '灵感' }] as project}
             {@const record = records.find(entry => entry.binding?.localId === project.id)}
             <label class="check-label sync-document-row"><input class="sync-check-input" type="checkbox" disabled={working} checked={record?.binding?.enabled ?? false} onchange={event => act(() => toggle(project.id, event.currentTarget.checked, project.id === 'inspiration' ? 'inspiration' : 'project'))}/><span class="fm-task-checkbox sync-checkmark" data-checked={record?.binding?.enabled ?? false} aria-hidden="true"></span><span class="sync-document-name">{project.name}</span><span class="sync-document-state" class:needs-attention={!!record?.conflict || !!record?.error}>{documentStatus(record)}</span></label>
           {/each}</div>

@@ -7,9 +7,13 @@
   import type { DocumentContent, SyncTransport } from '../src/lib/sync/contracts';
   const params = new URLSearchParams(location.search);
   const scenario = params.get('case') ?? 'paired';
-  const projects = Array.from({ length: params.has('long') ? 30 : 3 }, (_, i) => ({ id: `local-${i}`, name: ['工作清单', '产品设计笔记', '旅行计划'][i] ?? `项目 ${i + 1}` }));
+  // 归档项目用于验证同步清单筛选：local-1 已归档但仍在同步，旧项目已归档且未选择。
+  const projects = [
+    ...Array.from({ length: params.has('long') ? 30 : 3 }, (_, i) => ({ id: `local-${i}`, name: ['工作清单', '产品设计笔记', '旅行计划'][i] ?? `项目 ${i + 1}`, archived: i === 1 })),
+    { id: 'archived', name: '旧项目', archived: true },
+  ];
   let version = $state(0); let ready = $state(false);
-  const content = new Map<string, DocumentContent>(projects.map(project => [project.id, { text: '# 工作清单\n\n整理本周的设计反馈。\n\n## 下周\n\n提交发布说明。\n', name: project.name, archived: false }]));
+  const content = new Map<string, DocumentContent>(projects.map(project => [project.id, { text: '# 工作清单\n\n整理本周的设计反馈。\n\n## 下周\n\n提交发布说明。\n', name: project.name, archived: project.archived ?? false }]));
   content.set('inspiration', { text: '一个新想法', name: '灵感', archived: false });
   // 两端各有独立正文：共用一份会让修改互相可见，构造不出真实的并发冲突。
   const peerContent = new Map<string, DocumentContent>([...content].map(([id, value]) => [id, { ...value }]));
