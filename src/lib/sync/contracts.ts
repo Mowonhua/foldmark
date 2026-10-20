@@ -2,6 +2,7 @@
  * 文件职责：定义局域网同步的版本、绑定和持久化端口。
  * 定义范围：网络数据不含本机路径；同步模块通过文档端口读取和条件写入。
  */
+import type { CanvasAsset } from '../canvas/types';
 export type DocumentId = string;
 export type RevisionId = string;
 export interface DocumentContent { text: string; name: string; archived: boolean }
@@ -62,12 +63,28 @@ export interface SyncState { version: 1; pairing?: string; records: Record<Docum
  * 协议 3 为增量传输：版本按 peerKnown 差集编码，正文可缩为行级补丁；needsFull 请求对端下轮回复全量。
  * selection 缺省仅供本机旧版本记录校验，网络接收必须包含。
  */
-export interface SyncEnvelope { protocol: 3; documents: WireDocument[]; selection?: SyncSelection; needsFull?: boolean }
+/** 请求只包含正文中已有的内容标识；offset 为已接收的连续字节数。 */
+export interface AssetRequest { documentId: DocumentId; assetId: string; offset: number }
+/** 一次交换最多携带一个 256 KiB 图片块；全部接收并验摘要后才允许使用。 */
+export interface AssetChunk extends AssetRequest { data: string }
+/** 图片字节仅供附件端口保存，不写入文档正文或版本日志。 */
+export interface SyncAttachment { asset: CanvasAsset; bytes: Uint8Array }
+export interface SyncEnvelope {
+  protocol: 3; documents: WireDocument[]; selection?: SyncSelection; needsFull?: boolean;
+  /** 可选扩展保留普通旧文档兼容性；带图片的文档要求双方声明支持。 */
+  assetProtocol?: 1;
+  assetRequests?: AssetRequest[];
+  assetChunks?: AssetChunk[];
+}
 /** 文档写入须复用保存协调器；编辑中或有受保护草稿时允许推迟，禁止覆盖。 */
 export interface SyncDocumentPort {
   read(localId: string): Promise<DocumentContent>;
   apply(localId: string, expected: DocumentContent, next: DocumentContent): Promise<void>;
-  accept(documentId: DocumentId, kind: SyncDocument['kind'], content: DocumentContent): Promise<string | null>;
+  accept(documentId: DocumentId, kind: SyncDocument['kind'], content: DocumentContent, attachments?: SyncAttachment[]): Promise<string | null>;
+  /** 本机路径只能由绑定解析；读取必须校验附件摘要。 */
+  readAsset?(localId: string, asset: CanvasAsset): Promise<Uint8Array>;
+  /** 返回前完成附件校验与持久化；失败禁止继续写入引用该附件的正文。 */
+  writeAsset?(localId: string, attachment: SyncAttachment): Promise<void>;
 }
 export interface SyncStore {
   load(): Promise<SyncState | null>;

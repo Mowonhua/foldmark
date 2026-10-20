@@ -1,5 +1,6 @@
 //! 文件职责：连接桌面命令与文件基础设施。
 //! 定义范围：Tauri 启动入口和平台命令适配。
+mod canvas_assets;
 mod external_link;
 mod recovery;
 #[cfg(target_os = "windows")]
@@ -133,6 +134,34 @@ async fn create_file(
         storage::create(Path::new(&path), &text)
     })
     .await
+}
+
+#[tauri::command]
+async fn put_canvas_asset(request: tauri::ipc::Request<'_>, state: State<'_, FileState>) -> Result<canvas_assets::CanvasAsset, FileError> {
+    let encoded = request.headers().get("x-taskrail-canvas").and_then(|value| value.to_str().ok())
+        .ok_or_else(|| FileError::new("CANVAS_ASSET_INVALID", "二进制请求缺少元数据头。"))?;
+    let metadata: canvas_assets::AssetUploadMetadata = canvas_assets::decode_upload_metadata(encoded)?;
+    let bytes = canvas_assets::upload_bytes(request.body(), canvas_assets::MAX_IMAGE_BYTES)?;
+    disk(state.gate.clone(), move || canvas_assets::put(Path::new(&metadata.document_path), &bytes, &metadata.mime_type)).await
+}
+
+#[tauri::command]
+async fn read_canvas_asset(document_path: String, asset: canvas_assets::CanvasAsset, state: State<'_, FileState>) -> Result<tauri::ipc::Response, FileError> {
+    disk(state.gate.clone(), move || canvas_assets::read(Path::new(&document_path), &asset)).await.map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
+async fn save_canvas_bundle(request: tauri::ipc::Request<'_>, state: State<'_, FileState>) -> Result<(), FileError> {
+    let encoded = request.headers().get("x-taskrail-canvas").and_then(|value| value.to_str().ok())
+        .ok_or_else(|| FileError::new("CANVAS_ASSET_INVALID", "二进制请求缺少元数据头。"))?;
+    let metadata: canvas_assets::ExportUploadMetadata = canvas_assets::decode_upload_metadata(encoded)?;
+    let bytes = canvas_assets::upload_bytes(request.body(), canvas_assets::MAX_BUNDLE_BYTES)?;
+    disk(state.gate.clone(), move || canvas_assets::save_bundle(Path::new(&metadata.path), &bytes)).await
+}
+
+#[tauri::command]
+async fn read_canvas_bundle(path: String, state: State<'_, FileState>) -> Result<tauri::ipc::Response, FileError> {
+    disk(state.gate.clone(), move || canvas_assets::read_bundle(Path::new(&path))).await.map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
@@ -339,6 +368,10 @@ pub fn run() {
             open_local_document,
             write_file,
             create_file,
+            put_canvas_asset,
+            read_canvas_asset,
+            save_canvas_bundle,
+            read_canvas_bundle,
             load_config,
             save_config,
             load_recovery,

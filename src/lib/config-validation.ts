@@ -39,6 +39,7 @@ export function validateAppConfig(value: unknown): AppConfig | null {
   if (value.preferences !== undefined) {
     if (!record(value.preferences)) return fail();
     const p = value.preferences;
+    if (p.canvasPreview !== undefined && (typeof p.canvasPreview !== 'string' || !['compact', 'medium', 'spacious'].includes(p.canvasPreview))) return fail();
     // 旧配置允许缺省；未知语言标识由翻译层回退，便于跨版本共享配置。
     if (p.locale !== undefined && typeof p.locale !== 'string') return fail();
     for (const flag of [p.autoCheckUpdates, p.autoDownloadUpdates, p.keepTransparentOnBlur, p.sidebarOpen, p.headingAdd]) if (flag !== undefined && typeof flag !== 'boolean') return fail();

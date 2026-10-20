@@ -1,0 +1,77 @@
+{
+  "family": "Taskrail Sans",
+  "version": "Version 2.1.5",
+  "source": "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz",
+  "archiveMember": "liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf",
+  "archiveSha256": "7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0",
+  "ttfSha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+  "woff2Sha256": "e2ad4bd8436b635c63a2ac41653edb5e23cb964039f2e73baf0a3bc0d057c909",
+  "woff2Bytes": 146840,
+  "fontTools": "4.61.0",
+  "conversion": "TTFont(BytesIO(ttf), recalcTimestamp=False); rename name-table IDs 1/3/4/6/16/18/21/25 when present to Taskrail names; font.flavor=\"woff2\"; font.save(output)",
+  "conversionPreservesTTFMetrics": true,
+  "comparedWithVendor1_05": {
+    "commonCodepoints": 658,
+    "differentAdvanceWidths": 2,
+    "differentCodepoints": [
+      "0xb7",
+      "0x2012"
+    ],
+    "metrics": {
+      "head": {
+        "unitsPerEm": {
+          "old": 2048,
+          "new": 2048
+        }
+      },
+      "hhea": {
+        "ascent": {
+          "old": 1854,
+          "new": 1854
+        },
+        "descent": {
+          "old": -434,
+          "new": -434
+        },
+        "lineGap": {
+          "old": 67,
+          "new": 67
+        }
+      },
+      "OS/2": {
+        "sTypoAscender": {
+          "old": 1491,
+          "new": 1491
+        },
+        "sTypoDescender": {
+          "old": -431,
+          "new": -431
+        },
+        "sTypoLineGap": {
+          "old": 307,
+          "new": 307
+        },
+        "usWinAscent": {
+          "old": 1854,
+          "new": 1854
+        },
+        "usWinDescent": {
+          "old": 434,
+          "new": 434
+        }
+      }
+    },
+    "asciiAdvanceWidthsEqual": true
+  },
+  "fullName": "Taskrail Sans Regular",
+  "postScriptName": "TaskrailSans-Regular",
+  "uniqueId": "TaskrailSans-Regular;2.1.5;Taskrail",
+  "modifiedNameIds": [
+    1,
+    3,
+    4,
+    6
+  ],
+  "preserved": "Original copyright, license, outlines, cmap, advance widths, vertical metrics and hinting; no subsetting",
+  "verifiedGlyphOutlines": 2620
+}

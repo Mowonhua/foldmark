@@ -10,6 +10,36 @@ import { AndroidFilePort } from '../files/android';
 import { builtInThemes, paletteKeys, parseTheme, type ThemeDefinition } from '../themes';
 import type { AppConfig, Project, ProjectView } from '../contracts';
 import { setLocalePreference } from '../i18n';
+import type { CanvasEngineOptions } from '../canvas/engine-port';
+import { scanCanvasBlocks } from '../canvas/model';
+
+const canvasBoundary = vi.hoisted(() => ({
+  edit: null as null | ((elements: Record<string, unknown>[]) => void),
+  tryEdit: null as null | ((elements: Record<string, unknown>[]) => boolean),
+}));
+// jsdom 不提供 Canvas 渲染；只替换白板引擎，保留真实全页组件、提交队列、编辑器和保存器。
+vi.mock('../canvas/engine', async () => {
+  const { CanvasSaveQueue } = await import('../canvas/save-queue');
+  return { mountCanvasEngine: async (options: CanvasEngineOptions) => {
+    const queue = new CanvasSaveQueue(options);
+    let title = options.session.document.title;
+    let elements = [...options.session.document.elements];
+    let locked = false;
+    const update = () => queue.update({ title, elements, files: {} });
+    canvasBoundary.edit = next => { elements = next; update(); };
+    // jsdom 不执行 inert 的浏览器输入阻断；在引擎边界复现浏览器对用户输入的准入条件。
+    canvasBoundary.tryEdit = next => {
+      if (locked) return false;
+      for (let node: HTMLElement | null = options.host; node; node = node.parentElement) if (node.inert) return false;
+      elements = next; update(); return true;
+    };
+    return {
+      setTitle(next: string) { title = next; update(); }, setAppearance() {}, canCloseWithEscape: () => true,
+      setLocked(value: boolean) { locked = value; }, addImage: async () => {},
+      flush: () => queue.flush(), exportPNG: async () => new Blob(), dispose: () => { queue.dispose(); canvasBoundary.edit = null; canvasBoundary.tryEdit = null; },
+    };
+  } };
+});
 
 const desktopBoundary = vi.hoisted(() => ({
   enabled: false,
@@ -719,6 +749,148 @@ async function openThemeManager(): Promise<void> {
 }
 
 describe('App 更多操作菜单', () => {
+  it('画布预览三档即时应用并持久化，重启与源码切换不修改正文', async () => {
+    await start(['# 阅读\n\n- [ ] 保留正文\n']);
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.edit).not.toBeNull());
+    button('收起画布').click(); await vi.waitFor(() => expect(document.querySelector('.canvas-page')).toBeNull());
+    const original = (await files.read(firstProject.path)).text;
+    button('设置').click(); await tick();
+    expect(themeControl('画布预览').value).toBe('compact');
+    for (const value of ['medium', 'spacious', 'compact', 'spacious']) {
+      await chooseThemeSetting('画布预览', value);
+      expect(document.documentElement.dataset.canvasPreview).toBe(value);
+    }
+    await vi.waitFor(async () => expect((await files.loadConfig())?.preferences.canvasPreview).toBe('spacious'));
+    expect((await files.read(firstProject.path)).text).toBe(original);
+    await remount();
+    expect(document.documentElement.dataset.canvasPreview).toBe('spacious');
+    expect(document.querySelector('.fm-canvas-thumbnail')).not.toBeNull();
+    button('查看源码').click(); await tick();
+    expect(document.querySelector('.fm-canvas-card')).toBeNull();
+    button('返回预览').click(); await tick();
+    expect(document.querySelector('.fm-canvas-thumbnail')).not.toBeNull();
+    expect((await files.read(firstProject.path)).text).toBe(original);
+  });
+  it('收起画布等待正文落盘时锁住引擎，保存失败恢复编辑且重试保留最新图形', async () => {
+    await start(['# 画布退出\n\n- [ ] 任务\n']);
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.tryEdit).not.toBeNull());
+    const first = { id: 'first-shape', type: 'rectangle', x: 0, y: 0, width: 80, height: 40 };
+    const second = { id: 'second-shape', type: 'ellipse', x: 100, y: 0, width: 80, height: 40 };
+    expect(canvasBoundary.tryEdit!([first])).toBe(true);
+    const writeOriginal = BrowserFilePort.prototype.write;
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const write = vi.spyOn(BrowserFilePort.prototype, 'write').mockImplementationOnce(async () => {
+      await barrier; throw new Error('暂时无法写入');
+    });
+    try {
+      button('收起画布').click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(document.querySelector<HTMLElement>('.canvas-page')?.inert).toBe(true);
+      expect(canvasBoundary.tryEdit!([first, second])).toBe(false);
+    } finally { release(); }
+    await vi.waitFor(() => expect(button('收起画布').disabled).toBe(false));
+    expect(document.querySelector('.canvas-page')).not.toBeNull();
+    expect(document.querySelector<HTMLElement>('.canvas-page')?.inert).toBe(false);
+    expect(canvasBoundary.tryEdit!([first, second])).toBe(true);
+    write.mockImplementation(writeOriginal);
+    button('收起画布').click();
+    await vi.waitFor(() => expect(document.querySelector('.canvas-page')).toBeNull());
+    expect(scanCanvasBlocks((await files.read(firstProject.path)).text)[0].document?.elements).toHaveLength(2);
+  });
+
+  it('桌面关闭等待画布正文落盘时锁住引擎，保存失败恢复编辑且成功后才销毁窗口', async () => {
+    desktopBoundary.enabled = true;
+    await start(['# 画布退出\n\n- [ ] 任务\n']);
+    await vi.waitFor(() => expect(desktopBoundary.close).not.toBeNull());
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.tryEdit).not.toBeNull());
+    const first = { id: 'window-first', type: 'rectangle', x: 0, y: 0, width: 80, height: 40 };
+    const second = { id: 'window-second', type: 'ellipse', x: 100, y: 0, width: 80, height: 40 };
+    expect(canvasBoundary.tryEdit!([first])).toBe(true);
+    const writeOriginal = BrowserFilePort.prototype.write;
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const write = vi.spyOn(BrowserFilePort.prototype, 'write').mockImplementationOnce(async () => {
+      await barrier; throw new Error('暂时无法写入');
+    });
+    const closing = desktopBoundary.close!({ preventDefault: vi.fn() });
+    try {
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(document.querySelector<HTMLElement>('.canvas-page')?.inert).toBe(true);
+      expect(canvasBoundary.tryEdit!([first, second])).toBe(false);
+      expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+    } finally { release(); await closing; }
+    expect(desktopBoundary.destroy).not.toHaveBeenCalled();
+    expect(document.querySelector<HTMLElement>('.canvas-page')?.inert).toBe(false);
+    expect(canvasBoundary.tryEdit!([first, second])).toBe(true);
+    write.mockImplementation(writeOriginal);
+    await desktopBoundary.close!({ preventDefault: vi.fn() });
+    expect(desktopBoundary.destroy).toHaveBeenCalledOnce();
+    expect(scanCanvasBlocks((await files.read(firstProject.path)).text)[0].document?.elements).toHaveLength(2);
+  });
+
+  it('待办 Ctrl+End 落到隐藏归档后插入画布，关闭和保存后卡片仍在待办可见区域', async () => {
+    const source = '# 清单\n\n- [ ] 待办\n\n# 归档\n\n- [x] 旧任务\n';
+    await start([source], { [firstProject.id]: { mode: 'todo', cursor: source.length, scrollTop: 0, folded: [] } });
+    documentInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'End', code: 'End', ctrlKey: true, bubbles: true, cancelable: true }));
+    await tick();
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.edit).not.toBeNull());
+    canvasBoundary.edit!([{ id: 'visible-shape', type: 'rectangle', x: 0, y: 0, width: 80, height: 40 }]);
+    button('收起画布').click();
+    await vi.waitFor(() => expect(document.querySelector('.canvas-page')).toBeNull());
+    expect(document.querySelector('.fm-canvas-card')).not.toBeNull();
+    const saved = (await files.read(firstProject.path)).text;
+    expect(scanCanvasBlocks(saved)[0].to).toBeLessThan(saved.indexOf('# 归档'));
+    expect(saved.slice(saved.indexOf('# 归档'))).toBe('# 归档\n\n- [x] 旧任务\n');
+  });
+
+  it('首次无配置欢迎文档插入画布后，自动保存与关闭不能恢复初始欢迎正文', async () => {
+    await remount();
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.edit).not.toBeNull());
+    expect(document.querySelector('.fm-canvas-card')).not.toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const config = await files.loadConfig();
+    const project = config!.projects.find(project => project.id === config!.activeProjectId)!;
+    expect(scanCanvasBlocks((await files.read(project.path)).text)).toHaveLength(1);
+    canvasBoundary.edit!([{ id: 'welcome-shape', type: 'ellipse', x: 0, y: 0, width: 80, height: 40 }]);
+    button('收起画布').click();
+    await vi.waitFor(() => expect(document.querySelector('.canvas-page')).toBeNull());
+    expect(document.querySelector('.fm-canvas-card')).not.toBeNull();
+    expect(scanCanvasBlocks((await files.read(project.path)).text)[0].document?.elements).toHaveLength(1);
+  });
+
+  it('插入画布后提交图形与标题，关闭、外部检查及重启都保留同一份正文', async () => {
+    const source = '# 欢迎\n\n- [ ] 开始使用\n';
+    await start([source]);
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.edit).not.toBeNull());
+    expect(document.querySelector('.fm-canvas-card')).not.toBeNull();
+    canvasBoundary.edit!([{ id: 'rectangle', type: 'rectangle', x: 0, y: 0, width: 80, height: 40 }]);
+    const title = document.querySelector<HTMLInputElement>('[aria-label="画布标题"]')!;
+    title.value = '保存的图'; title.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    button('收起画布').click();
+    await vi.waitFor(() => expect(document.querySelector('.canvas-page')).toBeNull());
+    await vi.waitFor(async () => {
+      const blocks = scanCanvasBlocks((await files.read(firstProject.path)).text);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].document?.title).toBe('保存的图');
+      expect(blocks[0].document?.elements[0]).toMatchObject({ id: 'rectangle', width: 80 });
+    });
+    expect(document.querySelector('.fm-canvas-title')?.textContent).toBe('保存的图');
+    const expected = (await files.read(firstProject.path)).text;
+    await new Promise(resolve => setTimeout(resolve, 850));
+    expect((await files.read(firstProject.path)).text).toBe(expected);
+    await remount();
+    expect(document.querySelector('.fm-canvas-title')?.textContent).toBe('保存的图');
+    button('查看源码').click(); await tick();
+    expect(documentInput().textContent).toContain('```canvas');
+  });
+
   it('内部点击保留菜单，外部点击关闭，触发按钮仍能切换且菜单操作正常', async () => {
     await start(['# 菜单验收\n']);
     const trigger = button('更多操作');

@@ -75,7 +75,8 @@ export class SyncController {
   private summary(): string {
     const records = Object.values(this.engine.snapshot().records).filter(record => !record.binding || record.binding.enabled);
     if (records.some(record => record.conflict)) return '有同步冲突';
-    if (records.some(record => record.error)) return '部分文档待处理';
+    if (records.some(record => record.error && !record.error.includes('SYNC_ASSET_PENDING'))) return '部分文档待处理';
+    if (this.engine.pendingAssets) return '正在同步图片';
     if (records.some(record => !record.binding)) return '有待接收文档';
     // 对端没开时本机改动仍保存在磁盘上，重试即可，不能显示成同步失败。
     if (this.offline) return '等待对端';
@@ -89,7 +90,7 @@ export class SyncController {
     const records = Object.values(this.engine.snapshot().records).filter(record => !record.binding || record.binding.enabled);
     if (records.some(record => record.conflict)) return '有同步冲突';
     if (records.some(record => !record.binding)) return '有文档待接收';
-    if (records.some(record => record.error)) return '同步失败';
+    if (records.some(record => record.error && !record.error.includes('SYNC_ASSET_PENDING'))) return '同步失败';
     return this.offline ? '' : this.error ? '同步失败' : '';
   }
   /** 状态与底栏提示一起更新，避免两处各自推断同一批记录。 */
@@ -139,7 +140,7 @@ export class SyncController {
         // 本轮请求早于响应中的新版本；接收或合并后立即回传新 head，让电脑完成确认。
         // 只在 head 实际前进时跟进，未解决冲突和保存失败不能形成无间隔重试。
         const sent = new Map(outgoing.documents.map(doc => [doc.id, doc.head]));
-        followUp = Object.values(this.engine.snapshot().records).some(record =>
+        followUp = this.engine.pendingAssets || Object.values(this.engine.snapshot().records).some(record =>
           record.binding?.enabled && !record.conflict && !record.error && !record.pending && sent.get(record.document.id) !== record.document.head);
         // 网络等待期间的新输入尚未包含在本轮确认中，不能提前显示“已同步”。
         if (generation === this.editGeneration) this.dirty = false;

@@ -4,10 +4,15 @@
  */
 import type { AppConfig, FilePort, Project } from '../contracts';
 import type { ProjectSession } from './types';
-import type { DocumentContent, SyncDocumentPort } from '../sync/contracts';
+import type { DocumentContent, SyncAttachment, SyncDocumentPort } from '../sync/contracts';
+import type { CanvasAsset, CanvasAssetPort } from '../canvas/types';
+import { canvasAssetsFromText } from '../canvas/model';
+import { verifyCanvasAssetBytes } from '../canvas/assets';
 import { sameContent } from '../sync/merge';
 export interface SyncDocumentOptions {
   files: FilePort;
+  /** 画布附件使用与编辑器相同的持久化端口；无图片的旧文档不依赖此端口。 */
+  assets?: CanvasAssetPort;
   config(): AppConfig;
   session(id: string): ProjectSession | undefined;
   capture(): void;
@@ -52,6 +57,7 @@ export class SessionSyncDocuments implements SyncDocumentPort {
   async apply(id: string, expected: DocumentContent, next: DocumentContent): Promise<void> {
     if (!sameContent(await this.read(id), expected)) throw new Error('SYNC_CHANGED: 本机内容或项目资料已变化');
     const project = this.project(id); const session = this.options.session(id);
+    for (const asset of canvasAssetsFromText(next.text)) await this.readAsset(id, asset);
     if (session) await session.saver.applySynchronized(expected.text, next.text);
     else {
       const snapshot = await this.options.files.read(project.path);
@@ -67,12 +73,35 @@ export class SessionSyncDocuments implements SyncDocumentPort {
     if (!await this.options.persist()) throw new Error('SYNC_SAVE: 项目资料保存失败');
     this.options.changed();
   }
-  async accept(documentId: string, kind: 'project' | 'inspiration', content: DocumentContent): Promise<string | null> {
-    if (kind === 'inspiration') { await this.options.inspiration(); return 'inspiration'; }
+  async readAsset(id: string, asset: CanvasAsset): Promise<Uint8Array> {
+    if (!this.options.assets) throw new Error('SYNC_SAVE: 画布图片存储不可用');
+    return this.options.assets.read(this.project(id).path, asset);
+  }
+  async writeAsset(id: string, attachment: SyncAttachment): Promise<void> {
+    await this.saveAttachments(this.project(id).path, [attachment]);
+  }
+  /** 附件摘要由引用确定；保存后再读原引用，禁止只比较 put 返回值便放行正文。 */
+  private async saveAttachments(path: string, attachments: SyncAttachment[]): Promise<void> {
+    if (!attachments.length) return;
+    const assets = this.options.assets;
+    if (!assets) throw new Error('SYNC_SAVE: 画布图片存储不可用');
+    for (const { asset, bytes } of attachments) {
+      await verifyCanvasAssetBytes(bytes, asset);
+      await assets.put(path, bytes, asset.mimeType);
+      await assets.read(path, asset);
+    }
+  }
+  async accept(documentId: string, kind: 'project' | 'inspiration', content: DocumentContent, attachments: SyncAttachment[] = []): Promise<string | null> {
+    if (kind === 'inspiration') { const path = await this.options.inspiration(); await this.saveAttachments(path, attachments); return 'inspiration'; }
     const config = this.options.config();
     // 文件和配置已保存、同步日志尚未保存时重试，复用明确 ID，不能按同名猜测关联。
     if (config.projects.some(project => project.id === documentId)) return documentId;
     const path = await this.options.receivePath(content.name); if (!path) return null;
+    await this.saveAttachments(path, attachments);
+    for (const asset of canvasAssetsFromText(content.text)) {
+      if (!this.options.assets) throw new Error('SYNC_SAVE: 画布图片存储不可用');
+      await this.options.assets.read(path, asset);
+    }
     await this.options.files.create(path, content.text);
     config.projects = [...config.projects, { id: documentId, path, name: content.name, archived: content.archived }];
     if (!await this.options.persist()) throw new Error('SYNC_SAVE: 接收项目配置保存失败，文件已保留');

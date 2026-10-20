@@ -35,9 +35,20 @@
   import { WindowMaterialController, type WindowMaterial } from './lib/window-material';
   import { registerDrawerGestures } from './lib/mobile-navigation';
   import { createCardWindowController } from './lib/card-window';
+  import CanvasPanel from './lib/canvas/CanvasPanel.svelte';
+  import './lib/canvas/canvas.css';
+  import { createCanvasAssetPort, nativeSaveCanvasFile } from './lib/canvas/assets';
+  import { canvasAssetsFromText } from './lib/canvas/model';
+  import type { CanvasSession } from './lib/canvas/types';
 
   const { native, android, desktop } = platformCapabilities();
   const mobile = android || import.meta.env.DEV && new URLSearchParams(location.search).has('mobile-preview');
+  const canvasAssets = createCanvasAssetPort(native);
+  let canvasSession = $state.raw<CanvasSession | null>(null);
+  let canvasClosing = $state(false);
+  let canvasPanel = $state.raw<CanvasPanel>();
+  let bundleInput: HTMLInputElement;
+  let bundleBusy = $state(false);
   let syncController = $state.raw<SyncController>();
   let syncRevision = $state(0);
   let syncOpen = $state(false);
@@ -258,6 +269,12 @@
     if (ready && configReady) scheduleConfig();
   });
   $effect(() => { void query; void includeArchived; if (ready && (searchOpen || screen === 'all')) scheduleIndex(); });
+  $effect(() => {
+    document.documentElement.dataset.canvasPreview = config.preferences.canvasPreview ?? 'compact';
+    // 卡片高度改变后重新测量块布局，不替换编辑器状态或写入正文历史。
+    void tick().then(() => editor?.view.requestMeasure());
+    if (ready && configReady) scheduleConfig();
+  });
   // editor 是普通变量不参与追踪；编辑器创建时经 EditorOptions 取初值，此处只响应偏好变化。
   $effect(() => {
     const enabled = config.preferences.headingAdd ?? false;
@@ -356,6 +373,7 @@
     // 撤销提示位于主界面外；进入保存屏障后不能再从提示条产生新的正文事务。
     toast = ''; toastUndo = false; clearTimeout(toastTimer);
     await tick();
+    if (canvasPanel && !await canvasPanel.flush()) { updateInstalling = false; return false; }
     captureUI(); clearTimeout(configTimer);
     await captureWindowPlacement();
     const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
@@ -469,6 +487,18 @@
     scheduleConfig();
     if (searchOpen || screen === 'all') scheduleIndex();
   }
+  /** 画布占用唯一正文会话；关闭时先完成附件与正文保存，再恢复编辑焦点。 */
+  function openCanvas(session: CanvasSession): void {
+    if (canvasSession) return;
+    menuOpen = false; searchOpen = false; projectMenu = null; crumbMenu = null;
+    canvasSession = session;
+  }
+  function closeCanvas(): void {
+    const previous = canvasSession;
+    canvasSession = null;
+    void tick().then(() => { previous?.close(); void active?.saver.checkExternal(); });
+  }
+  $effect(() => { canvasPanel?.setLocked(updateInstalling || canvasClosing); });
   /** 摘要展开只保存阅读配置；独立安排写入，不能依赖上一次正文保存尚未结束的定时器。 */
   function editorUIChanged(): void {
     if (switching || !active || !editor) return;
@@ -610,6 +640,12 @@
       onStatus: message => notify(message, message.includes($t("可撤销"))),
       resolveResource: url => native ? resolveDocumentResource(resourceDocumentPath, url, convertFileSrc) : url,
       openLink: openDocumentLink,
+      openCanvas,
+      resolveCanvasImage: async asset => {
+        const path = resourceDocumentPath;
+        const bytes = await canvasAssets.read(path, asset);
+        return new Blob([bytes as BlobPart], { type: asset.mimeType });
+      },
       headingAddEnabled: config.preferences.headingAdd ?? false, nativeSelection: mobile,
     });
     else editor.restoreState(editor.createState(disk.text, ui.mode));
@@ -620,7 +656,7 @@
     };
     current.saver = new SaveCoordinator({
       files, snapshot: disk, getText: () => current.state.doc.toString(), preserveRecovery: !!recoveryWarning || !!draft && draft.text !== disk.text,
-      canReload: () => active?.project.id !== project.id || !editor?.view.composing,
+      canReload: () => active?.project.id !== project.id || !editor?.view.composing && !canvasSession,
       reload: (text, reason) => {
         if (active?.project.id === project.id && editor) {
           const target = editor;
@@ -935,7 +971,57 @@
       scheduleConfig();
     } catch (error) { fatal = errorMessage(error); }
   }
-  async function save(): Promise<void> { if (active) { captureUI(); if (await active.saver.flush()) notify($t("已保存")); } }
+  async function save(): Promise<void> { if (canvasPanel && !await canvasPanel.flush()) return; if (active) { captureUI(); if (await active.saver.flush()) notify($t("已保存")); } }
+  /** 系统对话框确定输出路径后才写入；浏览器预览使用下载，不把附件挤入 localStorage。 */
+  async function downloadCanvasFile(blob: Blob, name: string): Promise<void> {
+    const extension = blob.type === 'image/png' ? 'png' : 'zip';
+    const basename = name.replace(/\.(?:png|zip)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 110) || 'canvas';
+    const safeName = `${basename}.${extension}`;
+    if (native) {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const path = await save({ defaultPath: safeName, filters: [{ name: extension.toUpperCase(), extensions: [extension] }] });
+      if (!path) return;
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      if (android) { const { writeFile } = await import('@tauri-apps/plugin-fs'); await writeFile(path, bytes); }
+      else await nativeSaveCanvasFile(path, bytes);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href = url; link.download = safeName; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function exportCanvasBundle(): Promise<void> {
+    if (!active || bundleBusy) return;
+    bundleBusy = true; menuOpen = false;
+    try {
+      captureUI();
+      const current = active;
+      const text = current.state.doc.toString();
+      const path = current.project.path, name = current.project.name;
+      const { exportBundle } = await import('./lib/canvas/bundle');
+      const bytes = await exportBundle({ text, documentPath: path, assets: canvasAssetsFromText(text), port: canvasAssets });
+      await downloadCanvasFile(new Blob([bytes as BlobPart], { type: 'application/zip' }), `${name}.zip`);
+    } catch (error) { notify(errorMessage(error)); }
+    finally { bundleBusy = false; }
+  }
+  async function importCanvasBundle(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || bundleBusy) return;
+    bundleBusy = true; menuOpen = false;
+    try {
+      const { importBundle, MAX_CANVAS_BUNDLE_BYTES } = await import('./lib/canvas/bundle');
+      if (file.size > MAX_CANVAS_BUNDLE_BYTES) throw new Error($t('完整文档包不能超过 128 MiB。'));
+      const path = native ? android ? await (files as import('./lib/files/android').AndroidFilePort).managedPath('导入') : await files.chooseFile(true) : `browser/import-${crypto.randomUUID()}.md`;
+      if (!path) return;
+      const imported = await importBundle({ bytes: new Uint8Array(await file.arrayBuffer()), documentPath: path, port: canvasAssets });
+      await files.create(path, imported.text);
+      const project = { id: crypto.randomUUID(), name: file.name.replace(/\.zip$/i, ''), path };
+      config.projects = [...config.projects, project];
+      await persistConfig(); await openProject(project);
+    } catch (error) { notify(errorMessage(error)); }
+    finally { input.value = ''; bundleBusy = false; }
+  }
   async function exportMarkdown(text = active?.state.doc.toString() ?? '', name = `${active?.project.name ?? $t("清单")}.md`): Promise<void> {
     if (mobile && native) {
       try { if (await (files as import('./lib/files/android').AndroidFilePort).exportText(text, name)) notify($t('副本已保存')); } catch (error) { notify(errorMessage(error)); }
@@ -1024,7 +1110,7 @@
     if (!mobile) return;
     return registerDrawerGestures({
       isOpen: () => sidebar,
-      blocked: () => !booted || !!dialog || syncOpen || menuOpen || searchOpen || !!crumbMenu || updateInstalling || projectActionBusy,
+      blocked: () => !booted || !!dialog || !!canvasSession || syncOpen || menuOpen || searchOpen || !!crumbMenu || updateInstalling || projectActionBusy,
       setOpen: open => open ? expandSidebar() : closeSidebar(),
     });
   });
@@ -1119,6 +1205,7 @@
   }
 
   function keydown(event: KeyboardEvent): void {
+    if (canvasSession) return;
     if (updateInstalling || projectActionBusy) { event.preventDefault(); return; }
     if (event.isComposing) return;
     if (event.key === 'Escape') { closeProjectMenu(); dialog = null; searchOpen = false; closeProjectSearch(); menuOpen = false; crumbMenu = null; return; }
@@ -1152,7 +1239,8 @@
   async function initializeSync(): Promise<void> {
     const documents = new SessionSyncDocuments({
       files, config: () => config, session: id => sessions.get(id), capture: captureUI,
-      composing: id => active?.project.id === id && !!editor?.view.composing,
+      assets: canvasAssets,
+      composing: id => active?.project.id === id && (!!editor?.view.composing || !!canvasSession),
       persist: persistConfig, changed: () => { version += 1; indexCache.clear(); scheduleIndex(); },
       inspiration: ensureSyncInspiration,
       receivePath: async name => mobile ? (files as import('./lib/files/android').AndroidFilePort).managedPath(name) : files.chooseFile(true),
@@ -1206,6 +1294,7 @@
         if (android) {
           const { onBackButtonPress, exit } = await import('@tauri-apps/api/app');
           const back = await onBackButtonPress(() => {
+            if (canvasSession) { void canvasPanel?.close(); return; }
             if (syncOpen) { syncOpen = false; return; }
             if (dialog) { dialog = null; return; }
             if (searchOpen) { searchOpen = false; return; }
@@ -1223,15 +1312,20 @@
           const { getCurrentWindow } = await import('@tauri-apps/api/window');
           unlistenClose = await getCurrentWindow().onCloseRequested(async event => {
             event.preventDefault();
-            if (updateInstalling) return;
-            captureUI();
-            await captureWindowPlacement();
-            const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
-            const configured = await persistConfig();
-            // 关闭保存可能早于安装请求开始；安装已接管退出时，旧关闭请求不能销毁窗口。
-            if (updateInstalling) return;
-            if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
-            else notify($t("仍有正文或配置未保存，请处理保存失败后关闭。"));
+            if (updateInstalling || canvasClosing) return;
+            canvasClosing = true;
+            try {
+              await tick();
+              if (canvasPanel && !await canvasPanel.flush()) return;
+              captureUI();
+              await captureWindowPlacement();
+              const saved = await Promise.all([...sessions.values()].map(session => session.saver.flush()));
+              const configured = await persistConfig();
+              // 安装已接管退出时，旧关闭请求不能销毁窗口。
+              if (updateInstalling) return;
+              if (saved.every(Boolean) && configured) await getCurrentWindow().destroy();
+              else notify($t("仍有正文或配置未保存，请处理保存失败后关闭。"));
+            } finally { canvasClosing = false; }
           });
         }
         if (native) {
@@ -1252,7 +1346,7 @@
       } catch (error) { fatal = errorMessage(error); ready = true; booted = true; }
     };
     void initialize();
-    const beforeUnload = () => { captureUI(); void persistConfig(); for (const session of sessions.values()) void session.saver.flush(); };
+    const beforeUnload = () => { void (async () => { if (canvasPanel && !await canvasPanel.flush()) return; captureUI(); void persistConfig(); for (const session of sessions.values()) void session.saver.flush(); })(); };
     const focus = () => { for (const session of sessions.values()) void session.saver.checkExternal(); };
     const visibility = () => { if (document.hidden) beforeUnload(); };
     document.addEventListener('visibilitychange', visibility);
@@ -1273,7 +1367,8 @@
 
 <svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onmousedowncapture={suppressDismissFocus} onclick={dismissPopovers} />
 
-<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null || syncOpen} inert={updateInstalling || cardTransitioning || projectActionBusy || syncOpen}>
+<input class="canvas-bundle-input" type="file" accept=".zip,application/zip" bind:this={bundleInput} onchange={importCanvasBundle} tabindex="-1" aria-hidden="true"/>
+<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null || syncOpen} inert={updateInstalling || canvasClosing || cardTransitioning || projectActionBusy || syncOpen || !!canvasSession}>
 
   {#if mobile && sidebar}<button class="drawer-scrim" aria-label="关闭项目导航" onclick={() => sidebar = false}></button>{/if}
   {#if sidebar && !cardMode}
@@ -1336,14 +1431,16 @@
         {#if screen === 'project' && active}
         <button role="menuitem" onclick={save}>{$t("保存")} <kbd>Ctrl S</kbd></button>
         <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>{$t("新增任务")} <kbd>Ctrl N</kbd></button>
+        <button role="menuitem" disabled={mode !== 'todo'} onclick={() => { editor?.insertCanvas(); menuOpen = false; }}>{$t('插入画布')}</button>
         <button role="menuitem" onclick={() => currentItemAction('group')}>{$t("完成整组任务")}</button>
         <button role="menuitem" onclick={() => currentItemAction('fold')}>{$t("折叠 / 展开当前项")}</button>
         <button role="menuitem" onclick={() => currentItemAction('up')}>{$t("同级上移")}</button>
         <button role="menuitem" onclick={() => currentItemAction('down')}>{$t("同级下移")}</button>
         <hr/>{#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>{/if}
         <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
+        <button role="menuitem" disabled={bundleBusy} onclick={exportCanvasBundle}>{$t('导出完整文档')}</button>
         {#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('remove')}>{$t(mobile ? '删除项目' : '移除项目关联')}</button>{/if}
-        <hr/>{/if}<button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button>{#if native}<button role="menuitem" onclick={() => { syncOpen = true; menuOpen = false; }}>设备同步</button>{/if}{#if !mobile}<button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>{/if}
+        <hr/>{/if}<button role="menuitem" disabled={bundleBusy} onclick={() => { menuOpen = false; bundleInput.click(); }}>{$t('导入完整文档')}</button><button role="menuitem" onclick={() => openDialog('project')}>{$t("新增项目")}</button><button role="menuitem" onclick={() => openDialog('archived-projects')}>{$t("查看归档项目")}</button><button role="menuitem" onclick={() => openDialog('settings')}>{$t("阅读与外观")}</button><button role="menuitem" onclick={() => openDialog('updates')}>{$t("检查更新")}</button>{#if native}<button role="menuitem" onclick={() => { syncOpen = true; menuOpen = false; }}>设备同步</button>{/if}{#if !mobile}<button role="menuitem" onclick={() => openDialog('help')}>{$t("快捷键")}</button>{/if}
       </div>{/if}
     </header>
     {/if}
@@ -1424,6 +1521,10 @@
     </div>
   </main>
 </div>
+
+{#if canvasSession && active}
+  <CanvasPanel bind:this={canvasPanel} session={canvasSession} documentPath={active.project.path} assets={canvasAssets} theme={resolvedThemeMode} {desktop} documentSaved={saveStatus?.kind === 'saved'} onClose={closeCanvas} onSave={async () => { captureUI(); return await active?.saver.flush() ?? false; }} onDownload={downloadCanvasFile} onError={notify}/>
+{/if}
 
 {#if syncOpen && syncController}<SyncPanel controller={syncController} revision={syncRevision} projects={config.projects} focus={modalFocus} ensureInspiration={async () => { await ensureSyncInspiration(); }} onClose={() => syncOpen = false}/>{/if}
 {#if syncOpen && !syncController}<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="设备同步" tabindex="-1"><p>{syncError || '同步尚未就绪'}</p><button onclick={() => syncOpen = false}>关闭</button></div></div>{/if}

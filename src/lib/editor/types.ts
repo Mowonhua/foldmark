@@ -4,6 +4,7 @@
  */
 import type { ProjectView, ViewMode } from '../contracts';
 import type { ClipboardPort } from '../clipboard';
+import type { CanvasAsset, CanvasSession } from '../canvas/types';
 
 /**
  * 结构职责：注入文档和应用反馈端口。
@@ -27,6 +28,10 @@ export interface EditorOptions {
   openLink?: (url: string) => void | Promise<void>;
   /** 标题下新增任务入口的初始启用状态；运行时切换走 setHeadingAddEnabled。 */
   headingAddEnabled?: boolean;
+  /** 应用按需挂载画布引擎；会话负责原文范围校验，不向引擎暴露整个正文。 */
+  openCanvas?: (session: CanvasSession) => void;
+  /** 按当前文档目录读取缩略图所需图片；控件负责创建和释放本机 Blob URL。 */
+  resolveCanvasImage?: (asset: CanvasAsset) => Promise<Blob>;
 }
 
 /**
@@ -44,6 +49,8 @@ export interface EditorActions {
   focusAt: (from: number) => void;
   /** 在可见源文偏移处插入空任务并移入光标；标题下的新增按钮传入标题块之后的边界。 */
   insertTaskAt: (position: number) => void;
+  /** 使用当前源文范围打开画布；不得仅按可复制的画布 id 定位。 */
+  openCanvas: (from: number) => void;
 }
 
 export type { ProjectView, ViewMode };

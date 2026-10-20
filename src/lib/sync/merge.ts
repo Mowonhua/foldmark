@@ -2,14 +2,29 @@
  * 文件职责：校验同步数据、编码增量版本，并在共同祖先上按并集合并 Markdown 正文。
  * 定义范围：纯内容合并、内容寻址、线上补丁编解码和版本祖先关系；不执行文件或网络访问。
  */
-import { diffLines } from 'diff';
+import { diffArrays, diffLines } from 'diff';
+import { scanCanvasBlocks } from '../canvas/model';
+import { ASSET_CHUNK_BYTES } from './attachments';
 import type { DocumentContent, RevisionPatch, SyncDocument, SyncEnvelope, SyncRevision, SyncSelection, WireDocument, WireRevision } from './contracts';
 
 export const sameContent = (a: DocumentContent, b: DocumentContent): boolean => a.text === b.text && a.name === b.name && a.archived === b.archived;
 const field = <T>(base: T, local: T, remote: T): T | undefined => local === remote || remote === base ? local : local === base ? remote : undefined;
 interface Edit { from: number; to: number; insert: string }
+/** 画布是完整快照，差异算法不得把其内部多行 JSON 当作可独立合并的段落。 */
+function mergeTokens(text: string): string[] {
+  const tokens: string[] = []; let cursor = 0;
+  const lines = (part: string) => tokens.push(...(part.match(/[^\n]*\n|[^\n]+$/g) ?? []));
+  for (const block of scanCanvasBlocks(text)) {
+    lines(text.slice(cursor, block.from));
+    const end = text[block.to] === '\n' ? block.to + 1 : block.to;
+    tokens.push(text.slice(block.from, end)); cursor = end;
+  }
+  lines(text.slice(cursor)); return tokens;
+}
 function edits(base: string, next: string): Edit[] {
-  const parts = diffLines(base, next, { timeout: 200, maxEditLength: 10000 });
+  const options = { timeout: 200, maxEditLength: 10000 };
+  const parts = !base.includes('canvas') && !next.includes('canvas') ? diffLines(base, next, options)
+    : diffArrays(mergeTokens(base), mergeTokens(next), options)?.map(part => ({ ...part, value: part.value.join('') }));
   if (!parts) throw new Error('SYNC_COMPLEX: 文档差异过大，请手动合并');
   const result: Edit[] = []; let offset = 0;
   for (let i = 0; i < parts.length; i++) {
@@ -205,6 +220,22 @@ export async function validateEnvelope(value: unknown): Promise<SyncEnvelope> {
   if (!record(value) || value.protocol !== 3) throw new Error('SYNC_PROTOCOL: 同步协议不兼容，请更新两端应用');
   if (value.needsFull !== undefined && typeof value.needsFull !== 'boolean') throw new Error('SYNC_INVALID: 同步数据格式无效');
   if (!Array.isArray(value.documents) || value.documents.length > 200 || new TextEncoder().encode(JSON.stringify(value)).byteLength > 8 * 1024 * 1024) throw new Error('SYNC_LIMIT: 同步数据超过限制');
+  if (value.assetProtocol !== undefined && value.assetProtocol !== 1) throw new Error('SYNC_PROTOCOL: 图片同步协议不兼容');
+  if ((value.assetRequests !== undefined || value.assetChunks !== undefined) && value.assetProtocol !== 1) throw new Error('SYNC_PROTOCOL: 图片同步扩展缺失');
+  for (const [field, limit] of [['assetRequests', 1], ['assetChunks', 1]] as const) {
+    const entries = value[field];
+    if (entries === undefined) continue;
+    if (!Array.isArray(entries) || entries.length > limit) throw new Error('SYNC_LIMIT: 图片分块数量超限');
+    for (const entry of entries) {
+      if (!record(entry) || typeof entry.documentId !== 'string' || !/^[a-f0-9-]{36}$/.test(entry.documentId)
+        || typeof entry.assetId !== 'string' || !/^[a-f0-9]{64}$/.test(entry.assetId)
+        || !Number.isSafeInteger(entry.offset) || (entry.offset as number) < 0 || (entry.offset as number) >= 20 * 1024 * 1024
+        || (entry.offset as number) % ASSET_CHUNK_BYTES !== 0) throw new Error('SYNC_INVALID: 图片分块请求无效');
+      if (field === 'assetChunks' && (typeof entry.data !== 'string' || entry.data.length === 0
+        || entry.data.length > Math.ceil(ASSET_CHUNK_BYTES / 3) * 4 || entry.data.length % 4 !== 0
+        || !/^[A-Za-z0-9+/]+={0,2}$/.test(entry.data))) throw new Error('SYNC_INVALID: 图片分块编码无效');
+    }
+  }
   const selection = value.selection === undefined ? undefined : validateSelection(value.selection);
   const ids = new Set<string>();
   for (const raw of value.documents) {

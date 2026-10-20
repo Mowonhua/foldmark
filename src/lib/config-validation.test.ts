@@ -2,6 +2,15 @@
 import { describe, expect, it } from 'vitest';
 import { validateAppConfig } from './config-validation';
 describe('配置边界', () => {
+  it('画布预览档位兼容旧配置并拒绝非法值', () => {
+    for (const canvasPreview of [undefined, 'compact', 'medium', 'spacious']) {
+      const config = { projects: [], preferences: { canvasPreview } };
+      expect(validateAppConfig(config)).toBe(config);
+    }
+    for (const canvasPreview of ['wide', null, 6, true]) {
+      expect(() => validateAppConfig({ projects: [], preferences: { canvasPreview } })).toThrow('STATE_CONFIG_INVALID');
+    }
+  });
   it('失焦透明偏好兼容旧配置，拒绝非布尔值并保留原数据', () => {
     for (const keepTransparentOnBlur of [undefined, false, true]) {
       const config = { projects: [], preferences: { keepTransparentOnBlur } };

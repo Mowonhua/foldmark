@@ -2,7 +2,7 @@
 
 ## F-SYN-001 版本交换与保守合并
 
-同步所选正文和项目资料，按对端已知版本增量交换并以行级补丁压缩正文，使用共同祖先按并集合并双方修改；只有两端改动同一段内容时才保留冲突，交由用户逐处选择。
+同步所选正文、项目资料和画布图片，按对端已知版本增量交换并以行级补丁压缩正文，使用共同祖先按并集合并双方修改。画布快照作为完整块参与冲突判断；画布图片按缺失请求分块传输，完整校验并保存附件后才允许写入和确认正文。
 
 创建提交：-
 
@@ -14,6 +14,7 @@
 | 关键实现 | src/lib/sync/merge.ts::encodeDocument |
 | 关键实现 | src/lib/sync/merge.ts::mergeContent |
 | 关键实现 | src/lib/sync/merge.ts::diffHunks |
+| 关键实现 | src/lib/sync/attachments.ts::AttachmentExchange |
 | 关键实现 | src/lib/session/sync-documents.ts::SessionSyncDocuments |
 | 关键实现 | src/lib/editor/index.ts::EditorController.setSynchronizedText |
 | 关键实现 | src/lib/editor/sync-stream.ts::SyncStream |
@@ -39,6 +40,11 @@
 | S-15 | 正常 | 手机与桌面接收对端版本按差异分段写入正文并标注到达行，整段节奏固定约 160 毫秒、不随显示器刷新率变化，替换过程与结果都保持视口顶部原文行与像素偏移；阅读位置及其上方的差异随首帧一次写入，下方的插入逐段出现（多行按行组、单行按字符块，行首与带换行的插入整段写入）；末尾追加、上方插入、上方删除、多处修改、长段插入、段内插入及连续接收均不跳动，源码视图同样保持阅读位置，中间帧不丢失锚点行，位移不超过 1 像素 | scripts/test-sync-scroll.mjs::<module>, src/lib/editor/sync-stream.test.ts::同步分段写入 |
 | S-16 | 并发 | 两端各自新增内容与任务归档、排序等结构变化按并集合并，双方改动都保留且结果与调用顺序无关 | src/lib/sync/merge.test.ts::同步三方合并 > 两端各自新增与任务归档移动都保留, src/lib/sync/merge.test.ts::同步三方合并 > 排序移动与并行说明修改合并\,搬运覆盖另一端改动时保留冲突, src/lib/sync/merge.test.ts::同步三方合并 > 同一位置的两端新增都保留且与调用顺序无关 |
 | S-17 | 并发 | 冲突按差异块逐处给出本机、对端及可并存的两端内容，两端改动结果相同的差异块直接采纳，每处可选择来源并重建合并结果 | src/lib/sync/merge.test.ts::同步三方合并 > 差异块按类型给出默认选择并支持逐块改用另一端, src/lib/sync/merge.test.ts::同步三方合并 > 两端改动结果相同时差异块直接采纳, src/lib/sync/merge.test.ts::同步三方合并 > 两端改动同一段已有内容时差异块必须选择 |
+| S-18 | 并发 | 同一画布的多行快照被两端修改时按整块选择，禁止把不同字段拼成新对象；不同画布与普通段落的独立修改仍能自动合并 | src/lib/sync/merge.test.ts::同步三方合并 > 同一画布不同字段并发修改仍按完整快照冲突\，不拼接 JSON, src/lib/sync/merge.test.ts::同步三方合并 > 不同画布和普通段落独立修改仍能自动合并 |
+| S-19 | 正常 | 图片引用保留在正文中，原始字节经缺失请求按 256 KiB 分块传输，单图不超过 20 MiB、接收缓存不超过 64 MiB；已有图片不重传，完整校验并保存附件后才应用和确认正文 | src/lib/sync/canvas-sync.test.ts::画布附件同步 > 缺失图片按块拉取\，完整落盘之前不应用或确认正文\，已有图片不重传, src/lib/sync/attachments.test.ts::附件缓存生命周期 > 撤回待接收文档后释放完整图片\，重新接收须重新请求, src/lib/sync/attachments.test.ts::附件缓存生命周期 > 文档接收并持久化后释放完整图片\，外部删除后不能用旧字节缓存绕过缺失请求 |
+| S-20 | 异常 | 附件写入失败、块被篡改或传输中断时保留旧正文和待写日志；重新取得完整附件并成功保存后恢复确认；未被已选文档引用的图片请求不能读取本机文件 | src/lib/sync/canvas-sync.test.ts::画布附件同步 > 附件写入失败保留旧正文和写入日志\，重试成功后才确认, src/lib/sync/canvas-sync.test.ts::画布附件同步 > 图片块篡改后拒绝正文且从零重试\，未引用图片请求不能读取本机文件, src/lib/sync/canvas-sync.test.ts::画布附件同步 > 分块中断并重启后保留旧正文\，从零重取且完整保存后恢复确认, src/lib/sync/canvas-sync.test.ts::画布附件同步 > 此前验过的本机图片被移除后\，新正文仍须重新取得附件才能确认 |
+| S-21 | 正常 | 含图片的新文档必须先完成附件接收；用户选择本机路径后先保存附件，再创建正文和项目关联，取消接收不创建半成品文件 | src/lib/sync/canvas-sync.test.ts::画布附件同步 > 首次接收先完成附件\，再创建正文；未收齐时拒绝创建半成品文档, src/lib/session/sync-documents.test.ts::同步文档端口 > 接收含图片的新项目先保存附件\，附件失败不能创建正文和项目关联, src/lib/session/sync-documents.test.ts::同步文档端口 > 缺少附件的远端正文不能绕过端口校验直接落盘 |
+| S-22 | 约束 | 无画布图片的旧文档保留协议兼容性；对端未声明附件能力时不发送带图片正文，保留本机内容且不能确认完成 | src/lib/sync/canvas-sync.test.ts::画布附件同步 > 旧端未声明附件能力时保留本机版本\，不发送带图片正文或伪造确认 |
 
 ## F-SYN-002 设备配对与加密连接
 

@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppConfig, FilePort, FileSnapshot } from '../contracts';
 import { defaultPreferences } from '../browser-files';
 import { SessionSyncDocuments } from './sync-documents';
+import type { CanvasAssetPort } from '../canvas/types';
+import type { SyncAttachment } from '../sync/contracts';
+async function canvasImage(): Promise<{ text: string; attachment: SyncAttachment }> {
+  const bytes = new Uint8Array(24); bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  const id = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
+  const asset = { id, path: `.assets/${id}.png`, mimeType: 'image/png' as const, size: bytes.length, created: 1 };
+  return { text: '```canvas\n' + JSON.stringify({ version: 1, id: 'board', title: '', elements: [], files: { [id]: asset } }) + '\n```', attachment: { asset, bytes } };
+}
 function fixture() {
   const config: AppConfig = { projects: [{ id: 'local', name: '项目', path: 'a.md' }], activeProjectId: null, preferences: { ...defaultPreferences }, projectViews: {} };
   let disk: FileSnapshot = { path: 'a.md', text: '正文', revision: '1' };
@@ -14,6 +22,26 @@ function fixture() {
   return { config, files, options, port: new SessionSyncDocuments(options), external: () => { disk = { ...disk, text: '外部编辑', revision: '2' }; }, draft: () => { draft = true; }, disk: () => disk };
 }
 describe('同步文档端口', () => {
+  it('接收含图片的新项目先保存附件，附件失败不能创建正文和项目关联', async () => {
+    const f = fixture(), image = await canvasImage(); const order: string[] = [];
+    const create = vi.fn(async () => { order.push('document'); }); f.files.create = create as never;
+    f.options.receivePath = async () => 'received.md' as never;
+    const assets: CanvasAssetPort = { put: vi.fn(async (path) => {
+      expect(path).toBe('received.md'); order.push('asset'); throw new Error('disk full');
+    }), read: vi.fn(async () => image.attachment.bytes) };
+    const port = new SessionSyncDocuments({ ...f.options, assets });
+    await expect(port.accept(crypto.randomUUID(), 'project', { text: image.text, name: '白板', archived: false }, [image.attachment])).rejects.toThrow('disk full');
+    expect(create).not.toHaveBeenCalled(); expect(f.config.projects).toHaveLength(1);
+    vi.mocked(assets.put).mockImplementation(async (path) => { expect(path).toBe('received.md'); order.push('asset'); return image.attachment.asset; });
+    order.length = 0;
+    await port.accept(crypto.randomUUID(), 'project', { text: image.text, name: '白板', archived: false }, [image.attachment]);
+    expect(order).toEqual(['asset', 'document']); expect(f.config.projects).toHaveLength(2);
+  });
+  it('缺少附件的远端正文不能绕过端口校验直接落盘', async () => {
+    const f = fixture(), image = await canvasImage(), expected = await f.port.read('local');
+    await expect(f.port.apply('local', expected, { ...expected, text: image.text })).rejects.toThrow('SYNC_SAVE');
+    expect(f.disk().text).toBe('正文'); expect(f.files.write).not.toHaveBeenCalled();
+  });
   it('未打开的项目读取磁盘并同步项目资料', async () => {
     const f = fixture(); const expected = await f.port.read('local');
     await f.port.apply('local', expected, { text: '手机正文', name: '新名称', archived: true });

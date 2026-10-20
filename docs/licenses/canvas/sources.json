@@ -1,0 +1,92 @@
+{
+  "package": "@excalidraw/excalidraw",
+  "version": "0.18.1",
+  "licenses": [
+    {
+      "file": "Excalidraw-MIT.txt",
+      "source": "https://raw.githubusercontent.com/excalidraw/excalidraw/v0.18.1/LICENSE",
+      "extraction": "verbatim",
+      "sha256": "1352d204fdb90d5e482c13139d848bc2c9300a9a7de358a0a558a23e72d0d8be",
+      "bytes": 1067
+    },
+    {
+      "file": "Assistant-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/assistant/OFL.txt",
+      "extraction": "verbatim",
+      "sha256": "7eaf6282cfab122b99ffd62a122fc27b6c3c8f2c65b56ff9b3a25badbc64887d",
+      "bytes": 4613
+    },
+    {
+      "file": "Cascadia-OFL.txt",
+      "source": "https://raw.githubusercontent.com/microsoft/cascadia-code/main/LICENSE",
+      "extraction": "verbatim",
+      "sha256": "51882cd3cdba4e16f220f44ddb08a635c38c44ea6e0975db2574f4be6f958238",
+      "bytes": 4489
+    },
+    {
+      "file": "ComicShanns-MIT.txt",
+      "source": "https://raw.githubusercontent.com/excalidraw/excalidraw/v0.18.1/packages/excalidraw/fonts/ComicShanns/index.ts",
+      "extraction": "comic",
+      "sha256": "144c4771343a7104f981d9a4d47bbdcd27459d5ef37641e805457e753923dfb0",
+      "bytes": 1212
+    },
+    {
+      "file": "Excalifont-OFL.txt",
+      "source": "https://raw.githubusercontent.com/excalidraw/excalidraw/v0.18.1/packages/excalidraw/fonts/Excalifont/index.ts",
+      "extraction": "excalifont",
+      "sha256": "29e737f5542aff88dbd3dfe80cae8d108fc82afd1c0953046435b6fdeb19f973",
+      "bytes": 4358
+    },
+    {
+      "file": "Lilita-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lilitaone/OFL.txt",
+      "extraction": "verbatim",
+      "sha256": "255d5debbb80eb2ea762644311f266a279e8778f00156655a516e2b7781a63e1",
+      "bytes": 4392
+    },
+    {
+      "file": "Lilita-FONTLOG.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lilitaone/FONTLOG.txt",
+      "extraction": "verbatim",
+      "sha256": "5e324e1bb38125eaeeea4678ec10d8ab4da0b7fa037608ec78d9096221dbae50",
+      "bytes": 939
+    },
+    {
+      "file": "Nunito-OFL.txt",
+      "source": "https://raw.githubusercontent.com/googlefonts/nunito/main/OFL.txt",
+      "extraction": "verbatim",
+      "sha256": "580df76c95a1ec5ab878ceb25bb3d85c6a076804e9c970c8c6972aea775fdf65",
+      "bytes": 4385
+    },
+    {
+      "file": "Virgil-OFL.md",
+      "source": "https://raw.githubusercontent.com/excalidraw/virgil/main/LICENSE.md",
+      "extraction": "verbatim",
+      "sha256": "a3ac9cdc65ef304ffb095d8cc877ee93bf1bffa88269693cd42ddf001650ffd0",
+      "bytes": 4304
+    },
+    {
+      "file": "Xiaolai-OFL.txt",
+      "source": "https://raw.githubusercontent.com/lxgw/kose-font/master/OFL.txt",
+      "extraction": "verbatim",
+      "sha256": "0df7e09be4c2c850a48bd8beb9cd64b343aad49cd5d3f6cfb2ad2e3d28a56ca4",
+      "bytes": 4432
+    },
+    {
+      "file": "Liberation-OFL.txt",
+      "source": "https://raw.githubusercontent.com/liberationfonts/liberation-fonts/2.1.5/LICENSE",
+      "extraction": "verbatim",
+      "sha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b",
+      "bytes": 4414
+    }
+  ],
+  "overrides": {
+    "LiberationSans-Regular.woff2": {
+      "version": "2.1.5",
+      "source": "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz",
+      "file": "third_party/canvas-fonts/LiberationSans-Regular.woff2",
+      "family": "Taskrail Sans",
+      "woff2Sha256": "e2ad4bd8436b635c63a2ac41653edb5e23cb964039f2e73baf0a3bc0d057c909"
+    }
+  }
+}

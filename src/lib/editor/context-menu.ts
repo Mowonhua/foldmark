@@ -50,6 +50,8 @@ export interface ContextMenuOptions {
   undo: () => boolean;
   redo: () => boolean;
   onStatus?: (message: string) => void;
+  /** 画布复用控制器的同一插入命令；缺省时菜单不显示画布入口。 */
+  canvas?: { canInsert(): boolean; insert(): boolean };
 }
 
 // ==================== 函数和方法定义 ====================
@@ -178,6 +180,18 @@ export class EditorContextMenu {
       for (const entry of entries.slice(7)) panel.append(this.markdownButton(entry));
     } else {
       for (const entry of entries) panel.append(this.markdownButton(entry));
+      if (this.options.canvas) {
+        const canvas = document.createElement('button');
+        canvas.type = 'button'; canvas.tabIndex = -1; canvas.dataset.command = 'insertCanvas';
+        canvas.setAttribute('role', 'menuitem'); canvas.setAttribute('aria-label', translate('插入画布'));
+        canvas.setAttribute('aria-disabled', String(!this.options.canvas.canInsert())); canvas.textContent = translate('画布');
+        canvas.onpointermove = () => canvas.focus({ preventScroll: true });
+        canvas.onclick = () => {
+          if (!this.options.canvas?.canInsert()) return;
+          this.close(); this.view.focus(); this.options.canvas.insert();
+        };
+        panel.append(canvas);
+      }
     }
     panel.onkeydown = this.menuKey; panel.oncontextmenu = event => event.preventDefault();
     this.submenu = { trigger, panel }; trigger.setAttribute('aria-expanded', 'true');

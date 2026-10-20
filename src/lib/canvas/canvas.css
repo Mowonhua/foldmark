@@ -1,0 +1,44 @@
+/* 文件职责：定义画布卡片、独占页面布局及引擎的主题变量适配。 */
+.canvas-bundle-input{display:none}
+.fm-canvas-card{position:relative;height:3.6em;box-sizing:border-box;overflow:hidden;padding:5px 44px 5px 12px;border:1px solid var(--line);border-radius:var(--field-radius,6px);background:var(--code);color:var(--ink);font-size:var(--editor-font-size);line-height:1.8;contain:layout paint}
+[data-canvas-preview="medium"] .fm-canvas-card{height:10.8em;padding:12px 42px 28px 12px}
+[data-canvas-preview="spacious"] .fm-canvas-card{height:21.6em;padding:18px 42px 30px 18px}
+.fm-canvas-thumbnail{display:block;width:100%;height:100%;overflow:hidden;color:var(--ink)}
+.fm-canvas-empty{color:var(--muted);opacity:.55}
+.fm-canvas-title{position:absolute;left:10px;bottom:4px;max-width:35%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);background:var(--code);font-size:11px;line-height:1.4;font-weight:400;padding:1px 3px;border-radius:var(--control-radius,3px);pointer-events:none}
+[data-canvas-preview="medium"] .fm-canvas-title,[data-canvas-preview="spacious"] .fm-canvas-title{max-width:calc(100% - 58px);bottom:7px}
+.fm-canvas-expand{position:absolute;right:7px;top:7px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--control-radius,5px);color:var(--muted)}
+.fm-canvas-expand svg{width:17px;height:17px}
+.fm-canvas-expand:hover{color:var(--ink);background:var(--hover)}
+.fm-canvas-expand:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.canvas-page{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;min-width:0;background:var(--canvas);color:var(--ink);font-family:var(--document-font);isolation:isolate}
+.canvas-header{height:58px;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--canvas);user-select:none}
+.canvas-heading{display:flex;align-items:center;gap:12px;min-width:0;flex:1;color:var(--muted)}
+.canvas-heading>svg{flex-shrink:0}
+.canvas-heading input{width:min(340px,100%);min-width:0;padding:5px 4px;border:1px solid transparent;border-radius:var(--field-radius,4px);background:transparent;color:var(--ink);font-size:14px;font-weight:500;text-overflow:ellipsis}
+.canvas-heading input:hover:not([readonly]){border-color:var(--line)}
+.canvas-save-state{display:inline-flex;align-items:center;color:var(--muted);flex-shrink:0}
+.canvas-save-state.canvas-pending{opacity:.35}
+.canvas-header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.canvas-desktop .canvas-header{height:54px;min-height:54px;padding-right:0}
+.canvas-header .window-controls{margin-left:8px}
+.canvas-engine-host{flex:1;min-height:0;position:relative;overflow:hidden}
+.canvas-loading{position:absolute;inset:58px 0 0;display:grid;place-items:center;font-size:13px;color:var(--muted);background:var(--canvas)}
+.canvas-error{display:flex;align-items:center;gap:16px;padding:9px 20px;font-size:12px;border-bottom:1px solid var(--line);color:var(--danger);background:var(--surface)}
+.canvas-error span{flex:1;min-width:0;overflow-wrap:anywhere}
+.canvas-error button{flex-shrink:0;text-decoration:underline}
+/* 只映射通用语义变量。画布对象的颜色由文档保存，不随主题重写。 */
+.canvas-page .canvas-engine-host .excalidraw{--color-primary:var(--accent);--color-primary-darker:var(--accent);--color-primary-darkest:var(--accent);--color-primary-light:var(--accent-soft);--color-surface-primary:var(--surface);--color-surface-low:var(--code);--color-surface-mid:var(--hover);--color-surface-high:var(--line);--color-on-surface:var(--ink);--color-on-surface-variant:var(--muted);--color-border-outline:var(--line);--default-bg-color:var(--canvas);--island-bg-color:var(--surface);--button-hover-bg:var(--hover);--button-active-bg:var(--accent-soft);--button-gray-1:var(--code);--button-gray-2:var(--hover);--button-gray-3:var(--line);--text-primary-color:var(--ink);--text-secondary-color:var(--muted);--input-bg-color:var(--surface);--input-border-color:var(--line);--sidebar-bg-color:var(--surface);--popup-bg-color:var(--surface);--dialog-border-color:var(--line);--dialog-bg-color:var(--surface);--border-radius-lg:var(--floating-radius,8px);--border-radius-md:var(--control-radius,5px);--shadow-island:var(--floating-shadow,0 2px 10px #0000000d);--ui-font:var(--document-font);background:var(--canvas)}
+.canvas-page .excalidraw .App-menu_top{top:18px}
+.canvas-page .excalidraw .layer-ui__wrapper__top-right{display:none}
+.canvas-page .excalidraw .help-icon,.canvas-page .excalidraw .HintViewer{display:none}
+/* 额外工具只保留本地白板能力；优先级高于引擎菜单的 display:flex。 */
+.canvas-page .canvas-engine-host .excalidraw .App-toolbar__extra-tools-dropdown [data-testid="toolbar-embeddable"],.canvas-page .canvas-engine-host .excalidraw [data-testid="toolbar-magicframe"],.canvas-page .canvas-engine-host .excalidraw .App-toolbar__extra-tools-dropdown .dropdown-menu-container>div{display:none}
+.canvas-page .canvas-engine-host .excalidraw{--color-surface-primary-container:var(--accent-soft);--color-on-primary-container:var(--accent);--color-brand-hover:var(--hover);--color-brand-active:var(--accent-soft);--color-border-outline-variant:var(--line);--color-surface-lowest:var(--surface);--color-primary-light-darker:var(--accent-soft);--color-primary-hover:var(--accent);--button-special-active-bg-color:var(--accent-soft);--input-hover-bg-color:var(--hover);--input-label-color:var(--muted);--popup-secondary-bg-color:var(--code);--color-selection:var(--accent);--color-slider-track:var(--line);--color-slider-thumb:var(--accent)}
+@media(max-width:600px){
+  .canvas-header{height:52px;min-height:52px;padding:0 10px;gap:8px}
+  .canvas-heading{gap:7px}
+  .canvas-heading input{font-size:13px}
+  .canvas-header-actions{gap:3px}
+  .canvas-page .excalidraw .App-menu_top{top:10px}
+}

@@ -17,6 +17,8 @@ import { CodeLanguageWidget } from './code-language';
 import { paragraphLayout } from './paragraphs';
 import { activateFencedBlock, fencedBlocks, pendingFencedBlock } from './fenced-blocks';
 import { removeEmptyFencedBlock } from './fenced-block-editing';
+import { scanCanvasBlocks } from '../canvas/model';
+import { CanvasWidget } from './canvas';
 
 /** 共享行内排版只依赖源文和资源端口；无 focusAt 时生成可嵌入整行按钮的只读内容。 */
 interface InlineContext {
@@ -675,6 +677,7 @@ function buildPreview(state: EditorState): DecorationSet {
   // 空正文及空续行尚不一定进入 ListItem.to；沿共享段落归属布局，输入首字不会再触发横移。
   const paragraphs = paragraphLayout(state);
   const editableBlocks = new Map(fencedBlocks(state).map(block => [block.nodeFrom, block]));
+  const canvases = new Map(scanCanvasBlocks(model.text, model.tree).map(block => [state.doc.lineAt(block.from).from, block]));
   for (const paragraph of paragraphs.paragraphs) {
     if (paragraph.from > window.to) break;
     if (paragraph.kind === 'empty' && paragraph.to >= window.from && !overlapsHidden(paragraph.from, paragraph.to + 1)) {
@@ -704,7 +707,7 @@ function buildPreview(state: EditorState): DecorationSet {
     // 公式整体替换需包含闭围栏后的换行，否则块控件与段落分隔之间会残留空文本行。
     const separator = includeLineBreak ? paragraphs.separators.find(separator => separator.from === node.to) : undefined;
     const to = includeLineBreak && state.doc.lineAt(node.to).to === node.to ? Math.min((separator?.blankTo ?? node.to) + 1, state.doc.length) : node.to;
-    ranges.push(Decoration.replace({ widget: new IndentedWidget(widget, margin), block: true, inclusiveEnd: false }).range(from, to));
+    ranges.push(Decoration.replace({ widget: new IndentedWidget(widget, margin), block: true, inclusiveEnd: false, canvas: widget instanceof CanvasWidget }).range(from, to));
     replacedBlocks.push({ from, to });
   };
   const spacedLines = new Set<number>();
@@ -834,6 +837,8 @@ function buildPreview(state: EditorState): DecorationSet {
     if (name === 'Blockquote') for (let line = state.doc.lineAt(node.from); line.from <= node.to; ) { lineStyle(line.from, 'fm-quote'); if (line.number >= state.doc.lines) break; line = state.doc.line(line.number + 1); }
     if (name === 'QuoteMark' && !active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.from).to)) hide(node.from, Math.min(node.to + 1, state.doc.length));
     if (name === 'FencedCode' || name === 'CodeBlock') {
+      const canvas = name === 'FencedCode' ? canvases.get(state.doc.lineAt(node.from).from) : undefined;
+      if (canvas?.document) { blockReplacement(node, new CanvasWidget(canvas.document, canvas.from)); return; }
       let firstLine = state.doc.lineAt(node.from).number;
       let lastLine = state.doc.lineAt(node.to).number;
       // 代码正文直接使用原编辑器行；进入编辑也不展开围栏，完整源码模式在入口统一跳过预览。
@@ -896,6 +901,7 @@ export const previewField = StateField.define<DecorationSet>({
     const cursor = view.state.field(field).iter();
     while (cursor.value) {
       if (cursor.value.spec.paragraphSeparator) atoms.push(Decoration.replace({}).range(cursor.from, cursor.to + 1));
+      if (cursor.value.spec.canvas) atoms.push(Decoration.replace({}).range(cursor.from, cursor.to));
       cursor.next();
     }
     if (view.state.facet(modeFacet) !== 'source') {

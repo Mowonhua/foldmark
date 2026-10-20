@@ -11,6 +11,8 @@ export interface Project {
 }
 /** 结构职责：表示文档投影视图；源码仅显示来源视图范围，底层始终保留完整文本。 */
 export type ViewMode = 'todo' | 'archive' | 'source';
+/** 结构职责：控制画布预览占用的阅读空间；缺省紧凑，对应两行、六行和十二行正文高度。 */
+export type CanvasPreviewDensity = 'compact' | 'medium' | 'spacious';
 import type { ThemeDefinition, ThemeMode } from './themes';
 import type { LocalePreference } from './i18n';
 /** 结构职责：保存阅读参数；theme 保留旧版明暗模式语义，themeId 缺省时使用纸面主题。 */
@@ -30,6 +32,8 @@ export interface Preferences {
   sidebarOpen?: boolean;
   /** 缺省为 false；待办视图悬停各级标题时显示“新增任务”入口。 */
   headingAdd?: boolean;
+  /** 仅改变本机预览布局，不修改 Markdown、附件或全页画布。 */
+  canvasPreview?: CanvasPreviewDensity;
 }
 /** 结构职责：托管灵感簿的文件关联与阅读状态；文件由应用创建，可重新定位，不进入项目列表。 */
 export interface InspirationDoc {

@@ -28,6 +28,7 @@ import { bracketCompletion, matchingBrackets, pairedSymbols, pairingCaret, singl
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
+import { CanvasEditor } from './canvas';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
 import './editor.css';
@@ -68,14 +69,17 @@ export class EditorController {
   private pendingSettle?: () => void;
   private streamInstance?: SyncStream;
   private readonly contextMenu?: EditorContextMenu;
+  private readonly canvasEditor: CanvasEditor;
 
   constructor(parent: HTMLElement, options: EditorOptions) {
     this.options = options;
     // createState 读取开关初值，必须先于编辑器状态构建赋值。
     this.headingAddEnabled = options.headingAddEnabled ?? false;
     this.view = new EditorView({ parent, state: this.createState(options.text, options.mode) });
+    this.canvasEditor = new CanvasEditor(this.view, options.openCanvas);
     if (!options.nativeSelection) this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
-      undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus });
+      undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus,
+      canvas: options.openCanvas ? { canInsert: () => this.canvasEditor.canInsert(), insert: () => this.insertCanvas() } : undefined });
     this.unsubscribeLocale = locale.subscribe(() => this.refreshLanguage());
     this.view.dom.addEventListener('keydown', this.historyKey, true);
     this.view.scrollDOM.addEventListener('wheel', this.cancelPositionRestore, { passive: true });
@@ -139,12 +143,13 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
-      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position) }),
+      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
       documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
       EditorView.updateListener.of(update => {
+        this.canvasEditor?.update(update);
         // 焦点变化不会撤销剪贴板意图；真正改变目标或视图契约的事务必须关闭菜单。
         if (update.docChanged || !update.state.selection.eq(update.startState.selection)
           || update.transactions.some(transaction => transaction.reconfigured)) this.contextMenu?.invalidate();
@@ -270,6 +275,7 @@ export class EditorController {
 
   /** 外部全文替换只恢复可可靠匹配的折叠键，避免位置复用误折叠另一条目。 */
   setText(text: string, resetHistory = false): void {
+    this.canvasEditor.invalidate();
     this.stream.abandon();
     this.pendingSettle = undefined;
     this.contextMenu?.invalidate();
@@ -280,6 +286,7 @@ export class EditorController {
     this.setUIState(ui);
   }
   restoreState(state: EditorState, ui?: ProjectView): void {
+    this.canvasEditor.invalidate();
     // 单一视图跨项目复用，即使恢复同一状态对象，也必须取消此前项目的异步剪贴板动作。
     // 未写完整的分段接收随旧状态一起丢弃，应用侧正文已在接收时按最终文本记录。
     this.stream.abandon();
@@ -360,6 +367,8 @@ export class EditorController {
     }
     this.writeTaskInsert(position, indent, emptyLine);
   }
+  /** 在当前段落的同一容器插入空画布；完整快照写入与打开由局部会话协调。 */
+  insertCanvas(): boolean { return this.canvasEditor.insert(); }
   /** 在标题块后的可见行边界插入空任务；锚点由预览控件按同一布局规则计算。 */
   insertTaskAt(position: number): void {
     if (this.state.facet(modeFacet) === 'archive' || this.state.facet(sourceViewFacet) === 'archive') this.setMode('todo');
@@ -524,6 +533,7 @@ export class EditorController {
   /** 用户开始滚动或编辑后，旧的异步切换测量不能抢回阅读位置。 */
   private cancelPositionRestore = (): void => { this.positionGeneration++; };
   destroy(): void {
+    this.canvasEditor.invalidate();
     this.streamInstance?.destroy();
     this.pendingSettle = undefined;
     this.contextMenu?.destroy();

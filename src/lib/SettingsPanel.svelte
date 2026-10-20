@@ -3,7 +3,7 @@
    * 文件职责：呈现阅读与外观设置，组织常用字段及按需展开的主题操作。
    * 定义范围：偏好绑定、设置分组与文件操作回调；不访问持久化或原生窗口。
    */
-  import type { Preferences } from './contracts';
+  import type { CanvasPreviewDensity, Preferences } from './contracts';
   import type { ThemeDefinition } from './themes';
   import type { WindowMaterial } from './window-material';
   import { t, type LocalePreference } from './i18n';
@@ -147,6 +147,8 @@
 
   <section class="settings-section" aria-labelledby="settings-reading-heading">
     <h3 id="settings-reading-heading">{$t('正文')}</h3>
+    <ThemeSelect inline id="settings-canvas-preview" label={$t('画布预览')} bind:value={() => preferences.canvasPreview ?? 'compact', value => preferences.canvasPreview = value as CanvasPreviewDensity}
+      options={[{ value: 'compact', label: $t('紧凑') }, { value: 'medium', label: $t('适中') }, { value: 'spacious', label: $t('宽松') }]} />
     <FontSelect inline id="settings-font-primary" label={$t('正文字体')} bind:value={() => fontSlots.named[0] ?? null, family => replaceNamedSlot(0, family)} />
     <FontSelect inline id="settings-font-fallback" label={$t('备用字体')} allowEmpty bind:value={() => fontSlots.named[1] ?? null, family => replaceNamedSlot(1, family)} />
     <ThemeSelect inline id="settings-font-generic" label={$t('兜底字体')} bind:value={() => fontSlots.generic ?? 'none', family => setGenericFamily(family === 'none' ? null : family)}

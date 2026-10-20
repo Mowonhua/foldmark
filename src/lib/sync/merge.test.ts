@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { assembleMerge, decodeRevision, defaultChoices, diffHunks, encodeDocument, mergeContent, revision, validateEnvelope } from './merge';
 const content = (text: string, name = '项目', archived = false) => ({ text, name, archived });
 describe('同步三方合并', () => {
+  it('同一画布不同字段并发修改仍按完整快照冲突，不拼接 JSON', () => {
+    const canvas = '```canvas\n{\n  "version": 1,\n  "id": "board",\n  "title": "白板",\n  "elements": [],\n  "files": {}\n}\n```\n';
+    const base = content('正文\n\n' + canvas);
+    const left = content(base.text.replace('白板', '新白板'));
+    const right = content(base.text.replace('"elements": []', '"elements": [{"id":"shape"}]'));
+    expect(mergeContent(base, left, right)).toBeNull();
+    const hunks = diffHunks(base.text, left.text, right.text);
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].local).toContain('```canvas');
+    expect(hunks[0].remote).toContain('```canvas');
+  });
+  it('不同画布和普通段落独立修改仍能自动合并', () => {
+    const first = '```canvas\n{"version":1,"id":"first","title":"甲","elements":[],"files":{}}\n```\n';
+    const second = '```canvas\n{"version":1,"id":"second","title":"乙","elements":[],"files":{}}\n```\n';
+    const base = content('前言\n\n' + first + '\n说明\n\n' + second);
+    const left = content(base.text.replace('"title":"甲"', '"title":"甲改"'));
+    const right = content(base.text.replace('说明', '新的说明').replace('"title":"乙"', '"title":"乙改"'));
+    expect(mergeContent(base, left, right)?.text).toBe(left.text.replace('说明', '新的说明').replace('"title":"乙"', '"title":"乙改"'));
+  });
   it('合并不相交段落及项目资料且结果对称', () => {
     const base = content('甲\n\n乙\n\n丙\n');
     const a = content('甲改\n\n乙\n\n丙\n', '新名称');

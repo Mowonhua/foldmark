@@ -4,6 +4,9 @@
  */
 import type { DocumentContent, RevisionId, SyncDocument, SyncDocumentPort, SyncEnvelope, SyncRecord, SyncRevision, SyncState, SyncStore, WireDocument } from './contracts';
 import { ancestors, commonAncestor, decodeRevision, encodeDocument, mergeContent, revision, sameContent, validateEnvelope, validateSelection, validateStoredDocument } from './merge';
+import { AttachmentExchange } from './attachments';
+import { canvasAssetsFromText } from '../canvas/model';
+import { verifyCanvasAssetBytes } from '../canvas/assets';
 const INSPIRATION_DOCUMENT = '00000000-0000-4000-8000-000000000001';
 export class SyncEngine {
   private state: SyncState = { version: 1, records: {} };
@@ -13,7 +16,10 @@ export class SyncEngine {
   private needsFull = false;
   /** 对端请求全量时置位，由下一次 offer 消费；内存标记丢失无碍，对端解码失败会再次请求。 */
   private peerRequestsFull = false;
-  constructor(private readonly documents: SyncDocumentPort, private readonly store: SyncStore, private readonly changed: () => void = () => {}) {}
+  private readonly attachments: AttachmentExchange;
+  constructor(private readonly documents: SyncDocumentPort, private readonly store: SyncStore, private readonly changed: () => void = () => {}) { this.attachments = new AttachmentExchange(documents); }
+  /** 附件分块需要立即继续交换，不能等到空闲轮询。 */
+  get pendingAssets(): boolean { return this.attachments.pending; }
   snapshot(): SyncState { return structuredClone(this.state); }
   private run<T>(operation: () => Promise<T>, loading = false): Promise<T> {
     const task = this.queue.catch(() => {}).then(() => {
@@ -65,12 +71,18 @@ export class SyncEngine {
     if (!Number.isSafeInteger(next)) throw new Error('SYNC_STATE: 文档选择序号超出范围');
     this.state.selectionRevision = next;
   }
-  disable(id: string): Promise<void> { return this.run(async () => { const record = this.state.records[id]; if (record?.binding?.enabled) { this.advanceSelection(); record.binding.enabled = false; } await this.save(); }); }
-  reset(): Promise<void> { return this.run(async () => { this.state = { version: 1, records: {} }; await this.save(); }); }
+  disable(id: string): Promise<void> { return this.run(async () => {
+    const record = this.state.records[id];
+    if (record?.binding?.enabled) { this.advanceSelection(); record.binding.enabled = false; }
+    this.attachments.retain(new Set(Object.values(this.state.records).filter(record => !record.binding || record.binding.enabled).map(record => record.document.id)));
+    await this.save();
+  }); }
+  reset(): Promise<void> { return this.run(async () => { this.attachments.reset(); this.state = { version: 1, records: {} }; await this.save(); }); }
   /** 配对代次发生变化时清除旧映射，防止退出发生在撤销凭证与清理状态之间时泄露旧选择。 */
   attachPairing(pairing?: string): Promise<void> {
     return this.run(async () => {
       if (this.state.pairing === pairing) return;
+      this.attachments.reset();
       this.state = { version: 1, pairing, records: {} }; await this.save();
     });
   }
@@ -79,8 +91,13 @@ export class SyncEngine {
     const actual = await this.documents.read(record.binding.localId);
     if (record.pending) {
       const target = record.document.revisions[record.pending.target];
-      if (sameContent(actual, target.content)) { record.document.head = target.id; delete record.pending; delete record.conflict; }
+      if (sameContent(actual, target.content)) {
+        // 正文先前可能已写入但日志尚未完成；恢复确认仍要验证附件，不能只比较正文。
+        await this.attachments.require(record.document.id, target.content.text, record.binding.localId, true);
+        record.document.head = target.id; delete record.pending; delete record.conflict;
+      }
       else if (sameContent(actual, record.pending.expected)) {
+        await this.attachments.require(record.document.id, target.content.text, record.binding.localId, true);
         await this.documents.apply(record.binding.localId, actual, target.content);
         record.document.head = target.id; delete record.pending; delete record.conflict;
       } else {
@@ -98,6 +115,7 @@ export class SyncEngine {
       record.document.revisions[next.id] = next; record.document.head = next.id;
       if (record.conflict) record.conflict.local = next.id;
     }
+    await this.attachments.require(record.document.id, current.text, record.binding.localId);
     delete record.error;
   }
   private async captureAll(): Promise<void> {
@@ -123,8 +141,16 @@ export class SyncEngine {
       const envelope: SyncEnvelope = {
         protocol: 3,
         selection: { revision: this.state.selectionRevision ?? 0, ids: selected.map(record => record.document.id).sort() },
-        documents: selected.filter(record => !record.error).map(record => encodeDocument(record.document, serveFull ? new Set() : this.knownRevisions(record))),
+        documents: selected.filter(record => !record.error && (this.attachments.peerSupportsAssets || !canvasAssetsFromText(record.document.revisions[record.document.head].content.text).length)).map(record => encodeDocument(record.document, serveFull ? new Set() : this.knownRevisions(record))),
         ...(this.needsFull ? { needsFull: true } : {}),
+        ...await this.attachments.offer(async (request, cached) => {
+          const record = this.state.records[request.documentId];
+          if (!record?.binding?.enabled || !this.documents.readAsset) return;
+          const asset = Object.values(record.document.revisions).flatMap(entry => canvasAssetsFromText(entry.content.text)).find(asset => asset.id === request.assetId);
+          if (!asset) return;
+          if (cached) return cached;
+          return verifyCanvasAssetBytes(await this.documents.readAsset(record.binding.localId, asset), asset);
+        }),
       };
       return validateEnvelope(envelope);
     });
@@ -162,12 +188,29 @@ export class SyncEngine {
       // 仅撤回尚未接收的副本。已关联文件、正在处理的本机正文都不传播删除。
       for (const [id, entry] of Object.entries(this.state.records)) if (!entry.binding && !selected.ids.includes(id)) delete this.state.records[id];
       this.state.remoteSelection = selected;
+      this.attachments.retain(new Set([
+        ...selected.ids.filter(id => !this.state.records[id]?.binding),
+        ...Object.values(this.state.records).filter(record => record.binding?.enabled).map(record => record.document.id),
+      ]));
+      await this.attachments.receive(incoming);
       await this.captureAll();
       try {
         // 先解码全部文档：任一文档缺基线都不应用部分修改，并请求对端下轮全量重发。
         const decoded = new Map<string, SyncRevision[]>();
-        for (const remote of incoming.documents) decoded.set(remote.id, await this.decodeDocument(remote));
+        for (const remote of incoming.documents) {
+          const fresh = await this.decodeDocument(remote);
+          if (incoming.assetProtocol !== 1 && fresh.some(entry => canvasAssetsFromText(entry.content.text).length)) throw new Error('SYNC_PROTOCOL: 对端不支持画布图片同步，请更新两端应用');
+          decoded.set(remote.id, fresh);
+        }
         for (const remote of incoming.documents) await this.merge(remote, decoded.get(remote.id)!);
+        // 未接收文档尚无本机路径，先把完整附件留在受限内存中；用户接收时先写附件再创建正文。
+        for (const remote of incoming.documents) {
+          const record = this.state.records[remote.id];
+          if (!record?.binding) {
+            try { await this.attachments.require(remote.id, record.document.revisions[record.document.head].content.text); }
+            catch (error) { if (!String(error).includes('SYNC_ASSET_PENDING')) record.error = String(error); }
+          }
+        }
         this.needsFull = false;
         await this.save();
       } catch (error) {
@@ -195,6 +238,7 @@ export class SyncEngine {
     try {
       const doc = record.document;
       if (doc.head === remote.head) {
+        if (record.binding.acknowledged !== doc.head) await this.attachments.require(doc.id, doc.revisions[doc.head].content.text, record.binding.localId, true);
         record.binding.acknowledged = doc.head;
         // 只在对端明确持有相同版本后压缩活动历史。冲突和写入日志中的版本不得清除。
         // 旧备份重连若落在截点之前则转为人工合并，绝不能凭时间选择覆盖。
@@ -221,6 +265,7 @@ export class SyncEngine {
     const expected = record.document.revisions[record.document.head].content;
     record.pending = { expected, target };
     await this.save();
+    await this.attachments.require(record.document.id, record.document.revisions[target].content.text, record.binding!.localId, true);
     await this.documents.apply(record.binding!.localId, expected, record.document.revisions[target].content);
     record.document.head = target; delete record.pending; delete record.conflict; delete record.error;
     await this.save();
@@ -236,7 +281,8 @@ export class SyncEngine {
       const record = this.state.records[id]; if (!record || record.binding) return;
       const content = record.document.revisions[record.document.head].content;
       if (existingLocalId !== undefined && (record.document.kind !== 'project' || !existingLocalId || existingLocalId === 'inspiration')) throw new Error('SYNC_BINDING: 只能关联已有项目');
-      const localId = existingLocalId ?? await this.documents.accept(id, record.document.kind, content);
+      const incoming = existingLocalId === undefined ? await this.attachments.require(id, content.text) : [];
+      const localId = existingLocalId ?? await this.documents.accept(id, record.document.kind, content, incoming);
       if (localId === null) return;
       if (Object.values(this.state.records).some(other => other.binding?.localId === localId)) throw new Error('SYNC_BINDING: 文档已关联同步');
       const actual = await this.documents.read(localId);
