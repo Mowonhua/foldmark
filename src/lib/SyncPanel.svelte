@@ -20,6 +20,12 @@
   const attention = $derived(records.filter(record => record.binding?.enabled && (record.conflict || record.error)));
   const selected = $derived(records.filter(record => record.binding?.enabled).length);
   let qr = $state(''); let offer = $state<PairingOffer | null>(null); let input = $state(''); let address = $state('');
+  /**
+   * 二维码按 1200px 生成、在面板内只显示 320px：配对信息含证书 Base64，成码后每格在 320px 显示下不足 4 个屏幕像素，
+   * 部分手机会解码失败，点开后按原尺寸铺满窗口才能稳定识别。
+   */
+  const qrOptions = { width: 1200, margin: 4, errorCorrectionLevel: 'L' as const };
+  let zoom = $state(false);
   let error = $state(''); let working = $state(false);
   let conflict = $state<{ id: string; local: string; remote: string; base: string; mine: DocumentContent; theirs: DocumentContent } | null>(null);
   let hunks = $state<MergeHunk[]>([]);
@@ -58,7 +64,7 @@
   }
   async function showOffer(): Promise<void> {
     offer = await controller.transport.offer();
-    qr = await QRCode.toDataURL(encodePairingOffer(offer), { width: 480, margin: 4, errorCorrectionLevel: 'L' });
+    qr = await QRCode.toDataURL(encodePairingOffer(offer), qrOptions);
   }
   async function scan(): Promise<void> {
     await invoke('plugin:taskrail-mobile|prepare');
@@ -124,7 +130,7 @@
 {/snippet}
 
 <div class="modal-backdrop sync-backdrop" class:sync-mobile={!controller.desktop} role="presentation">
-  <div class="modal sync-panel" class:sync-merging={!!conflict} role="dialog" aria-modal="true" aria-label="设备同步" tabindex="-1" use:focus onkeydown={event => { if (event.key === 'Escape') { event.preventDefault(); if (conflict) conflict = null; else if (receiving) receiving = null; else onClose(); } }}>
+  <div class="modal sync-panel" class:sync-merging={!!conflict} role="dialog" aria-modal="true" aria-label="设备同步" tabindex="-1" use:focus onkeydown={event => { if (event.key === 'Escape') { event.preventDefault(); if (zoom) zoom = false; else if (conflict) conflict = null; else if (receiving) receiving = null; else onClose(); } }}>
     <header class="sync-heading">
       <div class="sync-title">{#if conflict || receiving}<button class="icon-button" aria-label="返回同步文档" onclick={() => { conflict = null; receiving = null; }}>{@render icon('back')}</button>{/if}<h2>{conflict ? '合并文档' : receiving ? '接收文档' : '设备同步'}</h2></div>
       <button class="icon-button" aria-label="关闭同步面板" onclick={onClose}>{@render icon('close')}</button>
@@ -168,7 +174,7 @@
         </section>
       {:else if !connection.paired}
         <section class="sync-pairing" class:has-qr={!!qr && controller.desktop}>
-          {#if qr && offer && controller.desktop}<div class="sync-qr-frame"><img class="sync-qr" src={qr} alt="手机扫码配对"/><span>五分钟内有效</span></div>{/if}
+          {#if qr && offer && controller.desktop}<div class="sync-qr-frame"><button class="sync-qr-open" type="button" aria-label="放大配对二维码" title="点击放大" onclick={() => zoom = true}><img class="sync-qr" src={qr} alt="手机扫码配对"/></button><span>五分钟内有效</span></div>{/if}
           <div class="sync-pairing-content">
             <div class="sync-device-icon">{@render icon(controller.desktop ? 'phone' : 'desktop', 30)}</div>
             <h3>{controller.desktop ? '连接手机' : '连接电脑'}</h3>
@@ -179,7 +185,7 @@
           </div>
         </section>
         {#if connection.pending}<section class="sync-pair-request"><div><strong>手机请求连接</strong><span>{connection.pending.slice(0, 8)}</span></div><div class="sync-inline-actions"><button class="sync-button" disabled={working} onclick={() => act(async () => { await controller.transport.approve(false); qr = ''; await controller.sync(); })}>拒绝</button><button class="primary sync-button" disabled={working} onclick={() => act(async () => { await controller.transport.approve(true); qr = ''; await controller.sync(); })}>允许连接</button></div></section>{/if}
-        {#if controller.desktop && offer}<details class="sync-details"><summary>连接选项</summary>{#if (offer.addresses?.length ?? 0) > 1}<label>电脑地址<select bind:value={offer.address} onchange={() => act(async () => { qr = await QRCode.toDataURL(encodePairingOffer(offer!), { width: 480, margin: 4, errorCorrectionLevel: 'L' }); })}>{#each offer.addresses ?? [] as endpoint}<option value={endpoint}>{endpoint}</option>{/each}</select></label>{:else}<p class="sync-address">{offer.address}</p>{/if}<button class="sync-text-button" disabled={working} onclick={() => act(async () => { const { writeText } = await import('@tauri-apps/plugin-clipboard-manager'); await writeText(encodePairingOffer(offer!)); })}>复制配对信息</button></details>
+        {#if controller.desktop && offer}<details class="sync-details"><summary>连接选项</summary>{#if (offer.addresses?.length ?? 0) > 1}<label>电脑地址<select bind:value={offer.address} onchange={() => act(async () => { qr = await QRCode.toDataURL(encodePairingOffer(offer!), qrOptions); })}>{#each offer.addresses ?? [] as endpoint}<option value={endpoint}>{endpoint}</option>{/each}</select></label>{:else}<p class="sync-address">{offer.address}</p>{/if}<button class="sync-text-button" disabled={working} onclick={() => act(async () => { const { writeText } = await import('@tauri-apps/plugin-clipboard-manager'); await writeText(encodePairingOffer(offer!)); })}>复制配对信息</button></details>
         {:else if !controller.desktop}<details class="sync-details"><summary>手动输入配对信息</summary><textarea aria-label="配对信息" class="sync-pair-input" placeholder="粘贴电脑的配对信息" bind:value={input}></textarea><button class="sync-button" disabled={working || !input.trim()} onclick={() => act(async () => { await invoke('plugin:taskrail-mobile|prepare'); await controller.pair(decodePairingOffer(input)); })}>连接</button></details>{/if}
       {:else}
         <section class="sync-device">
@@ -208,5 +214,8 @@
     {/if}
     {#if receiving}<footer class="sync-footer"><button class="sync-button" onclick={() => receiving = null}>取消</button><button class="primary sync-button" disabled={working} onclick={() => act(async () => { const id = receiving!; await controller.engine.accept(id, receiveTarget || undefined); receiving = null; await controller.sync(); if (controller.engine.snapshot().records[id]?.conflict) compare(id); })}>{receiveTarget ? '关联项目' : '新建并接收'}</button></footer>
     {:else if conflict}<footer class="sync-footer"><button class="sync-button" onclick={() => conflict = null}>暂不处理</button><button class="primary sync-button" disabled={working || !mergeReady} onclick={() => act(() => resolve({ text: mergedText, name: mergedName, archived: mergedArchived }))}>保存合并</button></footer>{/if}
+    <!-- 放大层必须留在弹窗内部：指针按下时只有命中外层 role=dialog 才不会关闭面板，
+         它只覆盖二维码本身，关闭后配对界面仍停在原处，不必重新打开。 -->
+    {#if zoom && qr}<button class="sync-qr-zoom" type="button" aria-label="关闭放大的配对二维码" onclick={() => zoom = false}><img src={qr} alt="配对二维码"/></button>{/if}
   </div>
 </div>

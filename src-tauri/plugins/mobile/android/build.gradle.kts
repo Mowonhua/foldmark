@@ -15,7 +15,11 @@ android {
 dependencies {
     implementation(project(":tauri-android"))
     implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // 离线条码识别：bundled 版把模型随 APK 下发，不依赖 Google Play 服务。
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

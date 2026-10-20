@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
-    <com.journeyapps.barcodescanner.DecoratedBarcodeView android:id="@+id/zxing_barcode_scanner"
-        android:layout_width="match_parent" android:layout_height="match_parent"
-        app:zxing_scanner_layout="@layout/taskrail_scanner_camera" app:zxing_preview_scaling_strategy="centerCrop"
-        app:zxing_use_texture_view="true" />
+    <androidx.camera.view.PreviewView android:id="@+id/scanner_preview"
+        android:layout_width="match_parent" android:layout_height="match_parent" android:importantForAccessibility="no" />
+    <app.taskrail.mobilebridge.ScannerFrame android:id="@+id/scanner_frame"
+        android:layout_width="match_parent" android:layout_height="match_parent" />
     <FrameLayout android:id="@+id/scanner_controls" android:layout_width="match_parent" android:layout_height="match_parent">
         <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical" android:paddingHorizontal="16dp">
             <ImageButton android:id="@+id/scanner_close" android:layout_width="48dp" android:layout_height="48dp"
@@ -13,7 +13,7 @@
                 android:text="扫描配对二维码" android:textColor="#FFFFFF" android:textSize="20sp" android:fontFamily="sans-serif-medium" />
         </LinearLayout>
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="88dp"
-            android:paddingHorizontal="24dp" android:gravity="center" android:text="将电脑上的二维码放入框内" android:textColor="#FFFFFF" android:textSize="15sp" />
+            android:paddingHorizontal="24dp" android:gravity="center" android:text="将电脑上的二维码对准画面" android:textColor="#FFFFFF" android:textSize="15sp" />
         <Button android:id="@+id/scanner_torch" android:layout_width="wrap_content" android:layout_height="52dp"
             android:layout_gravity="bottom|center_horizontal" android:layout_marginBottom="48dp"
             android:paddingHorizontal="20dp" android:background="@drawable/scanner_control" android:text="打开手电筒"

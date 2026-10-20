@@ -458,9 +458,10 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .mobile-edit-tools{display:grid;grid-template-columns:repeat(7,minmax(44px,1fr));flex-shrink:0;overflow-x:auto;padding:3px 6px;border-top:1px solid var(--divider-color,var(--line));background:var(--surface)}
 .mobile-edit-tools button{display:flex;align-items:center;justify-content:center;min-height:44px;padding:6px;font-size:12px;border-radius:var(--control-radius,5px)}
 
-/* 同步面板按设备、文档与处理事项分组；滚动只发生在正文区，保留关闭和合并操作。 */
+/* 同步面板按设备、文档与处理事项分组；滚动只发生在正文区，保留关闭和合并操作。
+   backdrop-filter 会让 fixed 子元素改用面板自身作为包含块，放大遮罩只剩面板大小并被 overflow 裁掉，这里不使用主题模糊底。 */
 .sync-backdrop{z-index:60;padding:24px}
-.modal.sync-panel{width:min(680px,100%);max-height:min(820px,calc(100dvh - 48px));padding:0;display:flex;flex-direction:column;overflow:hidden}
+.modal.sync-panel{width:min(680px,100%);max-height:min(820px,calc(100dvh - 48px));padding:0;display:flex;flex-direction:column;overflow:hidden;backdrop-filter:none}
 .sync-panel.sync-merging{width:min(900px,100%)}
 .sync-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:22px 28px 18px;flex-shrink:0;border-bottom:1px solid var(--divider-color,var(--line))}
 .sync-title{display:flex;align-items:center;gap:8px;min-width:0}
@@ -524,9 +525,16 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .sync-pairing-content .sync-device-icon{margin-bottom:18px;width:60px;height:60px}
 .sync-pairing h3{font-size:21px;letter-spacing:-.3px;font-weight:550;margin:0 0 10px}
 .sync-pairing p{font-size:12px;color:var(--muted);line-height:1.7;margin:0 0 22px;text-wrap:balance}
-.sync-qr-frame{flex-shrink:0;width:240px;text-align:center}
-.sync-qr{display:block;width:240px;height:240px;border-radius:var(--control-radius,5px)}
+.sync-qr-frame{flex-shrink:0;width:320px;max-width:100%;text-align:center}
+.sync-qr-open{display:block;padding:0;border:0;background:none;cursor:zoom-in;border-radius:var(--control-radius,5px)}
+.sync-qr-open:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.sync-qr{display:block;width:320px;max-width:100%;height:auto;aspect-ratio:1;border-radius:var(--control-radius,5px)}
 .sync-qr-frame>span{display:block;margin-top:12px;color:var(--muted);font-size:11px}
+/* 放大层压暗面板并模糊底图，二维码本身做成白卡：屏幕反光和深色背景是解码失败的主要来源。 */
+.sync-qr-zoom{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:min(6vmin,56px);border:0;background:rgba(0,0,0,.84);backdrop-filter:blur(6px);cursor:zoom-out;animation:sync-qr-fade .18s ease-out}
+.sync-qr-zoom img{width:auto;height:auto;max-width:min(88vw,86dvh,880px);max-height:min(88vw,86dvh,880px);padding:16px;border-radius:calc(var(--floating-radius,9px) + 4px);background:#fff;box-shadow:0 28px 80px rgba(0,0,0,.55);pointer-events:none}
+@keyframes sync-qr-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.sync-qr-zoom{animation:none}}
 .sync-waiting{margin-top:16px;font-size:12px;color:var(--muted)}
 .sync-address{font-size:12px;overflow-wrap:anywhere;margin:12px 0 4px}
 .sync-pair-request{display:flex;align-items:center;gap:16px;padding:16px;background:var(--accent-soft);border-radius:var(--control-radius,5px);margin:14px 0}

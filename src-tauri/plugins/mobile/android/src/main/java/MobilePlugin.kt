@@ -3,6 +3,7 @@ package app.taskrail.mobilebridge
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.activity.result.ActivityResult
@@ -16,8 +17,6 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 
 /** 扫码解码随 APK 提供；组播锁只在前台同步时持有，离开应用立即释放。 */
 @TauriPlugin(permissions = [
@@ -66,10 +65,7 @@ class MobilePlugin(private val activity: Activity) : Plugin(activity) {
             requestPermissionForAlias("camera", invoke, "cameraPermission")
             return
         }
-        val options = ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            .setCaptureActivity(PairingScannerActivity::class.java).setPrompt("")
-            .setBeepEnabled(false).setOrientationLocked(false)
-        startActivityForResult(invoke, ScanContract().createIntent(activity, options), "scanResult")
+        startActivityForResult(invoke, Intent(activity, MlKitScannerActivity::class.java), "scanResult")
     }
 
     @PermissionCallback
@@ -78,9 +74,10 @@ class MobilePlugin(private val activity: Activity) : Plugin(activity) {
         else invoke.reject("相机权限已拒绝，可使用手动配对")
     }
 
+    /* 用户取消扫码时不带回内容，前端据此不发起配对。 */
     @ActivityCallback
     fun scanResult(invoke: Invoke, result: ActivityResult) {
-        val content = ScanContract().parseResult(result.resultCode, result.data).contents
+        val content = if (result.resultCode == Activity.RESULT_OK) result.data?.getStringExtra(MlKitScannerActivity.RESULT) else null
         val response = JSObject()
         response.put("content", content)
         invoke.resolve(response)

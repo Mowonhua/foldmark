@@ -16,7 +16,22 @@ try {
         assert.deepEqual(await page.locator('.sync-document-name').allTextContents(), ['工作清单', '产品设计笔记', '旅行计划', '灵感'], '已归档项目不出现在同步清单，仍在同步的归档项目保留一行');
         assert(await page.locator('.sync-document-row').filter({ hasText: '产品设计笔记' }).getByRole('checkbox').isChecked(), '仍在同步的归档项目仍可取消选择');
       }
-      if (scenario === 'unpaired' && !mobile) await page.getByRole('button', { name: '显示配对二维码' }).click();
+      if (scenario === 'unpaired' && !mobile) {
+        await page.getByRole('button', { name: '显示配对二维码' }).click();
+        const code = page.locator('.sync-qr');
+        await code.waitFor();
+        await page.getByRole('button', { name: '放大配对二维码' }).click();
+        const zoomed = page.locator('.sync-qr-zoom img');
+        await zoomed.waitFor();
+        assert.equal(await zoomed.getAttribute('src'), await code.getAttribute('src'), '放大层显示与面板内相同的二维码');
+        await page.keyboard.press('Escape');
+        assert.equal(await page.locator('.sync-qr-zoom').count(), 0, '按 Esc 关闭放大层');
+        assert.equal(await page.locator('.sync-qr').count(), 1, '关闭放大层后配对面板保持打开');
+        await page.getByRole('button', { name: '放大配对二维码' }).click();
+        await page.locator('.sync-qr-zoom').click();
+        assert.equal(await page.locator('.sync-qr-zoom').count(), 0, '点击放大层后关闭');
+        assert.equal(await page.locator('.sync-qr').count(), 1, '关闭放大层后配对面板保持打开');
+      }
       if (scenario === 'conflict') {
         await page.getByRole('button', { name: '比较并处理' }).click();
         const merged = page.locator('textarea[aria-label="合并结果"]');
