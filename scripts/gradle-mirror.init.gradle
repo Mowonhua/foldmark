@@ -1,0 +1,14 @@
+// 文件职责：为 Android 构建提供国内 Maven 镜像。
+// 使用方式：网络无法访问 dl.google.com 或 plugins.gradle.org 时，把本文件复制到
+//   %USERPROFILE%\.gradle\init.d\ 后重新构建；Gradle 会自动应用这里的前置仓库。
+// 定义范围：只前置镜像仓库，保留项目原有的仓库声明与全部依赖版本。
+def mirrors = { repositories ->
+    repositories.maven { url = 'https://maven.aliyun.com/repository/google' }
+    repositories.maven { url = 'https://maven.aliyun.com/repository/public' }
+    repositories.maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+}
+settingsEvaluated { settings -> mirrors(settings.pluginManagement.repositories) }
+gradle.beforeProject { project ->
+    mirrors(project.buildscript.repositories)
+    mirrors(project.repositories)
+}
