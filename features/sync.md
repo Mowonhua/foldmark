@@ -69,6 +69,8 @@
 | 关键实现 | src-tauri/src/sync/connection.rs::client |
 | 关键实现 | src-tauri/src/sync/connection.rs::server |
 | 关键实现 | src-tauri/plugins/mobile/android/src/main/java/MlKitScannerActivity.kt::MlKitScannerActivity |
+| 关键实现 | src-tauri/plugins/mobile/android/src/main/res/values/styles.xml::Theme.TaskrailScanner |
+| 关键实现 | src-tauri/plugins/mobile/android/consumer-rules.pro::<module> |
 | 关键实现 | src/lib/SyncPanel.svelte::showOffer |
 
 ### 行为场景

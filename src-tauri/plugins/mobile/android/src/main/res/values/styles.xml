@@ -1,5 +1,6 @@
 <resources>
-    <style name="Theme.TaskrailScanner" parent="@android:style/Theme.Material.NoActionBar">
+    <!-- 扫码页继承 AppCompatActivity，必须使用 AppCompat 主题；系统 Material 主题会在加载布局时抛出异常。 -->
+    <style name="Theme.TaskrailScanner" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
