@@ -5,10 +5,13 @@ use serde::Deserialize;
 use tauri::{Theme, WebviewWindow};
 
 #[cfg(target_os = "windows")]
-use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 
 #[cfg(target_os = "windows")]
 const KEEP_TRANSPARENCY_SUBCLASS_ID: usize = 1;
+
+#[cfg(target_os = "windows")]
+const REFRESH_BACKDROP_SUBCLASS_ID: usize = 2;
 
 /// 只维持非客户区的激活绘制状态，不改变输入焦点或原生材质。
 /// 必须先将原消息交给其余子类：Tao 会从 WM_NCACTIVATE 更新真实焦点，不能把 TRUE 传进该链。
@@ -113,6 +116,114 @@ fn set_keep_transparency_on_blur(hwnd: HWND, enabled: bool) -> Result<(), String
     Ok(())
 }
 
+/// 函数职责：重建系统 Acrylic 背景样本。
+/// 输入说明：hwnd 必须是已应用系统背景材质的窗口，且调用时窗口不可见。
+/// 输出说明：不支持系统背景的版本会静默失败，保留原有材质。
+/// 实现思路：同步撤销再恢复瞬态窗口背景，让 DWM 丢弃最小化前的背景样本。
+#[cfg(target_os = "windows")]
+unsafe fn reset_acrylic_backdrop(hwnd: HWND) {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW,
+    };
+
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE as u32,
+            &DWMSBT_NONE as *const _ as _,
+            4,
+        );
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE as u32,
+            &DWMSBT_TRANSIENTWINDOW as *const _ as _,
+            4,
+        );
+    }
+}
+
+/// 维护 Acrylic 背景刷新子类：最小化完成、窗口已不可见时重建材质。
+/// 恢复时不再改动材质；销毁前移除回调。
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn refresh_backdrop_subclass(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    subclass_id: usize,
+    _: usize,
+) -> LRESULT {
+    use windows_sys::Win32::UI::{
+        Shell::{DefSubclassProc, RemoveWindowSubclass},
+        WindowsAndMessaging::{SIZE_MINIMIZED, WM_NCDESTROY, WM_SIZE},
+    };
+
+    if message == WM_NCDESTROY {
+        unsafe { RemoveWindowSubclass(hwnd, Some(refresh_backdrop_subclass), subclass_id) };
+        return unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+    }
+    // 先让系统完成最小化，再在窗口不可见时替换材质；恢复过程不再触发任何材质变更。
+    let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+    if message == WM_SIZE && wparam == SIZE_MINIMIZED as WPARAM {
+        unsafe { reset_acrylic_backdrop(hwnd) };
+    }
+    result
+}
+
+/// 为当前 HWND 安装或移除 Acrylic 背景刷新策略；必须在窗口所属主线程调用。
+/// 同一回调与 ID 重复安装不会叠加子类，移除时不存在策略视为成功。
+#[cfg(target_os = "windows")]
+fn set_refresh_backdrop(hwnd: HWND, enabled: bool) -> Result<(), String> {
+    use windows_sys::Win32::UI::{
+        Shell::{GetWindowSubclass, RemoveWindowSubclass, SetWindowSubclass},
+        WindowsAndMessaging::IsWindow,
+    };
+
+    if unsafe { IsWindow(hwnd) } == 0 {
+        return Err("无法更新窗口背景刷新：窗口句柄无效。".to_owned());
+    }
+    let mut reference = 0;
+    let installed = unsafe {
+        GetWindowSubclass(
+            hwnd,
+            Some(refresh_backdrop_subclass),
+            REFRESH_BACKDROP_SUBCLASS_ID,
+            &mut reference,
+        )
+    } != 0;
+    if enabled {
+        if installed {
+            return Ok(());
+        }
+        if unsafe {
+            SetWindowSubclass(
+                hwnd,
+                Some(refresh_backdrop_subclass),
+                REFRESH_BACKDROP_SUBCLASS_ID,
+                0,
+            )
+        } == 0
+        {
+            return Err("无法安装窗口背景刷新策略。".to_owned());
+        }
+        return Ok(());
+    }
+    if !installed {
+        return Ok(());
+    }
+    if unsafe {
+        RemoveWindowSubclass(
+            hwnd,
+            Some(refresh_backdrop_subclass),
+            REFRESH_BACKDROP_SUBCLASS_ID,
+        )
+    } == 0
+    {
+        return Err("无法移除窗口背景刷新策略。".to_owned());
+    }
+    Ok(())
+}
+
 /// 结构职责：限定前端可请求的窗口背景材质。
 /// 字段说明：Opaque 与 Transparent 都清除原生效果，由前端分别绘制实色或透明背景；Blur 与 Acrylic 请求桌面内容模糊。
 /// 约束条件：仅接受小写枚举值，不携带窗口标签或主题身份。
@@ -181,11 +292,19 @@ fn apply_material(
         };
         match result {
             Ok(()) => {
-                if matches!(material, WindowMaterial::Acrylic) && keep_transparent_on_blur {
+                if matches!(material, WindowMaterial::Acrylic) {
+                    // 背景刷新用于避免最小化恢复时透出上一次的系统背景样本；
+                    // 失焦透明是独立策略，只在偏好开启时安装。
                     let result = window
                         .hwnd()
                         .map_err(|error| format!("无法获取窗口材质句柄：{error}"))
-                        .and_then(|hwnd| set_keep_transparency_on_blur(hwnd.0, true));
+                        .and_then(|hwnd| {
+                            set_refresh_backdrop(hwnd.0, true)?;
+                            if keep_transparent_on_blur {
+                                set_keep_transparency_on_blur(hwnd.0, true)?;
+                            }
+                            Ok(())
+                        });
                     if let Err(error) = result {
                         clear_material(window)?;
                         return Err(error);
@@ -217,9 +336,13 @@ fn apply_material(
 /// 函数职责：移除当前窗口可能残留的 Blur 和 Acrylic 材质。
 /// 输入说明：调用方必须位于主线程。
 /// 输出说明：无法支持的效果视为无需清除；其他原生错误保留为字符串。
-/// 实现思路：先移除激活绘制策略，再清除 Blur 和 Acrylic；全部先发出清理请求，避免一种失败阻止另一种清理。
+/// 实现思路：先移除背景刷新与激活绘制策略，再清除 Blur 和 Acrylic；全部先发出清理请求，避免一种失败阻止另一种清理。
 #[cfg(target_os = "windows")]
 fn clear_material(window: &WebviewWindow) -> Result<(), String> {
+    let refresh_result = window
+        .hwnd()
+        .map_err(|error| format!("无法获取窗口材质句柄：{error}"))
+        .and_then(|hwnd| set_refresh_backdrop(hwnd.0, false));
     let transparency_result = window
         .hwnd()
         .map_err(|error| format!("无法获取窗口材质句柄：{error}"))
@@ -228,6 +351,7 @@ fn clear_material(window: &WebviewWindow) -> Result<(), String> {
         window_vibrancy::clear_blur(window),
         window_vibrancy::clear_acrylic(window),
     ];
+    refresh_result?;
     transparency_result?;
     for result in results {
         match result {
@@ -245,11 +369,15 @@ mod tests {
     use super::*;
     use windows_sys::Win32::{
         Foundation::{LPARAM, LRESULT, WPARAM},
+        Graphics::Dwm::{
+            DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE,
+            DWMSBT_TRANSIENTWINDOW,
+        },
         UI::{
             Shell::{DefSubclassProc, GetWindowSubclass, SetWindowSubclass},
             WindowsAndMessaging::{
-                CreateWindowExW, DestroyWindow, GetForegroundWindow, SendMessageW, WM_ACTIVATE,
-                WM_NCACTIVATE, WM_NCDESTROY, WS_OVERLAPPED,
+                CreateWindowExW, DestroyWindow, GetForegroundWindow, SendMessageW, SIZE_MINIMIZED,
+                WM_ACTIVATE, WM_NCACTIVATE, WM_NCDESTROY, WM_SIZE, WS_OVERLAPPED,
             },
         },
     };
@@ -349,6 +477,18 @@ mod tests {
         }) != 0
     }
 
+    fn refresh_backdrop_installed(window: &TestWindow) -> bool {
+        let mut reference = 0;
+        (unsafe {
+            GetWindowSubclass(
+                window.0,
+                Some(refresh_backdrop_subclass),
+                REFRESH_BACKDROP_SUBCLASS_ID,
+                &mut reference,
+            )
+        }) != 0
+    }
+
     #[test]
     fn keep_transparency_rejects_an_invalid_window() {
         assert!(set_keep_transparency_on_blur(std::ptr::null_mut(), true).is_err());
@@ -402,5 +542,50 @@ mod tests {
         assert_ne!(unsafe { DestroyWindow(window.0) }, 0);
         window.0 = std::ptr::null_mut();
         assert!(observer.transparency_removed_before_destroy);
+    }
+
+    #[test]
+    fn backdrop_refresh_installs_and_removes_idempotently() {
+        let window = TestWindow::new();
+        assert!(!refresh_backdrop_installed(&window));
+        assert!(set_refresh_backdrop(window.0, false).is_ok());
+        assert!(set_refresh_backdrop(window.0, true).is_ok());
+        assert!(set_refresh_backdrop(window.0, true).is_ok());
+        assert!(refresh_backdrop_installed(&window));
+        assert!(set_refresh_backdrop(window.0, false).is_ok());
+        assert!(set_refresh_backdrop(window.0, false).is_ok());
+        assert!(!refresh_backdrop_installed(&window));
+    }
+
+    #[test]
+    fn backdrop_refresh_rebuilds_acrylic_after_minimize() {
+        let window = TestWindow::new();
+        let none = DWMSBT_NONE;
+        if unsafe {
+            DwmSetWindowAttribute(
+                window.0,
+                DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                &none as *const _ as _,
+                4,
+            )
+        } < 0
+        {
+            // Windows 10 使用旧的 Acrylic 路径，没有需要验证的系统背景属性。
+            return;
+        }
+        assert!(set_refresh_backdrop(window.0, true).is_ok());
+        unsafe { SendMessageW(window.0, WM_SIZE, SIZE_MINIMIZED as WPARAM, 0) };
+        let mut value = DWMSBT_NONE;
+        let result = unsafe {
+            DwmGetWindowAttribute(
+                window.0,
+                DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                &mut value as *mut _ as _,
+                4,
+            )
+        };
+        if result >= 0 {
+            assert_eq!(value, DWMSBT_TRANSIENTWINDOW);
+        }
     }
 }
