@@ -4,6 +4,8 @@ import { ASSET_CHUNK_BYTES } from './attachments';
 import type { CanvasAsset } from '../canvas/types';
 import type { DocumentContent, SyncAttachment, SyncDocumentPort, SyncState } from './contracts';
 
+// 512 KiB 附件的分块传输与摘要校验在并行 worker 下会超过默认 5 秒。
+const ATTACHMENT_TIMEOUT = 20_000;
 const content = (text: string): DocumentContent => ({ text, name: '白板', archived: false });
 async function image(size = ASSET_CHUNK_BYTES * 2 + 20): Promise<SyncAttachment> {
   const bytes = new Uint8Array(size); bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -61,7 +63,7 @@ describe('画布附件同步', () => {
     record = b.engine.snapshot().records[id]; expect(record.binding?.acknowledged).toBe(record.document.head);
     await a.engine.receive(await b.engine.offer());
     expect((await a.engine.offer()).assetChunks ?? []).toHaveLength(0);
-  });
+  }, ATTACHMENT_TIMEOUT);
   it('附件写入失败保留旧正文和写入日志，重试成功后才确认', async () => {
     const attachment = await image(40), a = device('旧正文', [attachment]), b = device('');
     await a.engine.load(); await b.engine.load(); const id = await a.engine.enable('local', 'project');
@@ -103,7 +105,7 @@ describe('画布附件同步', () => {
     for (let round = 0; round < 4; round++) { await a.engine.receive(await right.offer()); await right.receive(await a.engine.offer()); }
     expect(b.disk().text).toBe(board(attachment.asset));
     const record = right.snapshot().records[id]; expect(record.binding?.acknowledged).toBe(record.document.head);
-  });
+  }, ATTACHMENT_TIMEOUT);
   it('旧端未声明附件能力时保留本机版本，不发送带图片正文或伪造确认', async () => {
     const attachment = await image(40), a = device('旧正文', [attachment]), b = device('');
     await a.engine.load(); await b.engine.load(); const id = await a.engine.enable('local', 'project');
