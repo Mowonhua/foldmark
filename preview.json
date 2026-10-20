@@ -1,11 +1,11 @@
 {
-  "version": "0.8.0",
-  "notes": "# Taskrail v0.8.0\r\n\r\n相较于 v0.7.5：\r\n\r\n- 新增 Markdown 画布：在待办正文中通过「更多操作 → 插入画布」或右键菜单插入内嵌白板，全页编辑文字、图形、连线、手绘和图片，编辑自动保存。\r\n- 收起后的画布以内容预览为主，可随时展开继续编辑；设置新增「画布预览」，提供紧凑、适中、宽松三档（分别占正文两行、六行、十二行），仅影响本机阅读布局，不修改文档。\r\n- 画布可导出 PNG；保存失败时保留编辑现场，可重试保存或导出图片。\r\n- 画布图片保存在 Markdown 同目录的 `.assets/`，同目录文档按内容摘要共享图片；新增「导出完整文档」与「导入完整文档」，以 ZIP 连同图片搬运文档，普通 Markdown 导出不复制图片。\r\n- 局域网同步支持画布图片附件，按分块传输，完整校验并保存后才应用正文；画布图片同步需要两端都运行 0.8.0。\r\n- 应用标识、窗口标题、安装包与资源名称统一为 Taskrail，Windows、Android 和浏览器使用新的 T 字母双轨道图标。\r\n- 设备同步的文档清单不再列出已归档项目，接收文档时的项目下拉也排除已归档项目；已在同步中的归档项目仍保留一行，可取消选择。\r\n- 修复桌面输入法组合输入时中文成对符号不补齐。\r\n- 修复玻璃主题最小化恢复时透出旧背景，消除最小化恢复瞬间的透明空档；欢迎页空状态标识改为 T。\r\n\r\n0.8.0 更换了应用标识，不能从 0.7.5 原地覆盖升级。Windows 请下载 `Taskrail_0.8.0_x64-setup.exe` 安装，再重新关联原有 Markdown 项目；Android 请下载 `Taskrail-0.8.0-arm64.apk` 安装，新版会作为独立应用与原版并存。Markdown 原文件不受影响；旧版保存在应用数据目录中的界面配置与恢复草稿不会迁移。\r\n\r\n局域网同步需要两端运行兼容版本，电脑保持运行、手机处于前台，并连接同一局域网。v0.8.0 沿用 v0.7.5 的同步协议，可与 v0.7.5、v0.7.4、v0.7.3 混用；含画布图片的文档需要两端都运行 0.8.0。与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
-  "pub_date": "2026-10-20T09:02:58.577Z",
+  "version": "0.8.1",
+  "notes": "# Taskrail v0.8.1\r\n\r\n相较于 v0.8.0：\r\n\r\n- 手机端扫码改用 CameraX 配合 ML Kit 连续识别，整幅画面参与解码，取景框只作引导；原扫码页及其相机布局移除，光线一般时也能连续尝试识别配对二维码。\r\n- 电脑端配对二维码按 1200px 生成、在同步面板中以 320px 呈现，点击可铺满窗口放大查看，点击任意处或按 Esc 只关闭放大层。\r\n- 同步面板不再使用主题模糊底，固定定位的放大层不会因此被面板裁剪。\r\n- 手机「更多操作」菜单移除完成整组、折叠当前项和同级上移下移入口，这些操作仍由列表项折叠按钮、完成提示和触屏辅助栏提供；菜单高度限制在顶栏以下的窗口剩余范围内滚动，条目再多也不越过窗口底边。\r\n\r\n0.8.1 沿用 0.8.0 的应用标识，可从 v0.8.0 覆盖升级。Windows 下载 `Taskrail_0.8.1_x64-setup.exe` 安装，Android 下载 `Taskrail-0.8.1-arm64.apk` 安装。\r\n\r\n局域网同步沿用 v0.8.0 的协议，可与 v0.8.0、v0.7.5、v0.7.4、v0.7.3 混用；含画布图片的文档仍需要两端都运行 0.8.0 或更新版本。与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
+  "pub_date": "2026-10-20T12:03:55.294Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTQrN3Q3WEU3OFBCYnMyNHB5MDlVdWk1d1RUN1kwVXhkMGM0dkxSZ2JZa3VlRW9uQVJ5cHM0TnQxSjVUUHY4OEFaVSt2QStJSTUrbTI2d3hFTXd0elFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDg2OTc1CWZpbGU6VGFza3JhaWxfMC44LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuOC4wCmVqaFI2MjZ2d3BWeTJxLzNLQzNtbUliS1JPWVlvbU95T3A5TEprVTNBTS9yV3ZSb3UzbHIwZDU4Lzh6WWFwYWFyZzZlSFZmZW95K3BkMFV2c2dnSUN3PT0K",
-      "url": "https://github.com/Mowonhua/taskrail/releases/download/v0.8.0/Taskrail_0.8.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTBLNnE4V3daV1pyTlRLcS9qaTBsdUdRMFBvWTF2TGdCYkprbUdxeDJXRDNheTZENXdYZFdlZ2JxOEVJK0VrT01IK21iYUN1VzEyWWxjVTNvaTJsY3cwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDk3ODMzCWZpbGU6VGFza3JhaWxfMC44LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuOC4xClprY1JOZW9lUjR1enNpVzVselBxbXZseVNoazlxYWpzS21aU1UwVWlZVm5NQjQ5NTdBSmxmNndJM0ZNaGtmU2Fjc3AyblNFekp1Q3gzeDl0STFGbERBPT0K",
+      "url": "https://github.com/Mowonhua/taskrail/releases/download/v0.8.1/Taskrail_0.8.1_x64-setup.exe"
     }
   }
 }
