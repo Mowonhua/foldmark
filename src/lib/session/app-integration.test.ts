@@ -1900,10 +1900,16 @@ describe('项目操作失败与聚合视图边界', () => {
     button('更多操作').click(); await tick();
     const actions = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent?.trim());
     expect(actions).not.toContain('新增任务');
-    expect(actions).not.toContain('完成整组任务');
-    expect(actions).not.toContain('同级上移');
-    expect(actions).not.toContain('同级下移');
+    expect(actions).not.toContain('插入画布');
     expect((await files.read(firstProject.path)).text).toBe(original);
+  });
+
+  it('更多菜单只提供文档与项目操作，不重复列表项自身的折叠和排序入口', async () => {
+    await start(['# 甲清单\n\n- [ ] 原始任务\n']);
+    button('更多操作').click(); await tick();
+    const actions = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent ?? '');
+    expect(actions.some(text => text.includes('新增任务'))).toBe(true);
+    for (const item of ['完成整组任务', '折叠 / 展开当前项', '同级上移', '同级下移']) expect(actions.some(text => text.includes(item))).toBe(false);
   });
 
   it('较早打开请求失败时，不覆盖后来已选中的项目', async () => {

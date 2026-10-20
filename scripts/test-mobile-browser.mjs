@@ -63,6 +63,22 @@ try {
   assert(await page.evaluate(() => !document.querySelector('.cm-content')?.contains(document.activeElement)), '手机切换项目不主动聚焦编辑器，避免切换瞬间弹出输入法');
   await page.getByRole('button', { name: '更多操作' }).tap();
   await page.waitForSelector('.dropdown[data-more-menu]');
+  // 更多菜单受窗口剩余高度约束：底边不越过窗口，条目再多也只在菜单内部滚动。
+  await page.setViewportSize({ width: 320, height: 420 });
+  await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--mobile-height').trim() === '420px');
+  const moreMenu = await page.locator('.dropdown[data-more-menu]').evaluate(node => {
+    const box = node.getBoundingClientRect();
+    return { bottom: box.bottom, scrolls: node.scrollHeight > node.clientHeight };
+  });
+  assert(moreMenu.bottom <= 420, '更多菜单不能超出窗口底部');
+  assert(moreMenu.scrolls, '菜单条目超出屏幕时在菜单内部滚动');
+  const lastItem = page.locator('.dropdown[data-more-menu] [role="menuitem"]').last();
+  await page.locator('.dropdown[data-more-menu]').evaluate(node => { node.scrollTop = node.scrollHeight; });
+  assert.equal(await lastItem.isVisible(), true, '滚动后底部菜单项可见');
+  const lastBox = await lastItem.boundingBox();
+  assert(lastBox && lastBox.y + lastBox.height <= 420, '底部菜单项滚动后落在窗口内');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--mobile-height').trim() === '640px');
   const blank = await page.evaluate(() => {
     for (const x of [20, Math.round(innerWidth / 2), innerWidth - 20]) {
       for (let y = 140; y < innerHeight - 20; y += 20) {
@@ -77,5 +93,5 @@ try {
   await page.waitForFunction(() => !document.querySelector('.dropdown[data-more-menu]'));
   assert(await page.evaluate(() => !document.querySelector('.cm-content')?.contains(document.activeElement)), '点击空白处只关闭浮层，不把焦点交给编辑器');
   assert.deepEqual(failures, []);
-  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏、窄屏布局与浮层焦点。');
+  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏、窄屏布局、更多菜单限高滚动与浮层焦点。');
 } finally { await browser.close(); }

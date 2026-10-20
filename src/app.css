@@ -134,6 +134,8 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .dropdown button:focus-visible{outline-offset:-2px}
 .dropdown hr{border:0;border-top:1px solid var(--line);margin:5px}
 .dropdown kbd{font-size:10px;color:var(--muted)}
+/* 更多菜单按顶栏以下的剩余高度滚动：条目再多也不越过窗口底边，触屏可在菜单内部拖动查看。 */
+[data-more-menu][role="menu"]{max-height:calc(100% - 66px);overflow-y:auto;overscroll-behavior:contain}
 /* 正文菜单沿用主题浮层参数，仅补充鼠标锚定的定位与菜单交互规则。 */
 .fm-context-menu.dropdown{position:fixed;inset:auto;margin:0;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;color:var(--ink)}
 .fm-context-menu::backdrop{background:transparent;pointer-events:none}

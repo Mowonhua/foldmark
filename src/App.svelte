@@ -1051,16 +1051,6 @@
     active.saver.changed(); dialog = null; recovery = null; version += 1;
     editor.normalizeArchive();
   }
-  function currentItemAction(action: 'fold' | 'up' | 'down' | 'group'): void {
-    if (!editor || screen !== 'project') return;
-    const position = editor.state.selection.main.head;
-    const item = parseDocument(editor.text).items.filter(item => item.from <= position && item.to >= position).at(-1);
-    if (!item) { notify($t("请先将光标放在列表项中")); return; }
-    if (action === 'fold') editor.toggleFold(item.from);
-    else if (action === 'group') editor.toggleTask(item.from, true);
-    else editor.moveItem(item.from, action);
-    menuOpen = false;
-  }
   async function openDocumentLink(url: string): Promise<void> {
     try {
       if (url.startsWith('#') && editor) {
@@ -1432,10 +1422,6 @@
         <button role="menuitem" onclick={save}>{$t("保存")} <kbd>Ctrl S</kbd></button>
         <button role="menuitem" onclick={() => { editor?.insertTask(); menuOpen = false; }}>{$t("新增任务")} <kbd>Ctrl N</kbd></button>
         <button role="menuitem" disabled={mode !== 'todo'} onclick={() => { editor?.insertCanvas(); menuOpen = false; }}>{$t('插入画布')}</button>
-        <button role="menuitem" onclick={() => currentItemAction('group')}>{$t("完成整组任务")}</button>
-        <button role="menuitem" onclick={() => currentItemAction('fold')}>{$t("折叠 / 展开当前项")}</button>
-        <button role="menuitem" onclick={() => currentItemAction('up')}>{$t("同级上移")}</button>
-        <button role="menuitem" onclick={() => currentItemAction('down')}>{$t("同级下移")}</button>
         <hr/>{#if active.project.id !== INSPIRATION_ID}<button role="menuitem" onclick={() => openDialog('rename')}>{$t("重命名项目")}</button>{/if}
         <button role="menuitem" onclick={() => exportMarkdown()}>{$t("另存 Markdown 副本")}</button>
         <button role="menuitem" disabled={bundleBusy} onclick={exportCanvasBundle}>{$t('导出完整文档')}</button>
