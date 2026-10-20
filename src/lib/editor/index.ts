@@ -24,7 +24,7 @@ import { paragraphAt, paragraphLayout } from './paragraphs';
 import { contentVisibility } from './visibility';
 import { foldMotion } from './fold-motion';
 import { codeSelection } from './selection';
-import { bracketCompletion, matchingBrackets, pairedSymbols, pairingCaret, singleSymbolPairs } from './paired-symbols';
+import { bracketCompletion, compositionBracketCompletion, matchingBrackets, pairedSymbols, pairingCaret, singleSymbolPairs } from './paired-symbols';
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
@@ -137,9 +137,10 @@ export class EditorController {
       // Android 由系统维护选字手柄与操作菜单；桌面选区绘制会隐藏原生选区，导致长按菜单消失。
       history(), this.options.nativeSelection ? [] : [drawSelection(), codeSelection], bracketMatching({ brackets: matchingBrackets }), indentOnInput(), syntaxHighlighting(themeHighlightStyle), pairedSymbols, pairingCaret,
       // 桌面键盘用 closeBrackets 补齐成对符号；手机输入法不在编辑器内配对，改由 singleSymbolPairs 补齐。
+      // closeBrackets 在桌面组合输入期间跳过，compositionBracketCompletion 补上中文输入法提交全角符号的路径。
       // bracketCompletion 为两者提供含全角符号的配对表，并让 Backspace 一次删除整对；
       // pairingCaret 抵消输入法回发把刚补齐的光标推到闭符号之后的行为。
-      this.options.nativeSelection ? singleSymbolPairs : closeBrackets(), bracketCompletion,
+      this.options.nativeSelection ? singleSymbolPairs : [compositionBracketCompletion, closeBrackets()], bracketCompletion,
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),

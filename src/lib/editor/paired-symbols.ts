@@ -1,8 +1,9 @@
 /**
  * 文件职责：定义成对符号表，并处理输入时的自动补齐与光标居中。
- * 定义范围：符号表、单个开符号补齐、输入法整对提交居中、closeBrackets 与成对高亮的配对配置。
+ * 定义范围：符号表、单个开符号补齐、桌面组合输入补齐、输入法整对提交居中、closeBrackets 与成对高亮的配对配置。
  */
-import { CharCategory, EditorState, Prec, Transaction } from '@codemirror/state';
+import { insertBracket } from '@codemirror/autocomplete';
+import { CharCategory, EditorState, Prec, Transaction, codePointAt, codePointSize } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
 /** 开符号到闭符号的映射，半角符号与对应的全角、中文符号成对收录。 */
@@ -33,6 +34,30 @@ const PAIRABLE_BEFORE = new Set([...CLOSINGS.keys(), ':', ';', '，', '。', '�
 export const bracketCompletion = Prec.high(EditorState.languageData.of(() => [{
   closeBrackets: { brackets: [...OPENINGS.keys()].filter(open => open !== '<'), before: [...PAIRABLE_BEFORE].join('') },
 }]));
+
+/**
+ * 函数职责：在桌面输入法的组合会话中补齐单个成对符号。
+ * 输入说明：closeBrackets 在桌面组合期间主动跳过处理，中文输入法提交全角符号时不会触发补齐；
+ *   这里只在组合期间接管，其余输入仍由 closeBrackets 按同一份配对表处理。
+ * 输出说明：命中符号时派发与默认插入同类的组合事务，光标停在两符号之间。
+ * 实现思路：insertBracket 生成的事务丢失组合标记，重建时沿用默认插入的 userEvent，
+ *   让输入法写回、撤销合并和组合状态与普通输入保持一致。
+ */
+export const compositionBracketCompletion = EditorView.inputHandler.of((view, from, to, text, insert) => {
+  if (!view.compositionStarted || view.state.readOnly) return false;
+  const { main } = view.state.selection;
+  if (text.length > 2 || text.length === 2 && codePointSize(codePointAt(text, 0)) === 1 || from !== main.from || to !== main.to) return false;
+  const transaction = insertBracket(view.state, text);
+  if (!transaction) return false;
+  view.dispatch(transaction.startState.update({
+    changes: transaction.changes,
+    selection: transaction.selection,
+    effects: transaction.effects,
+    scrollIntoView: true,
+    userEvent: insert().annotation(Transaction.userEvent),
+  }));
+  return true;
+});
 
 /**
  * 成对高亮的符号表，开闭两两排列。

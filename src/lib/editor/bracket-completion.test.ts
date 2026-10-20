@@ -25,6 +25,19 @@ async function type(instance: EditorController, inserted: string): Promise<void>
   await new Promise(resolve => setTimeout(resolve, 20));
 }
 
+/** 模拟输入法组合会话中提交文本：input 事件先于 compositionend 到达，与中文输入法提交全角符号一致。 */
+async function typeComposing(instance: EditorController, inserted: string): Promise<void> {
+  const at = instance.state.selection.main.head;
+  const dom = instance.view.domAtPos(at);
+  const node = dom.node as Text;
+  instance.view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  node.insertData(dom.offset, inserted);
+  document.getSelection()!.collapse(node, dom.offset + inserted.length);
+  instance.view.contentDOM.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: inserted, bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  instance.view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: inserted }));
+}
+
 /** 断言文档末尾补出整对符号，且光标停在开符号之后。 */
 function expectCentered(instance: EditorController, pair: string): void {
   expect(instance.text).toBe(`- [ ] 任务${pair}`);
@@ -47,6 +60,23 @@ describe('成对符号补全', () => {
     await type(instance, '<');
     expect(instance.text).toBe('- [ ] 任务<');
     expect(instance.state.selection.main.head).toBe('- [ ] 任务<'.length);
+  });
+
+  it.each([['（', '（）'], ['［', '［］'], ['【', '【】'], ['「', '「」'], ['“', '“”'], ['(', '()']])('桌面输入法组合中提交 %s 同样补齐为 %s 并把光标放到中间', async (inserted, pair) => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await typeComposing(instance, inserted);
+    expectCentered(instance, pair);
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务'.length + 1);
+  });
+
+  it('桌面输入法组合中提交闭符号时跳过已补齐的闭符号', async () => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await typeComposing(instance, '（');
+    await typeComposing(instance, '）');
+    expect(instance.text).toBe('- [ ] 任务（）');
+    expect(instance.state.selection.main.head).toBe('- [ ] 任务（）'.length);
   });
 
   it('引号在词边界补齐，在单词内部不补齐以避免影响撇号', async () => {

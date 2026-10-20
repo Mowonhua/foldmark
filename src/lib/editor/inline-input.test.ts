@@ -28,18 +28,18 @@ describe('行内格式边界输入', () => {
     content.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '（', isComposing: true, bubbles: true }));
     await new Promise(resolve => setTimeout(resolve, 30));
     const formatted = `- [ ] ${mark}示例任务段落${mark}`;
-    expect(editor.text).toBe(formatted + '（');
-    expect(content.textContent).toContain(`${mark}示例任务段落${mark}（`);
+    expect(editor.text).toBe(formatted + '（）');
+    expect(content.textContent).toContain(`${mark}示例任务段落${mark}（）`);
     expect(closing.isConnected).toBe(true);
     content.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '（' }));
     expect(editor.view.composing).toBe(false);
     expect(markdownActionEnabled(editor.view, 'bold')).toBe(true);
     expect(taskEnter(editor.view)).toBe(true);
-    expect(editor.text).toBe(formatted + '（\n\n- [ ] ');
+    expect(editor.text).toBe(formatted + '（\n\n- [ ] ）');
     editor.undo(); editor.undo();
     expect(editor.text).toBe(formatted);
     editor.redo();
-    expect(editor.text).toBe(formatted + '（');
+    expect(editor.text).toBe(formatted + '（）');
   });
 
   it('行内标记在当前行保留，离开该行后隐藏，重新进入可继续编辑', () => {
