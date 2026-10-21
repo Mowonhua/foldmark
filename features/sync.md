@@ -67,6 +67,7 @@
 |---|---|
 | 主入口 | src-tauri/src/sync.rs::sync_exchange |
 | 关键实现 | src/lib/sync/controller.ts::SyncController |
+| 关键实现 | src-tauri/src/sync.rs::handle |
 | 关键实现 | src-tauri/src/sync/connection.rs::client |
 | 关键实现 | src-tauri/src/sync/connection.rs::server |
 | 关键实现 | src-tauri/plugins/mobile/android/src/main/java/MlKitScannerActivity.kt::MlKitScannerActivity |
@@ -87,6 +88,7 @@
 | S-07 | 正常 | 手机在前台建立已认证的 TLS 双向长连接，两端通过同一连接发送变更通知和文档交换；空闲读超时不破坏帧，保存错误不关闭连接，断线使待确认请求失败 | src-tauri/src/sync.rs::tests::tls_stream_reuses_connection_after_idle_and_delivers_both_directions, src-tauri/src/sync/connection.rs::tests::same_connection_delivers_desktop_wake_and_multiple_mobile_exchanges, src-tauri/src/sync/connection.rs::tests::partial_frame_survives_read_timeout_and_preserves_next_frame, src-tauri/src/sync/connection.rs::tests::disconnected_stream_rejects_pending_exchange |
 | S-08 | 正常 | 电脑输入防抖后主动通知手机，手机退到后台释放连接，返回前台立即重连并交换；退到后台的旧同步任务不能继续建连 | src/lib/sync/controller.test.ts::电脑输入防抖后主动通知长连接\，手机进入后台释放连接, src/lib/sync/controller.test.ts::手机离开前台不启动连接\，前台确认后显示已同步, src/lib/sync/controller.test.ts::读取连接状态期间退到后台不再建连 |
 | S-09 | 正常 | 电脑端二维码在面板内按 320px 呈现，点击后铺满窗口放大查看，点击任意处或按 Esc 关闭放大层且配对面板保持打开 | scripts/test-sync-ui.mjs::<module> |
+| S-10 | 正常 | 手机扫码提交配对请求后电脑立即显示允许连接，不等待空闲轮询；手机等待允许期间约一秒复查一次，允许后立即开始连接，建连失败仍按离线退避 | src/lib/sync/controller.test.ts::电脑收到手机配对请求时立即刷新确认状态\，不等待空闲轮询, src/lib/sync/controller.test.ts::手机等待电脑确认期间一秒复查配对\，确认后立即连接 |
 
 ## F-SYN-003 同步面板
 

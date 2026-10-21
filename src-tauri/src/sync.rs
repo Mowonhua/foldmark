@@ -145,7 +145,11 @@ fn handle(app: &tauri::AppHandle, runtime: &Runtime, request: Value) -> Result<V
         let id = request["id"].as_str().filter(|value| value.len() == 64).ok_or("设备身份无效")?;
         let secret = request["secret"].as_str().filter(|value| value.len() == 64).ok_or("设备身份无效")?;
         if inner.pending.as_ref().is_some_and(|pending| pending.id != id || pending.secret != secret) { return Err("另一个配对请求正在等待处理".into()); }
+        let fresh = inner.pending.is_none();
         inner.pending = Some(Peer { id: id.into(), secret: secret.into(), address: String::new(), certificate: vec![] });
+        drop(inner);
+        // 桌面前端靠空闲轮询读取 pending 会延迟数秒；新请求到达时立即唤醒确认界面，同一手机重试不重复唤醒。
+        if fresh { let _ = app.emit("taskrail:sync-pair-request", json!({ "pending": id })); }
         return Ok(json!(false));
     }
     if !authenticated(&inner, &request) { return Err("SYNC_AUTH: 设备未配对或配对已撤销".into()); }

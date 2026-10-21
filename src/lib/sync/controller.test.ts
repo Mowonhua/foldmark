@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { SyncEngine } from './engine';
 import { SyncController } from './controller';
-import type { DocumentContent, SyncTransport } from './contracts';
+import type { DocumentContent, PairingOffer, SyncTransport } from './contracts';
 const listeners = vi.hoisted(() => new Map<string, (event: { payload: unknown }) => void | Promise<void>>());
 vi.mock('@tauri-apps/api/event', () => ({ listen: async (name: string, callback: (event: { payload: unknown }) => void | Promise<void>) => {
   listeners.set(name, callback); return () => { listeners.delete(name); };
@@ -68,6 +68,38 @@ it('桌面等待手机请求，不持续生成离线历史或改变未选择文�
   f.controller.markDirty('other'); expect(f.controller.status).toBe('已同步');
   f.controller.markDirty('local'); await f.controller.sync();
   expect(f.controller.status).toBe('等待同步'); expect(f.read).not.toHaveBeenCalled(); expect(f.probe).not.toHaveBeenCalled();
+});
+it('电脑收到手机配对请求时立即刷新确认状态，不等待空闲轮询', async () => {
+  const f = fixture(true);
+  let pending: string | undefined;
+  const status = vi.fn(async () => ({ paired: false, listening: true, pending }));
+  f.transport.status = status;
+  await f.controller.start();
+  expect(f.controller.connection.pending).toBeUndefined();
+  pending = 'a'.repeat(64);
+  await listeners.get('taskrail:sync-pair-request')?.({ payload: { pending } });
+  expect(status).toHaveBeenCalledTimes(2);
+  expect(f.controller.connection.pending).toBe(pending);
+});
+it('手机等待电脑确认期间一秒复查配对，确认后立即连接', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    let approved = false;
+    const pair = vi.fn(async () => approved);
+    f.transport.pair = pair;
+    await f.controller.start();
+    // 空闲轮询已退避到十五秒；配对仍需在电脑允许后一秒内复查。
+    await vi.advanceTimersByTimeAsync(60000);
+    const offer: PairingOffer = { version: 1, address: '192.168.1.2:1234', certificate: [], token: 'a'.repeat(64), expires: 0 };
+    await f.controller.pair(offer);
+    expect(pair).toHaveBeenCalledTimes(1); expect(f.controller.status).toBe('等待电脑确认');
+    await vi.advanceTimersByTimeAsync(999); expect(pair).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1); expect(pair).toHaveBeenCalledTimes(2);
+    approved = true;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(pair).toHaveBeenCalledTimes(3); expect(f.controller.status).toBe('已同步');
+  } finally { vi.useRealTimers(); }
 });
 it('传输等待期间的新输入不能被旧版本确认清除', async () => {
   const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');

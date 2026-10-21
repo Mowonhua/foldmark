@@ -25,7 +25,10 @@ export class SyncController {
   private idleRounds = 0;
   private stopListener?: () => void;
   private stopWakeListener?: () => void;
+  private stopPairListener?: () => void;
   private resyncRequested = false;
+  /** 手机已提交配对、等待电脑允许；此状态按短间隔复查，不能套用离线退避。 */
+  private awaitingApproval = false;
   private stopped = false;
   constructor(readonly engine: SyncEngine, readonly transport: SyncTransport, readonly desktop: boolean, private readonly changed: () => void) {}
   async start(): Promise<void> {
@@ -52,7 +55,9 @@ export class SyncController {
       if (this.busy) this.resyncRequested = true;
       else void this.sync();
     });
-    if (this.stopped) { this.stopListener(); this.stopWakeListener?.(); return; }
+    // 配对请求写在原生端，轮询间隔会退避到十五秒；收到请求立即刷新，确认按钮才能马上出现。
+    if (this.desktop) this.stopPairListener = await listen('taskrail:sync-pair-request', () => this.sync());
+    if (this.stopped) { this.stopListener(); this.stopWakeListener?.(); this.stopPairListener?.(); return; }
     document.addEventListener('visibilitychange', this.visibility);
     await this.sync();
   }
@@ -62,7 +67,10 @@ export class SyncController {
     clearTimeout(this.timer);
     const active = !this.desktop && !document.hidden && this.connection.paired && (!this.error || followUp);
     this.idleRounds = active ? 0 : this.idleRounds + 1;
-    this.timer = setTimeout(() => { void this.sync(); }, active ? (this.dirty ? 400 : followUp ? 0 : 15000) : Math.min(15000, 5000 * 1.5 ** this.idleRounds));
+    // 手机已发出配对请求时电脑可能已允许连接，一秒复查一次；离线失败仍按退避重试。
+    const awaiting = !this.desktop && !document.hidden && this.awaitingApproval;
+    const delay = awaiting ? 1000 : active ? (this.dirty ? 400 : followUp ? 0 : 15000) : Math.min(15000, 5000 * 1.5 ** this.idleRounds);
+    this.timer = setTimeout(() => { void this.sync(); }, delay);
   }
   private visibility = (): void => {
     if (!document.hidden) { void this.sync(); return; }
@@ -101,7 +109,7 @@ export class SyncController {
   }
   /** 本机还有未发送给对端的修改；面板用它区分“确认已完成”和“确认后本机又改过”。 */
   get pendingEdits(): boolean { return this.dirty; }
-  async pair(offer: PairingOffer): Promise<void> { this.pendingOffer = offer; await this.sync(); }
+  async pair(offer: PairingOffer): Promise<void> { this.pendingOffer = offer; this.awaitingApproval = false; await this.sync(); }
   async sync(): Promise<void> {
     if (this.stopped || !this.desktop && document.hidden) return;
     if (this.busy) { this.resyncRequested = true; return; }
@@ -111,8 +119,8 @@ export class SyncController {
     let followUp = false;
     try {
       if (this.pendingOffer) {
-        if (await this.transport.pair(this.pendingOffer)) this.pendingOffer = undefined;
-        else { this.setStatus('等待电脑确认'); return; }
+        if (await this.transport.pair(this.pendingOffer)) { this.pendingOffer = undefined; this.awaitingApproval = false; }
+        else { this.awaitingApproval = true; this.setStatus('等待电脑确认'); return; }
       }
       this.connection = await this.transport.status();
       await this.engine.attachPairing(this.connection.session);
@@ -148,6 +156,8 @@ export class SyncController {
       } else await this.transport.notify();
       this.offline = false; this.error = ''; this.setStatus(this.summary());
     } catch (error) {
+      // 建连或配对失败不属于等待确认，恢复正常退避，避免持续高频重试。
+      this.awaitingApproval = false;
       const message = errorMessage(error);
       // 连不上对端属于预期状态：本机正文已保存，只有本机能处理的错误才提示同步失败。
       this.offline = !actionable(message); this.error = message;
@@ -165,12 +175,13 @@ export class SyncController {
   }
   async unpair(): Promise<void> {
     this.pendingOffer = undefined;
+    this.awaitingApproval = false;
     await this.transport.unpair(); await this.engine.reset();
     this.connection = await this.transport.status(); this.offline = false; this.error = ''; this.setStatus('未配对'); this.changed();
   }
   stop(): void {
     this.stopped = true; clearTimeout(this.timer); clearTimeout(this.dirtyTimer);
-    this.stopListener?.(); this.stopWakeListener?.(); document.removeEventListener('visibilitychange', this.visibility);
+    this.stopListener?.(); this.stopWakeListener?.(); this.stopPairListener?.(); document.removeEventListener('visibilitychange', this.visibility);
     void this.transport.disconnect().catch(() => {});
   }
 }
