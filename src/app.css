@@ -208,6 +208,8 @@ body:has(.desktop-window.card-mode) .modal-backdrop{padding-top:24px}
 /* 遮罩覆盖整个窗口并拦截面板外点击，弹窗因此与背景形成明暗层次。 */
 .modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
 .modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,9px)) var(--floating-radius-top-right,var(--floating-radius,9px)) var(--floating-radius-bottom-right,var(--floating-radius,9px)) var(--floating-radius-bottom-left,var(--floating-radius,9px));box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
+/* 轨道在上下圆角内侧留白，滑块只在直边范围移动；3px 为滑块透明描边。 */
+.modal::-webkit-scrollbar-track{margin-top:max(0px,calc(var(--floating-radius-top-right,var(--floating-radius,9px)) - 3px));margin-bottom:max(0px,calc(var(--floating-radius-bottom-right,var(--floating-radius,9px)) - 3px))}
 .modal.wide{width:min(850px,100%)}
 .modal-close{position:absolute;right:14px;top:12px;padding:0}
 .modal>p{font-size:13px}
@@ -426,6 +428,8 @@ body:has(.desktop-window.card-mode) .modal-backdrop{padding-top:24px}
 
 /* 边角由主题包独立声明；覆盖浮层和伪元素，避免编辑器局部样式留下圆角。 */
 :root[data-corners=square] *, :root[data-corners=square] *::before, :root[data-corners=square] *::after{border-radius:0!important}
+/* 直角主题无需避让圆角，弹窗滚动条轨道保持完整。 */
+:root[data-corners=square] .modal::-webkit-scrollbar-track{margin-top:0;margin-bottom:0}
 /* 原生控件不保证遵循 border-radius；直角主题使用与配色无关的显式控件外观。 */
 :root[data-corners=square] input[type=checkbox]{appearance:none;width:15px;height:15px;padding:0;border:1px solid var(--ink);display:inline-grid;place-content:center;flex-shrink:0}
 :root[data-corners=square] input[type=checkbox]:checked{background:var(--ink);color:var(--canvas)}
