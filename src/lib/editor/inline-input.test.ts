@@ -33,6 +33,8 @@ describe('行内格式边界输入', () => {
     expect(closing.isConnected).toBe(true);
     content.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '（' }));
     expect(editor.view.composing).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(content.textContent).not.toContain(`${mark}示例任务段落${mark}`);
     expect(markdownActionEnabled(editor.view, 'bold')).toBe(true);
     expect(taskEnter(editor.view)).toBe(true);
     expect(editor.text).toBe(formatted + '（\n\n- [ ] ）');
@@ -42,17 +44,40 @@ describe('行内格式边界输入', () => {
     expect(editor.text).toBe(formatted + '（）');
   });
 
-  it('行内标记在当前行保留，离开该行后隐藏，重新进入可继续编辑', () => {
+  it('行内标记只在光标命中时展开，离开标记后隐藏，重新进入可继续编辑', () => {
     const editor = new EditorController(document.body.appendChild(document.createElement('div')), {
       text: '- [ ] ~~主任务~~ 后文\n\n  - [ ] 子任务', mode: 'todo', onChange: () => {},
     });
     editors.push(editor);
-    editor.focusAt(editor.text.indexOf('\n'));
-    expect(editor.view.contentDOM.textContent).toContain('~~主任务~~ 后文');
-    editor.focusAt(editor.text.length);
-    expect(editor.view.contentDOM.textContent).toContain('主任务 后文');
-    expect(editor.view.contentDOM.textContent).not.toContain('~~');
+    const content = editor.view.contentDOM;
     editor.focusAt(10);
-    expect(editor.view.contentDOM.textContent).toContain('~~主任务~~ 后文');
+    expect(content.textContent).toContain('~~主任务~~ 后文');
+    editor.focusAt(editor.text.indexOf('后文'));
+    expect(content.textContent).toContain('主任务 后文');
+    expect(content.textContent).not.toContain('~~');
+    editor.focusAt(editor.text.length);
+    expect(content.textContent).not.toContain('~~');
+    editor.focusAt(10);
+    expect(content.textContent).toContain('~~主任务~~ 后文');
+  });
+
+  it('同一行有多个行内标记时只展开光标命中的那一组', () => {
+    const editor = new EditorController(document.body.appendChild(document.createElement('div')), {
+      text: '- [ ] ~~删除~~ 与 **加粗** 和 `代码`', mode: 'todo', onChange: () => {},
+    });
+    editors.push(editor);
+    const content = editor.view.contentDOM;
+    editor.focusAt(editor.text.indexOf('加粗'));
+    expect(content.textContent).toContain('删除 与 **加粗** 和 代码');
+    expect(content.textContent).not.toContain('~~');
+    expect(content.textContent).not.toContain('`');
+    editor.focusAt(editor.text.indexOf('删除'));
+    expect(content.textContent).toContain('~~删除~~ 与 加粗 和 代码');
+    expect(content.textContent).not.toContain('**');
+    expect(content.textContent).not.toContain('`');
+    editor.focusAt(editor.text.indexOf('代码'));
+    expect(content.textContent).toContain('删除 与 加粗 和 `代码`');
+    expect(content.textContent).not.toContain('~~');
+    expect(content.textContent).not.toContain('**');
   });
 });

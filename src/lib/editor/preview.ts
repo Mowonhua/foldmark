@@ -4,7 +4,7 @@
  */
 import { get } from 'svelte/store';
 import { translate, locale } from '../i18n';
-import { StateField, type EditorState, type Range } from '@codemirror/state';
+import { StateEffect, StateField, Transaction, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import katex from 'katex';
@@ -20,15 +20,15 @@ import { removeEmptyFencedBlock } from './fenced-block-editing';
 import { scanCanvasBlocks } from '../canvas/model';
 import { CanvasWidget } from './canvas';
 
-/** 共享行内排版只依赖源文和资源端口；无 focusAt 时生成可嵌入整行按钮的只读内容。 */
+/** 共享行内排版只依赖源文和资源端口；无 placeCaret 时生成可嵌入整行按钮的只读内容。 */
 interface InlineContext {
   model: DocumentModel;
   resources: Pick<EditorOptions, 'resolveResource' | 'openLink'>;
-  focusAt?: (from: number) => void;
+  placeCaret?: (from: number) => void;
 }
 
 function inlineContext(view: EditorView): InlineContext {
-  return { model: view.state.field(documentField), resources: view.state.facet(resourcesFacet), focusAt: from => view.state.facet(actionsFacet).focusAt(from) };
+  return { model: view.state.field(documentField), resources: view.state.facet(resourcesFacet), placeCaret: from => view.state.facet(actionsFacet).placeCaret(from) };
 }
 
 /** 所有展开控件使用同一描边箭头；展开方向由 aria-expanded 对应的通用样式控制。 */
@@ -310,7 +310,7 @@ class MathWidget extends WidgetType {
   eq(other: MathWidget): boolean { return this.uiLocale === other.uiLocale && this.expression === other.expression && this.block === other.block && this.from === other.from && this.valid === other.valid && this.source === other.source; }
   toDOM(view: EditorView): HTMLElement {
     const context = inlineContext(view);
-    if (this.block) context.focusAt = () => { activateFencedBlock(view, this.from); };
+    if (this.block) context.placeCaret = () => { activateFencedBlock(view, this.from); };
     const rendered = this.render(context);
     if (!this.block) return rendered;
     const block = fencedBlocks(view.state).find(block => block.nodeFrom === this.from);
@@ -351,7 +351,8 @@ class MathWidget extends WidgetType {
       element.textContent = `${this.block ? '$$' : '$'}${this.expression}${this.valid ? (this.block ? '$$' : '$') : ''}`;
       element.title = error instanceof Error ? error.message : translate('公式无法排版');
     }
-    if (context.focusAt) element.addEventListener('mousedown', event => { event.preventDefault(); context.focusAt!(this.from + (this.block ? 2 : 1)); });
+    // 公式是替换型控件，点击必须显式放置光标；落点已可见，不能顺带滚动。
+    if (context.placeCaret) element.addEventListener('mousedown', event => { event.preventDefault(); context.placeCaret!(this.from + (this.block ? 2 : 1)); });
     return element;
   }
   ignoreEvent(): boolean { return true; }
@@ -453,20 +454,20 @@ class LinkWidget extends WidgetType {
       const image = document.createElement('img');
       image.src = url; image.alt = this.inline ? inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, context, Math.max(from!, this.inline.from), Math.min(to!, this.inline.to)).textContent ?? this.label : this.label; image.loading = 'lazy'; image.className = 'fm-image';
       if (this.title) image.title = this.title;
-      if (context.focusAt) image.addEventListener('click', () => context.focusAt!(this.from + 2));
+      if (context.placeCaret) image.addEventListener('click', () => context.placeCaret!(this.from + 2));
       return image;
     }
-    const link: HTMLElement = document.createElement(context.focusAt ? 'a' : 'span');
+    const link: HTMLElement = document.createElement(context.placeCaret ? 'a' : 'span');
     link.className = 'fm-link';
     if (this.inline) link.append(inlineContent(this.inline.node, this.inline.source, this.inline.sourceFrom, context, Math.max(from!, this.inline.from), Math.min(to!, this.inline.to)));
     else link.textContent = this.label || this.url;
     // 聚合任务的整行按钮负责定位，内部链接不生成第二个可交互目标。
-    if (!context.focusAt) { if (this.title) link.title = this.title; return link; }
+    if (!context.placeCaret) { if (this.title) link.title = this.title; return link; }
     if (url) link.setAttribute('href', url);
     link.title = this.title ? `${this.title} · ${translate('点击编辑；Ctrl + 点击打开链接')}` : translate('点击编辑；Ctrl + 点击打开链接');
     link.setAttribute('rel', 'noopener noreferrer'); link.setAttribute('target', '_blank');
     link.addEventListener('click', event => {
-      if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); context.focusAt!(this.from + 1); return; }
+      if (!event.ctrlKey && !event.metaKey) { event.preventDefault(); context.placeCaret!(this.from + 1); return; }
       if (original && resources.openLink) { event.preventDefault(); void resources.openLink(original); }
     });
     return link;
@@ -564,7 +565,7 @@ class TableWidget extends WidgetType {
       if (event.defaultPrevented || ((event.ctrlKey || event.metaKey) && (event.target as Element).closest('a'))) return;
       event.preventDefault();
       const cell = (event.target as Element).closest<HTMLElement>('[data-source-from]');
-      view.state.facet(actionsFacet).focusAt(cell ? Number(cell.dataset.sourceFrom) : this.from + 1);
+      view.state.facet(actionsFacet).placeCaret(cell ? Number(cell.dataset.sourceFrom) : this.from + 1);
     });
     wrapper.append(table);
     return wrapper;
@@ -586,11 +587,11 @@ const structureCache = new WeakMap<DocumentModel, PreviewStructure>();
 
 /**
  * 函数职责：构造与当前源文一致的预览装饰。
- * 输入说明：折叠和完成过滤区间先合并，之后才加入行内装饰。
+ * 输入说明：折叠和完成过滤区间先合并，之后才加入行内装饰；composing 表示本次更新来自组合输入。
  * 输出说明：替换范围不重叠；昂贵公式 DOM 仅由 CodeMirror 在可见时创建。
  * 实现思路：基于共享语法树访问节点，活动结构保留标记，其余内容按语义排版。
  */
-function buildPreview(state: EditorState): DecorationSet {
+function buildPreview(state: EditorState, composing = false): DecorationSet {
   const mode = state.facet(modeFacet);
   if (mode === 'source') return Decoration.set(hiddenContentRanges(state).map(range => Decoration.replace({ block: true, inclusiveEnd: false }).range(range.from, range.to)), true);
   const model = state.field(documentField);
@@ -778,11 +779,10 @@ function buildPreview(state: EditorState): DecorationSet {
     if (/^(?:ATXHeading|SetextHeading)[1-6]$/.test(name)) addHeadingWidget(node, contained);
     if (name === 'Emphasis' || name === 'StrongEmphasis' || name === 'Strikethrough' || name === 'InlineCode') {
       addMark(node.from, node.to, ({ Emphasis: 'fm-em', StrongEmphasis: 'fm-strong', Strikethrough: 'fm-strike', InlineCode: 'fm-code' } as Record<string, string>)[name]);
-      // 行内标记在光标所在物理行保持展开，离开该行后再隐藏。
-      // 输入法可将闭标记和新字符放在同一个文本节点中；首个字符使光标越过语法节点末端，
-      // 此时立即隐藏标记会拆坏尚未提交的输入节点，导致后续提交误删正文并滞留组合输入状态。
-      const editingLine = active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.to).to);
-      if (!editingLine) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
+      // 只展开光标命中的那一组行内标记，同一行其余标记继续隐藏。
+      // 组合输入期间仍按整行保留：输入法可能把闭标记和未提交文本并入同一个文本节点，
+      // 此时隐藏标记会拆坏输入节点，导致组合提交误删正文并滞留组合输入状态。
+      if (!(composing ? active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.to).to) : editing)) for (let child = node.firstChild; child; child = child.nextSibling) if (/Mark$/.test(child.name)) hide(child.from, child.to);
     }
     if (name === 'LinkReference') {
       if (!editing && !overlapsHidden(node.from, node.to)) {
@@ -894,9 +894,24 @@ function buildPreview(state: EditorState): DecorationSet {
   return cached.decorations.update({ add: ranges, sort: true });
 }
 
+const refreshPreview = StateEffect.define<null>();
+
+/**
+ * 组合输入结束不会必然产生状态事务，预览会停留在“整行展开”的组合期结果。
+ * 在输入法最后一次变更落定后补一次空事务，让不再命中的行内标记立即收起。
+ */
+export const previewComposition = EditorView.domEventHandlers({
+  compositionend: (_event, view) => {
+    setTimeout(() => {
+      if (view.dom.isConnected) view.dispatch({ effects: refreshPreview.of(null), annotations: Transaction.addToHistory.of(false) });
+    }, 0);
+  },
+});
+
 export const previewField = StateField.define<DecorationSet>({
   create: buildPreview,
-  update: (value, transaction) => transaction.docChanged || transaction.selection || transaction.effects.length || transaction.reconfigured ? buildPreview(transaction.state) : value,
+  update: (value, transaction) => transaction.docChanged || transaction.selection || transaction.effects.length || transaction.reconfigured
+    ? buildPreview(transaction.state, transaction.isUserEvent('input.type.compose')) : value,
   provide: field => [EditorView.decorations.from(field), EditorView.atomicRanges.of(view => {
     const atoms: Range<Decoration>[] = [];
     // 导航和删除将两个源码换行视为同一边界；绘制仍保留一个换行。

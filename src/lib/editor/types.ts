@@ -48,7 +48,10 @@ export interface EditorActions {
   moveTo: (from: number, boundary: number | null) => void;
   /** 把整块画布移动到可见段落边界或内容末尾；边界使用当前源文偏移。 */
   moveCanvas: (from: number, boundary: number | null) => void;
+  /** 外部导航定位：展开折叠目标并居中滚动。 */
   focusAt: (from: number) => void;
+  /** 点击已可见的预览控件时只放置光标，不滚动、不改变折叠或渲染窗口。 */
+  placeCaret: (from: number) => void;
   /** 在可见源文偏移处插入空任务并移入光标；标题下的新增按钮传入标题块之后的边界。 */
   insertTaskAt: (position: number) => void;
   /** 使用当前源文范围打开画布；不得仅按可复制的画布 id 定位。 */

@@ -1,6 +1,8 @@
 /* 文件职责：定义主题语义变量、应用布局及可访问的交互状态。 */
-/* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调，同时保持字重使用字体原生字形。 */
-:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:style;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
+/* 默认中文字体没有独立斜体字形，允许合成倾斜以呈现 Markdown 强调；
+   部分可选字体（如 LXGW WenKai Mono GB、黑体、楷体、仿宋）没有粗体字形，必须允许合成字重，否则 Markdown 加粗完全不生效。
+   字体自带对应字重时浏览器仍优先使用原生字形，不会触发合成。 */
+:root{font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink);background:var(--canvas);font-synthesis:weight style;--document-font:"Microsoft YaHei","PingFang SC",sans-serif;--document-size:16px;--document-width:800px}
 
 /* 仅原生窗口材质应用成功后清空根背景；浏览器和失败状态使用基础实色。 */
 :root[data-window-transparent=true]{background:transparent}

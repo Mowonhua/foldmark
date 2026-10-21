@@ -1,5 +1,7 @@
 /** 文件职责：验证真实编辑器事务、历史隔离与投影交互。 */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EditorView } from '@codemirror/view';
+import type { StateEffect, StateEffectType } from '@codemirror/state';
 import { EditorController, type EditorOptions } from './index';
 import { indentTask, taskEnter } from './commands';
 import { foldsField } from './state';
@@ -298,6 +300,20 @@ describe('唯一文档编辑事务', () => {
     instance.setMode('source');
     expect(instance.view.dom.querySelector('.fm-task-checkbox')).toBeNull();
     expect(instance.text).toBe(source);
+  });
+  it('点击行内公式只放置光标，不请求居中滚动', () => {
+    const source = '前文 $x^2$ 后文';
+    const instance = editor(source);
+    instance.focusAt(source.length);
+    const math = instance.view.dom.querySelector<HTMLElement>('.fm-math-inline')!;
+    expect(math).not.toBeNull();
+    const dispatch = vi.spyOn(instance.view, 'dispatch');
+    math.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    const call = dispatch.mock.calls.at(-1)?.[0] as { effects?: readonly StateEffect<unknown>[] } | undefined;
+    const scrollIntoView = EditorView.scrollIntoView as unknown as StateEffectType<unknown>;
+    expect(call?.effects?.some(effect => effect.is(scrollIntoView)) ?? false).toBe(false);
+    expect(instance.state.selection.main.head).toBe(source.indexOf('$') + 1);
+    expect(instance.view.dom.querySelector('.fm-math-inline')).toBeNull();
   });
   it('折叠只收拢相交选区，搜索定位展开祖先且不进入文本撤销', () => {
     const instance = editor('- [ ] 父\n  - [ ] 子\n    正文\n- [ ] 后');

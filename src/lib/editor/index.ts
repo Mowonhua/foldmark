@@ -12,7 +12,7 @@ import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { archiveSections, completedChildGroups, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskIsComplete, taskToggleChanges, type DocumentModel } from '../markdown';
 import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, headingAddFacet, modeFacet, resourcesFacet, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
-import { previewField, headingAddHover } from './preview';
+import { previewField, previewComposition, headingAddHover } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
 import { isSyncStreamUpdate, SyncStream, syncArrivalExtension } from './sync-stream';
@@ -144,8 +144,8 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
-      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), moveCanvas: (from, boundary) => this.moveCanvas(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
-      documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
+      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), moveCanvas: (from, boundary) => this.moveCanvas(from, boundary), focusAt: from => this.focusAt(from), placeCaret: from => this.placeCaret(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
+      documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewComposition, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
@@ -334,6 +334,7 @@ export class EditorController {
     this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setExpandedCompletedGroups.of(expandedGroups), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
     if (restoreScroll) this.view.scrollDOM.scrollTop = ui.scrollTop;
   }
+  /** 搜索、大纲等外部跳转：展开目标并居中滚动，保证定位后能立即看到上下文。 */
   focusAt(pos: number): void {
     this.positionGeneration++;
     const anchor = Math.max(0, Math.min(pos, this.state.doc.length));
@@ -344,6 +345,12 @@ export class EditorController {
     const window = this.state.field(previewWindowField);
     const viewportEffect = anchor < window.from || anchor > window.to ? [setPreviewWindow.of({ from: Math.max(0, anchor - 3000), to: Math.min(this.state.doc.length, anchor + 3000) })] : [];
     this.view.dispatch({ selection: { anchor }, effects: [setFolds.of(folds), setExpandedCompletedGroups.of([...expandedGroups]), ...viewportEffect, EditorView.scrollIntoView(anchor, { y: 'center' })], annotations: Transaction.addToHistory.of(false) });
+    this.view.focus();
+  }
+  /** 正文内的预览控件点击后落点已可见，只需放置光标，滚动或重排会把页面推离当前位置。 */
+  placeCaret(pos: number): void {
+    const anchor = Math.max(0, Math.min(pos, this.state.doc.length));
+    this.view.dispatch({ selection: { anchor }, annotations: Transaction.addToHistory.of(false) });
     this.view.focus();
   }
   insertTask(): void {
