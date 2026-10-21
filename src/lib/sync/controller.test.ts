@@ -31,6 +31,19 @@ it('对端不可达时不为离线输入固化发送版本', async () => {
   // 对端没开只改变面板状态，底栏不提示；本机正文已保存在磁盘上，重试即恢复。
   expect(f.controller.status).toBe('等待对端'); expect(f.controller.attention).toBe('');
 });
+it('本机正在输入时暂缓交换且底栏不提示同步失败', async () => {
+  const f = fixture(); await f.controller.start(); const id = await f.engine.enable('local', 'project');
+  f.read.mockRejectedValue(new Error('SYNC_DEFER: 正在输入或编辑画布'));
+  f.controller.markDirty('local');
+  await f.controller.sync();
+  expect(f.controller.status).toBe('等待同步'); expect(f.controller.attention).toBe('');
+  // 暂缓的本地修改仍算待同步，不能提前显示已同步。
+  expect(f.controller.pendingEdits).toBe(true);
+  expect(f.engine.snapshot().records[id].error).toBeUndefined();
+  f.read.mockImplementation(async () => ({ text: '正文', name: '项目', archived: false }));
+  await f.controller.sync();
+  expect(f.controller.status).toBe('已同步'); expect(f.controller.attention).toBe('');
+});
 it('原生权限拒绝保留可读原因，不显示对象占位文字', async () => {
   const f = fixture(); await f.controller.start();
   f.probe.mockRejectedValue({ message: '局域网权限已拒绝，请在系统设置中允许后重试' });

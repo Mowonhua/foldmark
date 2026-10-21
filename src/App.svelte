@@ -496,7 +496,11 @@
   function closeCanvas(): void {
     const previous = canvasSession;
     canvasSession = null;
-    void tick().then(() => { previous?.close(); void active?.saver.checkExternal(); });
+    void tick().then(() => {
+      previous?.close(); void active?.saver.checkExternal();
+      // 画布编辑期间同步会暂缓该文档；收起后立即交换，不能等到空闲轮询才补发。
+      void syncController?.sync();
+    });
   }
   $effect(() => { canvasPanel?.setLocked(updateInstalling || canvasClosing); });
   /** 摘要展开只保存阅读配置；独立安排写入，不能依赖上一次正文保存尚未结束的定时器。 */

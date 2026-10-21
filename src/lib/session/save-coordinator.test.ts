@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FilePort, FileSnapshot } from '../contracts';
 import { SaveCoordinator, type SaveOptions } from './save-coordinator';
 
-function fixture(preserveRecovery = false) {
+function fixture(preserveRecovery = false, canReload?: () => boolean) {
   let disk: FileSnapshot = { path: 'a.md', text: 'base', revision: '1' };
   let text = 'base';
   const status = vi.fn();
@@ -17,7 +17,7 @@ function fixture(preserveRecovery = false) {
     saveRecovery: vi.fn(async () => {}), clearRecovery: vi.fn(async () => {}),
   } as unknown as FilePort;
   const reload = vi.fn<SaveOptions['reload']>(value => { text = value; });
-  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload, onStatus: status, delay: 60000, preserveRecovery });
+  const saver = new SaveCoordinator({ files, snapshot: disk, getText: () => text, reload, onStatus: status, delay: 60000, preserveRecovery, canReload });
   return { saver, files, status, reload, setText: (value: string) => { text = value; saver.changed(); }, getText: () => text, external: (value: string) => { disk = { ...disk, text: value, revision: '9' }; }, disk: () => disk };
 }
 
@@ -43,6 +43,11 @@ describe('单文档保存协调', () => {
   it('受保护草稿阻止同步覆盖', async () => {
     const f = fixture(true); await expect(f.saver.applySynchronized('base', 'remote')).rejects.toThrow('SYNC_BUSY');
     expect(f.files.write).not.toHaveBeenCalled(); f.saver.dispose();
+  });
+  it('正在输入或编辑画布时暂缓同步，不写入远端内容', async () => {
+    const f = fixture(false, () => false);
+    await expect(f.saver.applySynchronized('base', 'remote')).rejects.toThrow('SYNC_DEFER');
+    expect(f.getText()).toBe('base'); expect(f.files.write).not.toHaveBeenCalled(); f.saver.dispose();
   });
   it('暂不恢复已有草稿时，无编辑保存不会删除该草稿', async () => {
     const f = fixture(true);

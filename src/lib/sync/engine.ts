@@ -8,10 +8,14 @@ import { AttachmentExchange } from './attachments';
 import { canvasAssetsFromText } from '../canvas/model';
 import { verifyCanvasAssetBytes } from '../canvas/assets';
 const INSPIRATION_DOCUMENT = '00000000-0000-4000-8000-000000000001';
+/** 用户正在输入或编辑画布时文档暂时不可读；本轮跳过，等交互结束后自动补发。 */
+const isDeferred = (error: unknown): boolean => String(error).includes('SYNC_DEFER');
 export class SyncEngine {
   private state: SyncState = { version: 1, records: {} };
   private queue: Promise<unknown> = Promise.resolve();
   private loaded = false;
+  /** 最近一轮因本机交互而跳过的文档；只影响本轮报价，不持久化为待处理错误。 */
+  private readonly deferredDocuments = new Set<string>();
   /** 本机无法解码对端增量时置位，下轮 offer 携带 needsFull 请对端全量重发；成功接收后清除。 */
   private needsFull = false;
   /** 对端请求全量时置位，由下一次 offer 消费；内存标记丢失无碍，对端解码失败会再次请求。 */
@@ -20,6 +24,8 @@ export class SyncEngine {
   constructor(private readonly documents: SyncDocumentPort, private readonly store: SyncStore, private readonly changed: () => void = () => {}) { this.attachments = new AttachmentExchange(documents); }
   /** 附件分块需要立即继续交换，不能等到空闲轮询。 */
   get pendingAssets(): boolean { return this.attachments.pending; }
+  /** 本轮有文档因本机正在输入而暂缓；调用方保留待同步状态，不能当作同步失败。 */
+  get deferred(): boolean { return this.deferredDocuments.size > 0; }
   snapshot(): SyncState { return structuredClone(this.state); }
   private run<T>(operation: () => Promise<T>, loading = false): Promise<T> {
     const task = this.queue.catch(() => {}).then(() => {
@@ -119,8 +125,13 @@ export class SyncEngine {
     delete record.error;
   }
   private async captureAll(): Promise<void> {
+    this.deferredDocuments.clear();
     for (const record of Object.values(this.state.records)) {
-      try { await this.capture(record); } catch (error) { record.error = String(error); }
+      try { await this.capture(record); }
+      catch (error) {
+        if (isDeferred(error)) this.deferredDocuments.add(record.document.id);
+        else record.error = String(error);
+      }
     }
     await this.save();
   }
@@ -141,7 +152,7 @@ export class SyncEngine {
       const envelope: SyncEnvelope = {
         protocol: 3,
         selection: { revision: this.state.selectionRevision ?? 0, ids: selected.map(record => record.document.id).sort() },
-        documents: selected.filter(record => !record.error && (this.attachments.peerSupportsAssets || !canvasAssetsFromText(record.document.revisions[record.document.head].content.text).length)).map(record => encodeDocument(record.document, serveFull ? new Set() : this.knownRevisions(record))),
+        documents: selected.filter(record => !record.error && !this.deferredDocuments.has(record.document.id) && (this.attachments.peerSupportsAssets || !canvasAssetsFromText(record.document.revisions[record.document.head].content.text).length)).map(record => encodeDocument(record.document, serveFull ? new Set() : this.knownRevisions(record))),
         ...(this.needsFull ? { needsFull: true } : {}),
         ...await this.attachments.offer(async (request, cached) => {
           const record = this.state.records[request.documentId];
@@ -259,7 +270,11 @@ export class SyncEngine {
       // 对端发送的 head 已证明其持有该版本；本机成功落盘后双方已一致，无须再等一轮。
       // 自动合并产生的新版本尚未被对端持有，仍须等待后续交换确认。
       if (target.id === remote.head) record.binding.acknowledged = target.id;
-    } catch (error) { record.error = String(error); }
+    } catch (error) {
+      // 本机正在输入或编辑画布时无法落盘，保留待写日志并在交互结束后重试。
+      if (isDeferred(error)) this.deferredDocuments.add(remote.id);
+      else record.error = String(error);
+    }
   }
   private async apply(record: SyncRecord, target: string): Promise<void> {
     const expected = record.document.revisions[record.document.head].content;

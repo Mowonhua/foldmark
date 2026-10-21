@@ -160,6 +160,40 @@ describe('同步持久化', () => {
     expect(offer.documents[0].revisions[offer.documents[0].head]).toMatchObject(content.get('healthy')!);
     expect(engine.snapshot().records[missing].error).toContain('missing');
   });
+  it('本机正在输入时本轮暂缓该文档且不记录同步失败', async () => {
+    const a = device(); const engine = a.engine();
+    await engine.load(); const id = await engine.enable('local', 'project');
+    a.edit('编辑中的正文');
+    a.port.read = async () => { throw new Error('SYNC_DEFER: 正在输入或编辑画布'); };
+    expect((await engine.offer()).documents).toHaveLength(0);
+    expect(engine.deferred).toBe(true);
+    expect(engine.snapshot().records[id].error).toBeUndefined();
+    // 交互结束后下一轮直接补发新版本，不经过“待处理”错误状态。
+    a.port.read = async () => ({ ...a.disk() });
+    const next = await engine.offer();
+    expect(engine.deferred).toBe(false);
+    expect(next.documents[0].revisions[next.documents[0].head].text).toBe('编辑中的正文');
+  });
+  it('本机正在输入时接收到的远端版本保留待写日志且不记录同步失败', async () => {
+    const a = device('甲'), b = device('甲'); const left = a.engine(), right = b.engine();
+    await left.load(); await right.load(); const id = await left.enable('local', 'project');
+    await right.receive(await left.offer()); await right.accept(id);
+    b.edit('远端修改');
+    const incoming = await right.offer();
+    const apply = a.port.apply;
+    a.port.read = async () => { throw new Error('SYNC_DEFER: 正在输入或编辑画布'); };
+    a.port.apply = async () => { throw new Error('SYNC_DEFER: 正在输入或编辑画布'); };
+    await left.receive(incoming);
+    let record = left.snapshot().records[id];
+    expect(left.deferred).toBe(true);
+    expect(record.error).toBeUndefined(); expect(record.pending).toBeDefined();
+    // 交互结束后的下一轮按待写日志补写，不需要用户处理错误。
+    a.port.read = async () => ({ ...a.disk() }); a.port.apply = apply;
+    await left.offer();
+    record = left.snapshot().records[id];
+    expect(a.disk().text).toBe('远端修改');
+    expect(record.pending).toBeUndefined(); expect(record.error).toBeUndefined();
+  });
   it('本机正文超过上限后保留可加载的旧版本，缩小正文后继续同步', async () => {
     const a = device(); let engine = a.engine(); await engine.load(); const id = await engine.enable('local', 'project');
     a.edit('大'.repeat(400000)); expect((await engine.offer()).documents).toHaveLength(0);

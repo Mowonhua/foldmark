@@ -143,7 +143,11 @@ export class SaveCoordinator {
 
   /** 同步提交必须穿过本地保存屏障；写入期间的新输入保留为草稿，不能被远端替换。 */
   async applySynchronized(expected: string, text: string): Promise<void> {
-    if (this.preserveRecovery || this.options.canReload?.() === false || !await this.flush()) throw new Error('SYNC_BUSY: 请先完成输入或处理本机草稿');
+    if (this.preserveRecovery) throw new Error('SYNC_BUSY: 请先完成输入或处理本机草稿');
+    // 组合输入或画布编辑只是暂时推迟；保存失败仍需用户处理。
+    if (this.options.canReload?.() === false) throw new Error('SYNC_DEFER: 正在输入或编辑画布');
+    if (!await this.flush()) throw new Error('SYNC_BUSY: 请先完成输入或处理本机草稿');
+    if (this.options.canReload?.() === false) throw new Error('SYNC_DEFER: 正在输入或编辑画布');
     if (this.options.getText() !== expected) throw new Error('SYNC_CHANGED: 本机内容已变化');
     const disk = await this.options.files.read(this.baseline.path);
     if (disk.text !== expected || this.options.getText() !== expected || this.options.canReload?.() === false) throw new Error('SYNC_CHANGED: 文件内容已变化');

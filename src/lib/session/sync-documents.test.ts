@@ -55,7 +55,7 @@ describe('同步文档端口', () => {
   });
   it('组合输入期间推迟同步且移除关联不删除文件', async () => {
     const f = fixture(); f.options.composing = () => true;
-    await expect(f.port.read('local')).rejects.toThrow('SYNC_BUSY');
+    await expect(f.port.read('local')).rejects.toThrow('SYNC_DEFER');
     f.config.projects = [];
     await expect(f.port.read('local')).rejects.toThrow('SYNC_MISSING');
     expect(f.disk().text).toBe('正文'); expect(f.files.write).not.toHaveBeenCalled();

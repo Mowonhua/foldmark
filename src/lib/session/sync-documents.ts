@@ -36,7 +36,9 @@ export class SessionSyncDocuments implements SyncDocumentPort {
   async read(id: string): Promise<DocumentContent> {
     this.options.capture();
     const project = this.project(id); const session = this.options.session(id);
-    if (this.options.composing(id) || session?.saver.hasProtectedRecovery) throw new Error('SYNC_BUSY: 正在输入或有待处理草稿');
+    // 正在输入或编辑画布只是暂时不可读，交互结束后同步会自动补上，不能记成待处理错误。
+    if (this.options.composing(id)) throw new Error('SYNC_DEFER: 正在输入或编辑画布');
+    if (session?.saver.hasProtectedRecovery) throw new Error('SYNC_BUSY: 正在输入或有待处理草稿');
     // 每轮同步多次读取同一文档；基线指纹与项目资料未变时跳过整轮读盘与草稿检查。
     if (session && !session.saver.hasLocalChanges) {
       const hit = this.cached.get(id);
@@ -48,7 +50,8 @@ export class SessionSyncDocuments implements SyncDocumentPort {
     }
     const snapshot = await this.options.files.read(project.path);
     const draft = await this.options.files.loadRecovery(project.path);
-    if (draft && draft.text !== snapshot.text || session?.saver.hasLocalChanges || this.options.composing(id)) throw new Error('SYNC_BUSY: 本机有尚未保存的输入或草稿');
+    if (draft && draft.text !== snapshot.text) throw new Error('SYNC_BUSY: 本机有尚未保存的输入或草稿');
+    if (session?.saver.hasLocalChanges || this.options.composing(id)) throw new Error('SYNC_DEFER: 本机有尚未保存的输入');
     const current = this.project(id);
     const content = { text: snapshot.text, name: current.name, archived: current.archived ?? false };
     if (session) this.cached.set(id, { token: this.token(snapshot.revision, current), content });

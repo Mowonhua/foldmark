@@ -28,6 +28,7 @@
 | 关键实现 | src/lib/canvas/model.ts::scanCanvasBlocks |
 | 关键实现 | src/lib/canvas/model.ts::serializeCanvasDocument |
 | 关键实现 | src/lib/canvas/CanvasPanel.svelte::close |
+| 关键实现 | src/App.svelte::closeCanvas |
 | 关键实现 | src/lib/canvas/engine.ts::mountCanvasEngine |
 | 关键实现 | src/lib/canvas/save-queue.ts::CanvasSaveQueue |
 | 关键实现 | src/lib/canvas/thumbnail.ts::createCanvasThumbnail |
@@ -48,7 +49,7 @@
 | S-10 | 约束 | 收起时不加载完整白板引擎；展开后才加载渲染引擎和同源字体，浅深色切换不修改图形颜色 | - |
 | S-11 | 正常 | 导出当前画布为 PNG；导出使用白色背景，最长边不超过 4096 像素，不携带可编辑场景 | - |
 | S-12 | 边界 | 引擎默认字段含 undefined 时，保存队列仍可提交，JSON 省略 undefined 并保留图形 | src/lib/editor/canvas.test.ts::保存队列传入引擎的 undefined 默认字段时\，真实会话仍能提交并保留图形 |
-| S-13 | 异常 | 关闭前等待画布队列及文档保存；保存失败保留全页编辑现场，不关闭画布 | src/lib/session/app-integration.test.ts::收起画布等待正文落盘时锁住引擎\，保存失败恢复编辑且重试保留最新图形, src/lib/session/app-integration.test.ts::桌面关闭等待画布正文落盘时锁住引擎\，保存失败恢复编辑且成功后才销毁窗口 |
+| S-13 | 异常 | 关闭前等待画布队列及文档保存；保存失败保留全页编辑现场，不关闭画布；收起后立即发起同步交换，补发编辑期间暂缓的文档 | src/lib/session/app-integration.test.ts::收起画布等待正文落盘时锁住引擎\，保存失败恢复编辑且重试保留最新图形, src/lib/session/app-integration.test.ts::桌面关闭等待画布正文落盘时锁住引擎\，保存失败恢复编辑且成功后才销毁窗口 |
 | S-14 | 边界 | 待办文末导航将光标放入隐藏归档后，插入画布仍落在待办末尾、归档标题之前，保存与关闭后卡片保持可见 | src/lib/editor/canvas.test.ts::待办的 todo 隐藏归档光标插入画布时落在归档标题前, src/lib/session/app-integration.test.ts::待办 Ctrl+End 落到隐藏归档后插入画布\，关闭和保存后卡片仍在待办可见区域 |
 | S-15 | 正常 | 真实应用中插入、提交、关闭及重启保留画布和正文 | src/lib/session/app-integration.test.ts::首次无配置欢迎文档插入画布后\，自动保存与关闭不能恢复初始欢迎正文, src/lib/session/app-integration.test.ts::插入画布后提交图形与标题\，关闭、外部检查及重启都保留同一份正文 |
 | S-16 | 正常 | 设置中的画布预览三档即时生效并持久化，旧配置默认紧凑；重启和源码切换不改变正文 | src/lib/session/app-integration.test.ts::画布预览三档即时应用并持久化\，重启与源码切换不修改正文, src/lib/config-validation.test.ts::画布预览档位兼容旧配置并拒绝非法值 |

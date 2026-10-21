@@ -39,7 +39,7 @@ export class SyncController {
         await this.engine.receive(event.payload.envelope);
         const reply = await this.engine.offer();
         await this.transport.respond(event.payload.id, reply);
-        if (generation === this.editGeneration) this.dirty = false;
+        if (generation === this.editGeneration && !this.engine.deferred) this.dirty = false;
         this.offline = false; this.error = ''; this.setStatus(this.summary());
       } catch (error) {
         this.error = errorMessage(error); this.offline = !actionable(this.error);
@@ -80,7 +80,8 @@ export class SyncController {
     if (records.some(record => !record.binding)) return '有待接收文档';
     // 对端没开时本机改动仍保存在磁盘上，重试即可，不能显示成同步失败。
     if (this.offline) return '等待对端';
-    if (this.dirty) return '等待同步';
+    // 本机仍在输入或编辑画布，文档尚未进入本轮交换；交互结束后补发。
+    if (this.dirty || this.engine.deferred) return '等待同步';
     if (records.some(record => record.binding?.enabled && record.binding.acknowledged !== record.document.head)) return '等待对端确认';
     return '已同步';
   }
@@ -143,7 +144,7 @@ export class SyncController {
         followUp = this.engine.pendingAssets || Object.values(this.engine.snapshot().records).some(record =>
           record.binding?.enabled && !record.conflict && !record.error && !record.pending && sent.get(record.document.id) !== record.document.head);
         // 网络等待期间的新输入尚未包含在本轮确认中，不能提前显示“已同步”。
-        if (generation === this.editGeneration) this.dirty = false;
+        if (generation === this.editGeneration && !this.engine.deferred) this.dirty = false;
       } else await this.transport.notify();
       this.offline = false; this.error = ''; this.setStatus(this.summary());
     } catch (error) {
