@@ -44,7 +44,6 @@ export const appearanceProperties = {
   'control-blur': 'length',
   'field-background': 'color',
   'backdrop-background': 'color',
-  'backdrop-blur': 'length',
   // 窗口内表面透明度与背景模糊独立配置，不替代操作系统的窗口合成。
   'sidebar-background': 'color',
   'floating-background': 'color',
@@ -116,8 +115,8 @@ export function validateAppearance(value: unknown): ThemeAppearance {
     const entry = source[key];
     if (kind === 'length' || kind === 'weight' || kind === 'factor' || kind === 'lift') {
       if (typeof entry !== 'number' || !Number.isFinite(entry)) return fail();
-      // 整页遮罩允许更大模糊半径；控件尺寸和局部表面仍保持原有上限。
-      if (kind === 'length' && (entry < 0 || entry > (key === 'backdrop-blur' ? 64 : 32))) return fail();
+      // 控件尺寸和局部表面保持原有上限。
+      if (kind === 'length' && (entry < 0 || entry > 32)) return fail();
       if (kind === 'factor' && (entry < .5 || entry > 2)) return fail();
       if (kind === 'lift' && (entry < 0 || entry > 2)) return fail();
       if (kind === 'weight' && (!Number.isInteger(entry) || entry < 100 || entry > 900)) return fail();

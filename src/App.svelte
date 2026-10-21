@@ -1362,7 +1362,7 @@
 <svelte:window onkeydown={keydown} onpointerdowncapture={event => { dismissDialog(event); dismissPopovers(event); }} onmousedowncapture={suppressDismissFocus} onclick={dismissPopovers} />
 
 <input class="canvas-bundle-input" type="file" accept=".zip,application/zip" bind:this={bundleInput} onchange={importCanvasBundle} tabindex="-1" aria-hidden="true"/>
-<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} class:modal-open={dialog !== null || syncOpen} inert={updateInstalling || canvasClosing || cardTransitioning || projectActionBusy || syncOpen || !!canvasSession}>
+<div class="app-shell" bind:this={appShell} class:booted class:sidebar-hidden={!sidebar || cardMode} class:card-mode={cardMode} class:card-transitioning={cardTransitioning} class:desktop-window={desktop} class:mobile-app={mobile} inert={updateInstalling || canvasClosing || cardTransitioning || projectActionBusy || syncOpen || !!canvasSession}>
 
   {#if mobile && sidebar}<button class="drawer-scrim" aria-label="关闭项目导航" onclick={() => sidebar = false}></button>{/if}
   {#if sidebar && !cardMode}

@@ -32,8 +32,9 @@ button svg{flex-shrink:0}
 .app-shell.sidebar-hidden{grid-template-columns:0px minmax(0,1fr)}
 .app-shell.card-transitioning{transition:none}
 .sidebar-slot{grid-area:1 / 1;min-width:0;overflow:hidden}
-/* 窗口操作共用现有工具栏；弹窗从工具栏下方遮罩，保留窗口控制入口。 */
-body:has(.desktop-window) .modal-backdrop{top:54px}
+/* 遮罩覆盖整窗；桌面保留标题栏高度作为弹窗定位偏移，避免面板压住标题栏内容。 */
+body:has(.desktop-window) .modal-backdrop{padding-top:78px}
+body:has(.desktop-window.card-mode) .modal-backdrop{padding-top:24px}
 .sidebar{width:232px;height:100%;background:var(--sidebar);border-right:1px solid var(--divider-color,var(--line));display:flex;flex-direction:column;padding:0 16px 12px;min-height:0}
 .brand{display:flex;align-items:center;gap:9px;height:var(--topbar-height);flex-shrink:0;margin-bottom:21px;padding:0 9px;border-bottom:1px solid transparent;color:var(--accent);font-size:22px;letter-spacing:-.8px;font-weight:650}
 .brand span{color:var(--ink)}
@@ -117,7 +118,6 @@ body:has(.desktop-window) .modal-backdrop{top:54px}
 .card-drag-region:active{cursor:grabbing}
 .card-mode .editor-region{padding-top:0}
 .card-mode .editor-region .cm-content{padding-top:0}
-body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 @media(prefers-reduced-motion:reduce){.card-mode .statusbar{transition:none}}
 .empty-state{max-width:520px;margin:auto;text-align:center;padding:45px 25px}
 .empty-state h1{font-size:29px}
@@ -205,6 +205,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
 .error-banner,.conflict-banner{padding:11px 25px;font-size:12px;line-height:1.7;background:var(--accent-soft);color:var(--accent)}
 .error-banner{color:var(--danger)}
 .error-banner button,.conflict-banner button{margin-left:16px;text-decoration:underline;font-size:12px}
+/* 遮罩覆盖整个窗口并拦截面板外点击，弹窗因此与背景形成明暗层次。 */
 .modal-backdrop{position:fixed;inset:0;background:var(--backdrop);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
 .modal{background:var(--surface);border:1px solid var(--floating-border,var(--line));border-radius:var(--floating-radius-top-left,var(--floating-radius,9px)) var(--floating-radius-top-right,var(--floating-radius,9px)) var(--floating-radius-bottom-right,var(--floating-radius,9px)) var(--floating-radius-bottom-left,var(--floating-radius,9px));box-shadow:var(--floating-shadow,none);width:min(470px,100%);max-height:90dvh;overflow:auto;padding:35px;position:relative}
 .modal.wide{width:min(850px,100%)}
@@ -370,9 +371,6 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
   --surface-filter:saturate(var(--surface-saturation,1)) contrast(var(--surface-contrast,1)) brightness(var(--surface-brightness,1));
 }
 .app-shell{box-shadow:var(--workspace-shadow,none)}
-/* 直接模糊页面自身，避免透明 WebView 的 backdrop-filter 无法采样正文合成层。
-   弹窗必须保持为 app-shell 的兄弟节点，不能放入此过滤层；关闭弹窗即移除类并恢复清晰。 */
-.app-shell.modal-open{filter:blur(var(--backdrop-blur,0px))}
 .sidebar{box-shadow:var(--sidebar-shadow,none)}
 :is(.modal,.dropdown,.search-panel,.toast){border-color:var(--floating-border-top,var(--floating-border,var(--line))) var(--floating-border-right,var(--floating-border,var(--line))) var(--floating-border-bottom,var(--floating-border,var(--line))) var(--floating-border-left,var(--floating-border,var(--line)))}
 .card-mode .statusbar{border-top-color:var(--floating-border-top,var(--floating-border,var(--divider-color,var(--line))))}
@@ -381,7 +379,7 @@ body:has(.desktop-window.card-mode) .modal-backdrop{top:0}
   .settings-help-popup{background:var(--menu-background,var(--floating-background,var(--surface)));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
   .sidebar{background:var(--sidebar-background,var(--sidebar));backdrop-filter:blur(var(--sidebar-blur,0px)) var(--surface-filter)}
   :is(.modal,.dropdown,.search-panel,.toast){background:var(--floating-background,var(--surface));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter)}
-  .dropdown{background-color:var(--menu-background,var(--floating-background,var(--surface)))}
+  :is(.modal,.dropdown,.search-panel){background-color:var(--menu-background,var(--floating-background,var(--surface)))}
   /* 卡片底栏覆盖正文，沿用浮层材质；未定义扩展的主题仍使用正文实色底。 */
   .card-mode .statusbar{background:var(--floating-background,var(--canvas));backdrop-filter:blur(var(--floating-blur,0px)) var(--surface-filter);background-image:var(--surface-image)}
   .modal-backdrop{background:var(--backdrop-background,var(--backdrop))}
