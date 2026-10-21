@@ -1338,15 +1338,15 @@ describe('App 真实编辑与文件闭环', () => {
   it('状态栏当前页字数随编辑、撤销和项目切换更新，源码切换保留统计', async () => {
     await start(['中文 😀\n', '第二份\n']);
     const status = () => button('快捷键').textContent;
-    expect(status()).toBe('3 字 · Markdown');
+    expect(status()).toBe('3 字');
     button('查看源码').click(); await tick();
-    expect(status()).toBe('3 字 · Markdown');
+    expect(status()).toBe('3 字');
     await paste('新增');
-    expect(status()).toBe('5 字 · Markdown');
+    expect(status()).toBe('5 字');
     await shortcut('z');
-    expect(status()).toBe('3 字 · Markdown');
+    expect(status()).toBe('3 字');
     await switchProject(secondProject);
-    expect(status()).toBe('3 字 · Markdown');
+    expect(status()).toBe('3 字');
     button(/^全部待办/).click(); await tick();
     expect(status()).toBe('快捷键');
   });
@@ -1354,17 +1354,17 @@ describe('App 真实编辑与文件闭环', () => {
   it('待办和归档各自计数，源码仅统计来源分区', async () => {
     await start(['# 清单\n\n- [ ] 待办\n\n# 归档\n\n- [x] 已完成\n']);
     const status = () => button('快捷键').textContent;
-    expect(status()).toBe('8 字 · Markdown');
+    expect(status()).toBe('4 字');
     button('查看源码').click(); await tick();
-    expect(status()).toBe('8 字 · Markdown');
+    expect(status()).toBe('4 字');
     button('返回预览').click(); await tick();
     button(/^归档/).click(); await tick();
-    expect(status()).toBe('10 字 · Markdown');
+    expect(status()).toBe('6 字');
     button('查看源码').click(); await tick();
-    expect(status()).toBe('10 字 · Markdown');
+    expect(status()).toBe('6 字');
     button('返回预览').click(); await tick();
     button(/^待办/).click(); await tick();
-    expect(status()).toBe('8 字 · Markdown');
+    expect(status()).toBe('4 字');
   });
 
   it.each(['todo', 'source'] as const)('%s 视图通过 Ctrl N 新增任务并支持撤销', async mode => {
@@ -1400,7 +1400,7 @@ describe('App 真实编辑与文件闭环', () => {
     await start(['# 清单\n']);
     const help = button('快捷键');
     expect(help.closest('footer')).not.toBeNull();
-    expect(help.textContent).toBe('3 字 · Markdown');
+    expect(help.textContent).toBe('2 字');
     help.click(); await tick();
     const modal = document.querySelector('[role="dialog"]')!;
     expect(modal.querySelector('h2')?.textContent).toBe('快捷键');

@@ -28,6 +28,7 @@
   import type { ProjectSession, TaskResult } from './lib/session/types';
   import { getHiddenRanges, parseDocument, searchTasks, taskIsArchived } from './lib/markdown';
   import type { DocumentModel, ListItem } from './lib/markdown';
+  import { countWords } from './lib/word-count';
   import { activeOutlineFrom, outlineEntries } from './lib/markdown/outline';
   import { resolveDocumentResource } from './lib/resource-paths';
   import { validateAppConfig } from './lib/config-validation';
@@ -234,8 +235,7 @@
     }
     return text + model.text.slice(position);
   });
-  // 当前分区按非空白 Unicode 码点计数，保留原有 Markdown 标记计数口径。
-  const characterCount = $derived(Array.from(pageText.replace(/\s/gu, '')).length);
+  const characterCount = $derived(countWords(pageText));
   const counts = $derived.by(() => {
     void version;
     if (!active) return { todo: 0, archive: 0 };
@@ -1506,7 +1506,7 @@
           {#if !mobile}<button class="card-button" aria-label={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} title={cardMode ? $t("退出卡片模式") : $t("进入卡片模式")} aria-pressed={cardMode} disabled={cardTransitioning} onclick={toggleCardMode}><svg width="17" height="19" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="19" rx="2"/><path d="M7 7h6M7 11h6M7 15h3"/></svg></button>{/if}
         </div>
         {#if desktop && ['available', 'ready', 'downloading'].includes(updateStatus.kind)}<button onclick={() => openDialog('updates')}>{updateStatus.kind === 'ready' ? $t("更新已就绪") : updateStatus.kind === 'downloading' ? `${$t("正在下载更新…")}${updateDownloadSize}` : $t("发现新版本")}</button>
-        {:else if syncNotice}<button class="sync-status" onclick={() => syncOpen = true}>{syncLabel}</button>{/if}<button aria-label={$t("快捷键")} title={$t("当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })} <span>·</span> Markdown{:else}{$t("快捷键")}{/if}</button>
+        {:else if syncNotice}<button class="sync-status" onclick={() => syncOpen = true}>{syncLabel}</button>{/if}<button aria-label={$t("快捷键")} onclick={() => openDialog('help')}>{#if screen === 'project' && active}{$t('{count} 字', { count: characterCount })}{:else}{$t("快捷键")}{/if}</button>
       </footer>
     </div>
   </main>

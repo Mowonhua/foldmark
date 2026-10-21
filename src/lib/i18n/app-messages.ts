@@ -95,7 +95,6 @@ export const appMessages: Readonly<Record<string, string>> = {
   "更新已就绪": "Update ready",
   "正在下载更新…": "Downloading update…",
   "发现新版本": "New version available",
-  "当前页字数（不含空白，包含 Markdown 标记）；点击查看快捷键": "Characters on this page (excluding whitespace, including Markdown syntax); click for keyboard shortcuts",
   "项目操作": "Project actions",
   "归档项目": "Archive project",
   "删除项目": "Delete project",
