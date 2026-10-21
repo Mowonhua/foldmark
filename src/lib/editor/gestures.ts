@@ -1,5 +1,5 @@
 /**
- * 文件职责：管理列表标记手势及正文右侧、空任务、空段落的指针定位。
+ * 文件职责：管理列表标记手势、画布卡片拖动及正文右侧、空任务、空段落的指针定位。
  * 定义范围：指针状态机、正文焦点、末尾空段落分隔和同父级可见插入边界（顶层可跨列表跨越标题）。
  */
 import { locale, translate } from '../i18n';
@@ -11,9 +11,11 @@ import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
 import { hiddenContentRanges } from './visibility';
 import { fencedBlocks } from './fenced-blocks';
 
+/** 画布卡片与列表标记共用拖动阈值、预览、插入线和自动滚动，落点语义由 kind 决定。 */
 interface DragSession {
+  kind: 'item' | 'canvas';
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
-  marker: HTMLElement; started: boolean; boundary: number | null | undefined;
+  handle: HTMLElement; started: boolean; boundary: number | null | undefined;
   preview: HTMLElement | null; line: HTMLElement | null;
 }
 
@@ -104,7 +106,18 @@ class MarkerGestures {
       return;
     }
     if (event.button !== 0) return;
-    const marker = (event.target as Element).closest<HTMLElement>('[data-list-marker]');
+    const target = event.target instanceof Element ? event.target : null;
+    const card = target?.closest<HTMLElement>('.fm-canvas-card');
+    if (card) {
+      // 展开按钮保留单击；归档只读，不能建立画布拖动会话。
+      if (target?.closest('button') || !this.view.dom.contains(card) || this.view.state.readOnly
+        || this.view.state.facet(modeFacet) !== 'todo') return;
+      event.preventDefault();
+      this.cancel();
+      this.begin('canvas', Number(card.dataset.canvasFrom), card, event);
+      return;
+    }
+    const marker = target?.closest<HTMLElement>('[data-list-marker]');
     if (!marker) { this.focusEmptyContent(event); return; }
     if (!this.view.dom.contains(marker)) return;
     event.preventDefault();
@@ -113,11 +126,15 @@ class MarkerGestures {
     // 收起完成项后，同一物理位置出现的是另一项；短时间重复按下不能误完成它。
     if (recent && recent.marker !== marker && performance.now() - recent.time < 360 && Math.hypot(event.clientX - recent.x, event.clientY - recent.y) < 5) return;
     this.cancel();
-    this.session = { from: Number(marker.dataset.listMarker), pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, marker, started: false, boundary: undefined, preview: null, line: null };
-    marker.addEventListener('lostpointercapture', this.cancel);
-    // 捕获保证拖出窗口后仍可收尾；无真实活动指针的测试事件允许回退到 window 监听。
-    try { marker.setPointerCapture?.(event.pointerId); } catch { /* 浏览器拒绝非活动指针时，现有全局取消路径仍有效。 */ }
+    this.begin('item', from, marker, event);
   };
+  /** 建立拖动会话；捕获失败时全局指针监听仍负责收尾。 */
+  private begin(kind: DragSession['kind'], from: number, handle: HTMLElement, event: PointerEvent): void {
+    this.session = { kind, from, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, handle, started: false, boundary: undefined, preview: null, line: null };
+    handle.addEventListener('lostpointercapture', this.cancel);
+    // 捕获保证拖出窗口后仍可收尾；无真实活动指针的测试事件允许回退到 window 监听。
+    try { handle.setPointerCapture?.(event.pointerId); } catch { /* 浏览器拒绝非活动指针时，现有全局取消路径仍有效。 */ }
+  }
   /**
    * 空任务和空段落没有可命中的正文字符，浏览器可能把右侧空白命中到后面的隐藏分隔。
    * 空段落在指针阶段准备编辑位置，再由 mousedown 接续拖选；任务控件列保留原有手势。
@@ -208,11 +225,14 @@ class MarkerGestures {
     session.x = event.clientX; session.y = event.clientY;
     if (!session.started && Math.hypot(session.x - session.startX, session.y - session.startY) > 6) {
       session.started = true;
-      // 归档允许复选框恢复，任何移动仍取消单击，但只在待办模式创建排序会话。
+      // 归档允许复选框恢复，任何移动仍取消单击，但只在待办模式创建拖动会话。
       if (this.view.state.facet(modeFacet) !== 'todo') return;
       session.preview = document.createElement('div'); session.preview.className = 'fm-drag-preview';
-      const item = this.view.state.field(documentField).items.find(item => item.from === session.from);
-      session.preview.textContent = item ? this.view.state.doc.sliceString(item.contentFrom, item.firstLineTo) || translate('空列表项') : '';
+      if (session.kind === 'canvas') session.preview.textContent = session.handle.querySelector('.fm-canvas-title')?.textContent || translate('画布');
+      else {
+        const item = this.view.state.field(documentField).items.find(item => item.from === session.from);
+        session.preview.textContent = item ? this.view.state.doc.sliceString(item.contentFrom, item.firstLineTo) || translate('空列表项') : '';
+      }
       session.line = document.createElement('div'); session.line.className = 'fm-drop-line';
       document.body.append(session.preview, session.line);
       document.body.classList.add('fm-dragging');
@@ -227,9 +247,18 @@ class MarkerGestures {
     session.boundary = undefined; session.line.hidden = true;
     const rect = this.view.scrollDOM.getBoundingClientRect();
     if (session.x < rect.left || session.x > rect.right || session.y < rect.top || session.y > rect.bottom) return;
+    const nearest = session.kind === 'canvas' ? this.canvasBoundary(session) : this.itemBoundary(session);
+    if (!nearest) return;
+    session.boundary = nearest.before;
+    session.line.hidden = false; session.line.style.top = `${nearest.y}px`;
+    session.line.style.left = `${Math.max(rect.left + 24, this.view.contentDOM.getBoundingClientRect().left)}px`;
+    session.line.style.width = `${Math.min(rect.width - 48, this.view.contentDOM.getBoundingClientRect().width)}px`;
+  }
+  /** 列表项落点只位于同父级可见项之间；顶层项可跨列表进入其他章节。 */
+  private itemBoundary(session: DragSession): { before: number | null; y: number } | undefined {
     const model = this.view.state.field(documentField);
     const source = model.items.find(item => item.from === session.from);
-    if (!source) return;
+    if (!source) return undefined;
     const hidden = getHiddenRanges(model, 'todo');
     const visible = (item: (typeof model.items)[number]): boolean =>
       !hidden.some(range => item.from >= range.from && item.from < range.to);
@@ -255,11 +284,30 @@ class MarkerGestures {
       boundaries.push({ before: next ? next.from : listFrom === source.listFrom ? null : lastVisible.moveTo, y: coords.bottom + 2 });
     }
     const nearest = boundaries.sort((a, b) => Math.abs(a.y - session.y) - Math.abs(b.y - session.y))[0];
-    if (!nearest || Math.abs(nearest.y - session.y) > 30 || nearest.before === source.from) return;
-    session.boundary = nearest.before;
-    session.line.hidden = false; session.line.style.top = `${nearest.y}px`;
-    session.line.style.left = `${Math.max(rect.left + 24, this.view.contentDOM.getBoundingClientRect().left)}px`;
-    session.line.style.width = `${Math.min(rect.width - 48, this.view.contentDOM.getBoundingClientRect().width)}px`;
+    if (!nearest || Math.abs(nearest.y - session.y) > 30 || nearest.before === source.from) return undefined;
+    return nearest;
+  }
+  /** 画布落点覆盖全部可见段落；源段落自身不产生落点，隐藏内容与零高度空段落不参与。 */
+  private canvasBoundary(session: DragSession): { before: number | null; y: number } | undefined {
+    const { state } = this.view;
+    const hidden = hiddenContentRanges(state);
+    const visible = (position: number): boolean => !hidden.some(range => position >= range.from && position < range.to);
+    const boundaries: { before: number | null; y: number }[] = [];
+    let last: { from: number; to: number } | undefined;
+    for (const paragraph of paragraphLayout(state).paragraphs) {
+      if (paragraph.kind === 'empty' || !visible(paragraph.from)) continue;
+      if (paragraph.from !== session.from) {
+        const coords = this.view.coordsAtPos(paragraph.from);
+        if (coords) boundaries.push({ before: paragraph.from, y: coords.top - 2 });
+      }
+      last = paragraph;
+    }
+    // 源画布已是最后一段时，追加落点与去掉自身后的位置相同，不再显示无意义的插入线。
+    const end = last && last.from !== session.from ? this.view.coordsAtPos(last.to) : null;
+    if (end) boundaries.push({ before: null, y: end.bottom + 2 });
+    const nearest = boundaries.sort((a, b) => Math.abs(a.y - session.y) - Math.abs(b.y - session.y))[0];
+    if (!nearest || Math.abs(nearest.y - session.y) > 30) return undefined;
+    return nearest;
   }
   private scroll = (): void => {
     const session = this.session;
@@ -274,13 +322,16 @@ class MarkerGestures {
     const session = this.session;
     if (!session || event.pointerId !== session.pointerId) return;
     const actions = this.view.state.facet(actionsFacet);
-    const markerRect = session.marker.getBoundingClientRect();
-    const click = !session.started && event.clientX >= markerRect.left && event.clientX <= markerRect.right && event.clientY >= markerRect.top && event.clientY <= markerRect.bottom;
+    const handleRect = session.handle.getBoundingClientRect();
+    const click = session.kind === 'item' && !session.started && event.clientX >= handleRect.left && event.clientX <= handleRect.right && event.clientY >= handleRect.top && event.clientY <= handleRect.bottom;
     const boundary = session.boundary;
     this.cancel();
-    if (session.started && boundary !== undefined) actions.moveTo(session.from, boundary);
-    if (click && session.marker.getAttribute('role') === 'checkbox') {
-      this.lastClick = { time: performance.now(), x: event.clientX, y: event.clientY, marker: session.marker };
+    if (session.started && boundary !== undefined) {
+      if (session.kind === 'canvas') actions.moveCanvas(session.from, boundary);
+      else actions.moveTo(session.from, boundary);
+    }
+    if (click && session.handle.getAttribute('role') === 'checkbox') {
+      this.lastClick = { time: performance.now(), x: event.clientX, y: event.clientY, marker: session.handle };
       actions.toggleTask(session.from);
     }
   };
@@ -293,8 +344,8 @@ class MarkerGestures {
     this.session = null;
     session?.preview?.remove(); session?.line?.remove();
     if (session) {
-      session.marker.removeEventListener('lostpointercapture', this.cancel);
-      try { if (session.marker.hasPointerCapture?.(session.pointerId)) session.marker.releasePointerCapture(session.pointerId); } catch { /* 控件被事务移除时捕获可能已由浏览器释放。 */ }
+      session.handle.removeEventListener('lostpointercapture', this.cancel);
+      try { if (session.handle.hasPointerCapture?.(session.pointerId)) session.handle.releasePointerCapture(session.pointerId); } catch { /* 控件被事务移除时捕获可能已由浏览器释放。 */ }
     }
     document.body.classList.remove('fm-dragging');
   };

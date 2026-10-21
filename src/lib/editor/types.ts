@@ -46,6 +46,8 @@ export interface EditorActions {
   toggleCompletedGroup: (parentFrom: number) => void;
   moveItem: (from: number, direction: 'up' | 'down') => void;
   moveTo: (from: number, boundary: number | null) => void;
+  /** 把整块画布移动到可见段落边界或内容末尾；边界使用当前源文偏移。 */
+  moveCanvas: (from: number, boundary: number | null) => void;
   focusAt: (from: number) => void;
   /** 在可见源文偏移处插入空任务并移入光标；标题下的新增按钮传入标题块之后的边界。 */
   insertTaskAt: (position: number) => void;

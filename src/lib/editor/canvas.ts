@@ -206,6 +206,57 @@ export class CanvasWidget extends WidgetType {
 }
 
 /**
+ * 函数职责：把整块画布移动到可见段落边界，并按落点容器调整围栏缩进。
+ * 输入说明：from 必须是闭合画布段落起点；boundary 为目标段落起点，null 表示可见内容末尾。
+ * 输出说明：只读、隐藏范围或失效落点不修改正文；成功移动可一次撤销。
+ * 实现思路：先按段落序列化移除源段，再在去除源段后的坐标中插入重建缩进的围栏，
+ * 两段改动合成为一笔事务，避免中间帧和多次撤销。
+ */
+export function moveCanvasBlock(view: EditorView, from: number, boundary: number | null): boolean {
+  const { state } = view;
+  if (view.composing || state.readOnly || state.facet(modeFacet) !== 'todo') return false;
+  const block = scanCanvasBlocks(state.doc.toString(), state.field(documentField).tree).find(block => block.from === from);
+  if (!block?.document) return false;
+  if (hiddenContentRanges(state).some(range => block.from < range.to && block.to > range.from)) return false;
+  const layout = paragraphLayout(state), index = paragraphAt(layout, block.from), paragraph = layout.paragraphs[index];
+  if (paragraph?.from !== block.from || paragraph.to !== block.to || paragraph.kind !== 'literal') return false;
+
+  const removal = state.update({ ...replaceParagraphs(state, index, index, [], 'before', 'move'), userEvent: 'move' });
+  const remaining = paragraphLayout(removal.state), hidden = hiddenContentRanges(removal.state);
+  const visible = (position: number): boolean => !hidden.some(range => position >= range.from && position < range.to);
+  let targetIndex: number;
+  let indent = '';
+  if (boundary === null) {
+    let last = -1;
+    for (let candidate = 0; candidate < remaining.paragraphs.length; candidate++) {
+      const current = remaining.paragraphs[candidate];
+      if (current.kind !== 'empty' && visible(current.from)) last = candidate;
+    }
+    if (last < 0) return false;
+    targetIndex = last + 1;
+  } else {
+    const mapped = removal.changes.mapPos(boundary, 1);
+    targetIndex = remaining.paragraphs.findIndex(candidate => candidate.from === mapped);
+    const target = remaining.paragraphs[targetIndex];
+    if (!target || !visible(target.from)) return false;
+    // 列表项首行之前落在父级内容列，条目正文行沿用结构缩进；非列表段落使用顶层，避免缩进代码块吞掉围栏。
+    const line = removal.state.doc.lineAt(target.from);
+    indent = target.item
+      ? target.from === target.item.moveFrom ? /^[ \t]*/.exec(line.text)![0] : target.indent
+      : '';
+  }
+  // 围栏内每行统一替换为落点缩进；多行 JSON 的相对缩进保留，空行不产生尾随空白。
+  const source = state.doc.sliceString(paragraph.from, paragraph.to);
+  const text = source.split('\n').map(line => line ? indent + (line.startsWith(block.indent) ? line.slice(block.indent.length) : line) : '').join('\n');
+  const insertion = removal.state.update({ ...replaceParagraphs(removal.state, targetIndex, targetIndex - 1, [text], 0, 'move'), userEvent: 'move' });
+  // 落在画布原本位置时复合改动仍可能非空；按最终正文判断，避免无变化也进入撤销历史。
+  if (insertion.state.doc.eq(state.doc)) return true;
+  const changes = removal.changes.compose(insertion.changes);
+  view.dispatch({ changes, annotations: isolateHistory.of('full'), userEvent: 'move' });
+  return true;
+}
+
+/**
  * 函数职责：整块删除指定画布，并整理独立段落两侧的分隔。
  * 输入说明：from 必须是当前快照中闭合 canvas 围栏的起点；隐藏分区内的画布不接管。
  * 输出说明：删除成功返回 true 且一次撤销可恢复；列表同行标记等外围容器保持原样。

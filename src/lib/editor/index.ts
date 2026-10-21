@@ -28,7 +28,7 @@ import { bracketCompletion, compositionBracketCompletion, matchingBrackets, pair
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
-import { CanvasEditor, canvasEditing } from './canvas';
+import { CanvasEditor, canvasEditing, moveCanvasBlock } from './canvas';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
 import './editor.css';
@@ -144,7 +144,7 @@ export class EditorController {
       this.mode.of(this.modeExtensions(mode)),
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
-      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
+      actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), moveCanvas: (from, boundary) => this.moveCanvas(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
       documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
@@ -498,6 +498,13 @@ export class EditorController {
       const expandedGroups = [...this.state.field(expandedCompletedGroupsField)].map(map);
       this.view.dispatch({ changes, selection, effects: [setFolds.of(folds), setExpandedCompletedGroups.of(expandedGroups)], annotations: isolateHistory.of('full'), userEvent: 'move' });
     } catch (error) { this.options.onStatus?.(error instanceof Error ? error.message : translate('无法移动条目')); }
+  }
+
+  /** 画布整块移动与任务拖动共用指针入口；失效落点静默忽略，异常沿用状态栏反馈。 */
+  private moveCanvas(from: number, boundary: number | null): void {
+    if (this.state.facet(modeFacet) !== 'todo') return;
+    try { moveCanvasBlock(this.view, from, boundary); }
+    catch (error) { this.options.onStatus?.(error instanceof Error ? error.message : translate('无法移动画布')); }
   }
 
   toggleFold(itemFrom: number): void {

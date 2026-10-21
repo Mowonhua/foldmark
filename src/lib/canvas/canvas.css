@@ -1,6 +1,8 @@
 /* 文件职责：定义画布卡片、独占页面布局及引擎的主题变量适配。 */
 .canvas-bundle-input{display:none}
 .fm-canvas-card{position:relative;height:3.6em;box-sizing:border-box;overflow:hidden;padding:5px 44px 5px 12px;border:1px solid var(--line);border-radius:var(--field-radius,6px);background:var(--code);color:var(--ink);font-size:var(--editor-font-size);line-height:1.8;contain:layout paint}
+.cm-content[contenteditable=true] .fm-canvas-card{cursor:grab}
+.cm-content[contenteditable=true] .fm-canvas-card:active{cursor:grabbing}
 [data-canvas-preview="medium"] .fm-canvas-card{height:10.8em;padding:12px 42px 28px 12px}
 [data-canvas-preview="spacious"] .fm-canvas-card{height:21.6em;padding:18px 42px 30px 18px}
 .fm-canvas-thumbnail{display:block;width:100%;height:100%;overflow:hidden;color:var(--ink)}

@@ -47,6 +47,7 @@ export const editorMessages: Record<string, string> = {
   "取消": "Cancel",
   "条目已移动，可撤销": "Item moved · Undo available",
   "无法移动条目": "Unable to move item",
+  "无法移动画布": "Unable to move canvas",
   "展开条目": "Expand item",
   "折叠条目": "Collapse item",
   "恢复任务": "Restore task",
