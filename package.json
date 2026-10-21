@@ -34,7 +34,6 @@
     "@tauri-apps/plugin-dialog": "^2.8.0",
     "@tauri-apps/plugin-fs": "2.6.0",
     "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-updater": "^2.13.1",
     "diff": "^9.0.0",
     "fflate": "^0.8.3",
     "katex": "^0.16.22",

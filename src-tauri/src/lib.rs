@@ -1,6 +1,8 @@
 //! 文件职责：连接桌面命令与文件基础设施。
 //! 定义范围：Tauri 启动入口和平台命令适配。
 mod canvas_assets;
+#[cfg(not(target_os = "android"))]
+mod desktop_update;
 mod external_link;
 mod recovery;
 #[cfg(target_os = "windows")]
@@ -354,7 +356,9 @@ pub fn run() {
         Ok(())
     });
     #[cfg(not(target_os = "android"))]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(desktop_update::DesktopUpdateState::default());
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -386,6 +390,10 @@ pub fn run() {
             sync::sync_unpair, sync::sync_address, sync::sync_exchange, sync::sync_respond,
             sync::sync_probe, sync::sync_notify, sync::sync_disconnect,
             sync::sync_load_state, sync::sync_save_state,
+            #[cfg(not(target_os = "android"))] desktop_update::desktop_update_check,
+            #[cfg(not(target_os = "android"))] desktop_update::desktop_update_download,
+            #[cfg(not(target_os = "android"))] desktop_update::desktop_update_install,
+            #[cfg(not(target_os = "android"))] desktop_update::desktop_update_close,
             system_fonts::list_system_fonts,
             window_material::set_window_material
         ])

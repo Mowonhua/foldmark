@@ -4113,13 +4113,16 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 name = "taskrail"
 version = "0.8.2"
 dependencies = [
+ "base64 0.22.1",
  "fontdb",
  "if-addrs",
  "mdns-sd",
+ "minisign-verify",
  "notify",
  "percent-encoding",
  "rand",
  "rcgen",
+ "reqwest",
  "rustls",
  "serde",
  "serde_json",
@@ -4135,6 +4138,7 @@ dependencies = [
  "tauri-plugin-taskrail-mobile",
  "tauri-plugin-updater",
  "tempfile",
+ "tokio",
  "url",
  "window-vibrancy 0.6.0",
  "windows-sys 0.61.2",

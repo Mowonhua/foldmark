@@ -39,6 +39,11 @@ tauri-plugin-taskrail-mobile = { path = "plugins/mobile" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tauri-plugin-updater = "2.13.1"
+base64 = "0.22"
+minisign-verify = "0.2"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+tokio = { version = "1", features = ["time"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.6.0"
