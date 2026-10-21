@@ -92,6 +92,21 @@ try {
   await page.touchscreen.tap(blank.x, blank.y);
   await page.waitForFunction(() => !document.querySelector('.dropdown[data-more-menu]'));
   assert(await page.evaluate(() => !document.querySelector('.cm-content')?.contains(document.activeElement)), '点击空白处只关闭浮层，不把焦点交给编辑器');
+  // 全页画布是与主界面并列的固定覆盖层，必须自行避让系统状态栏和导航栏。
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 28, bottom: 24, left: 0, right: 0 } });
+  await page.getByRole('button', { name: '更多操作' }).tap();
+  await page.getByRole('menuitem', { name: '插入画布' }).tap();
+  await page.waitForSelector('.canvas-page .canvas-header');
+  const canvasLayout = await page.locator('.canvas-page').evaluate(node => {
+    const header = node.querySelector('.canvas-header').getBoundingClientRect();
+    const host = node.querySelector('.canvas-engine-host').getBoundingClientRect();
+    return { headerTop: header.top, hostBottom: host.bottom, height: innerHeight };
+  });
+  assert(canvasLayout.headerTop >= 28, '全页画布标题栏不能进入手机状态栏');
+  assert(canvasLayout.hostBottom <= canvasLayout.height - 24 + 0.5, '全页画布底部编辑区不能进入手机导航栏');
+  await page.getByRole('button', { name: '收起画布' }).tap();
+  await page.waitForFunction(() => !document.querySelector('.canvas-page'));
   assert.deepEqual(failures, []);
-  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏、窄屏布局、更多菜单限高滚动与浮层焦点。');
+  console.log('移动浏览器验收通过：触屏勾选、撤销、导航抽屉、原生菜单、源码切换、固定辅助栏、窄屏布局、更多菜单限高滚动、浮层焦点与画布系统栏避让。');
 } finally { await browser.close(); }

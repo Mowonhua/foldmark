@@ -13,7 +13,8 @@
 .fm-canvas-expand svg{width:17px;height:17px}
 .fm-canvas-expand:hover{color:var(--ink);background:var(--hover)}
 .fm-canvas-expand:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.canvas-page{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;min-width:0;background:var(--canvas);color:var(--ink);font-family:var(--document-font);isolation:isolate}
+/* 全页画布是覆盖整个视口的独立固定层，需自行避让手机系统状态栏和导航栏。 */
+.canvas-page{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;min-width:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);background:var(--canvas);color:var(--ink);font-family:var(--document-font);isolation:isolate}
 .canvas-header{height:58px;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--canvas);user-select:none}
 .canvas-heading{display:flex;align-items:center;gap:12px;min-width:0;flex:1;color:var(--muted)}
 .canvas-heading>svg{flex-shrink:0}
@@ -25,7 +26,7 @@
 .canvas-desktop .canvas-header{height:54px;min-height:54px;padding-right:0}
 .canvas-header .window-controls{margin-left:8px}
 .canvas-engine-host{flex:1;min-height:0;position:relative;overflow:hidden}
-.canvas-loading{position:absolute;inset:58px 0 0;display:grid;place-items:center;font-size:13px;color:var(--muted);background:var(--canvas)}
+.canvas-loading{position:absolute;inset:calc(58px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom);display:grid;place-items:center;font-size:13px;color:var(--muted);background:var(--canvas)}
 .canvas-error{display:flex;align-items:center;gap:16px;padding:9px 20px;font-size:12px;border-bottom:1px solid var(--line);color:var(--danger);background:var(--surface)}
 .canvas-error span{flex:1;min-width:0;overflow-wrap:anywhere}
 .canvas-error button{flex-shrink:0;text-decoration:underline}
