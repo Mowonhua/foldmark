@@ -1,11 +1,11 @@
 {
-  "version": "0.8.2",
-  "notes": "# Taskrail v0.8.2\r\n\r\n相较于 v0.8.1：\r\n\r\n- 修复手机点击“扫描电脑二维码”后闪退的问题。扫码页使用与原生页面兼容的主题，正式安装包保留二维码识别组件必需的初始化入口。\r\n\r\n0.8.2 沿用 0.8.1 的应用标识，可覆盖升级。Windows 下载 `Taskrail_0.8.2_x64-setup.exe` 安装，Android 下载 `Taskrail-0.8.2-arm64.apk` 安装。\r\n\r\n局域网同步协议未变，兼容范围与 v0.8.1 相同。含画布图片的文档需要两端都运行 0.8.0 或更新版本。与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
-  "pub_date": "2026-10-20T13:01:43.912Z",
+  "version": "0.8.3",
+  "notes": "# Taskrail v0.8.3\r\n\r\n相较于 v0.8.2：\r\n\r\n- 新增拖动排序：按住画布卡片拖动即可调整它在正文中的位置，跨容器移动按落点重建缩进，一次撤销恢复原顺序。\r\n- 画布可整块删除：右键菜单删除画布会移除整个围栏，画布前后的 Backspace 与 Delete 同样整块删除，光标不再停进围栏或残留多余空行。\r\n- 画布收起后不再误报同步失败：编辑期间的同步暂缓与真实错误分开记录，交互结束后自动补发或补写。\r\n- 修复手机展开全页画布时顶部栏被系统状态栏遮挡，画布与加载遮罩避让状态栏和导航栏安全区。\r\n- 修复扫码后电脑端确认延迟：电脑收到配对请求立即显示，手机等待允许期间约每秒复查一次，允许后立即连接。\r\n- 电脑端更新下载支持断点续传：中断或重启后从已写入位置继续下载，安装包或版本变化时自动从头下载，安装前再次校验签名和签名内版本。\r\n\r\n0.8.3 沿用 0.8.2 的应用标识，可覆盖升级。Windows 下载 `Taskrail_0.8.3_x64-setup.exe` 安装，Android 下载 `Taskrail-0.8.3-arm64.apk` 安装。\r\n\r\n局域网同步协议未变，兼容范围与 v0.8.2 相同。含画布图片的文档需要两端都运行 0.8.0 或更新版本。与 v0.7.2 及更早版本不兼容，两端需一起升级。\r\n",
+  "pub_date": "2026-10-21T06:21:57.981Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTMvWkF2ckthQXp6Q280a05VdHhMRjRHL1pmTGNDVFhhQm9jQkhoOFc1bVZkZFZKNndlVmlreDVWY0N4eWo4SThWaGFhYlF2VnJvb0Jyd25SQUpsbmdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNTAxMzAwCWZpbGU6VGFza3JhaWxfMC44LjJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuOC4yCm1IalA5R0FpYkUzRkExVFVNWDhCbkhEOFYzbjFrZk9ETXg0djdMSlJQVHdjaGRGNjZFaHY3QXVOUkJrZjJINUNXU3VzNnhtWlkvV2JJWFJkVnMwa0RBPT0K",
-      "url": "https://github.com/Mowonhua/taskrail/releases/download/v0.8.2/Taskrail_0.8.2_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmRrb1VuY0F4NTZjNFYwUHBCVkU4OHZiT3lNRGFzMUVkZ1BvNHBBN3Z6UlVuZlB6TitUZkRYNXpLMVVHMVZxa05oTHR2TVZKbjVtZTFSa0lBQ0hyRDhOT3VOcUNKcUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNTYzNzE0CWZpbGU6VGFza3JhaWxfMC44LjNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuOC4zCnJuUzM4aXpnMHR3YlhrYWV0WktwUFRlZmRnMmk5bHhTUGdLTGU1YTh0OXZNUTVFeURRWXlGaWFMMnVmZEZKaTA2b2dMWDk4eVdxTjR6M0hmY0RmQUFnPT0K",
+      "url": "https://github.com/Mowonhua/taskrail/releases/download/v0.8.3/Taskrail_0.8.3_x64-setup.exe"
     }
   }
 }
