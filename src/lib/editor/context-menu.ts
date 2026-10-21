@@ -50,8 +50,8 @@ export interface ContextMenuOptions {
   undo: () => boolean;
   redo: () => boolean;
   onStatus?: (message: string) => void;
-  /** 画布复用控制器的同一插入命令；缺省时菜单不显示画布入口。 */
-  canvas?: { canInsert(): boolean; insert(): boolean };
+  /** 画布复用控制器的同一插入与删除命令；缺省时菜单不显示画布入口。 */
+  canvas?: { canInsert(): boolean; insert(): boolean; remove(from: number): boolean };
 }
 
 // ==================== 函数和方法定义 ====================
@@ -65,6 +65,8 @@ export class EditorContextMenu {
   private submenu: Submenu | null = null;
   private generation = 0;
   private disposed = false;
+  /** 本次菜单指向的画布起点；只在打开瞬间读取，关闭后不得沿用旧坐标。 */
+  private canvasFrom?: number;
   constructor(private readonly view: EditorView, private readonly options: ContextMenuOptions) {
     view.dom.addEventListener('mousedown', this.rightMouseDown, true);
     view.dom.addEventListener('contextmenu', this.context, true);
@@ -147,6 +149,7 @@ export class EditorContextMenu {
   private close(): void {
     this.closeSubmenu();
     this.popup?.remove(); this.popup = null;
+    this.canvasFrom = undefined;
   }
   private closeSubmenu(): void {
     this.submenu?.trigger.setAttribute('aria-expanded', 'false');
@@ -265,21 +268,26 @@ export class EditorContextMenu {
     const selected = state.selection.ranges.some(range => !range.empty);
     const writable = !state.readOnly && !this.view.composing;
     const modifier = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
-    return [
+    const entries: MenuEntry[] = [
       { command: 'undo', label: '撤销', shortcut: `${modifier} Z`, enabled: undoDepth(state) > 0 && !this.view.composing },
       { command: 'redo', label: '重做', shortcut: `${modifier} Shift Z`, enabled: redoDepth(state) > 0 && !this.view.composing },
       { command: 'cut', label: '剪切', shortcut: `${modifier} X`, enabled: writable && selected },
       { command: 'copy', label: '复制', shortcut: `${modifier} C`, enabled: selected },
       { command: 'paste', label: '粘贴', shortcut: `${modifier} V`, enabled: writable },
-      { command: 'delete', label: '删除', enabled: writable && selected },
+      // 画布快照不能被拆开编辑，命中画布时删除动作整块移除，不要求先选中。
+      { command: 'delete', label: '删除', enabled: writable && (selected || this.canvasFrom !== undefined && !!this.options.canvas) },
       { command: 'selectAll', label: '全选', shortcut: `${modifier} A`, enabled: state.doc.length > 0 },
     ];
+    return entries;
   }
 
   /** 鼠标菜单锚定点击处，键盘菜单锚定当前选区；顶层浮层避免正文容器裁切。 */
   private reveal(point: { x: number; y: number } | null, event?: MouseEvent): void {
     this.invalidate();
-    if (point) {
+    const card = event?.target instanceof Element ? event.target.closest<HTMLElement>('.fm-canvas-card') : null;
+    const from = card?.dataset.canvasFrom;
+    this.canvasFrom = from !== undefined && this.options.canvas ? Number(from) : undefined;
+    if (point && !card) {
       const geometricPosition = this.view.posAtCoords(point, false);
       // 空段落及底部留白的源文身份由已有指针定位端口决定，不能使用几何近邻覆盖它。
       const position = event ? this.view.plugin(markerGestures)?.contextPosition(event, geometricPosition) ?? geometricPosition : geometricPosition;
@@ -383,7 +391,10 @@ export class EditorContextMenu {
 
   private async execute(command: MenuCommand): Promise<void> {
     if (!this.entries().find(entry => entry.command === command)?.enabled) return;
+    const canvasFrom = this.canvasFrom;
     this.close(); this.view.focus();
+    // 画布删除不依赖选区：仅在无选中文本时把删除解释为整块移除，有选区仍按原文删除。
+    if (command === 'delete' && canvasFrom !== undefined && this.view.state.selection.ranges.every(range => range.empty)) { this.options.canvas?.remove(canvasFrom); return; }
     const state = this.view.state, generation = ++this.generation;
     try {
       if (command === 'undo' || command === 'redo') { this.options[command](); return; }

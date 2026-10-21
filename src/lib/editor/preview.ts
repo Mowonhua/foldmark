@@ -838,7 +838,9 @@ function buildPreview(state: EditorState): DecorationSet {
     if (name === 'QuoteMark' && !active(state.doc.lineAt(node.from).from, state.doc.lineAt(node.from).to)) hide(node.from, Math.min(node.to + 1, state.doc.length));
     if (name === 'FencedCode' || name === 'CodeBlock') {
       const canvas = name === 'FencedCode' ? canvases.get(state.doc.lineAt(node.from).from) : undefined;
-      if (canvas?.document) { blockReplacement(node, new CanvasWidget(canvas.document, canvas.from)); return; }
+      // 卡片整体替换必须连闭围栏后的分隔空行一起吃掉，否则块控件与下一段之间会残留一行空白，
+      // 且该空行不在原子范围内，光标可以停进去改写围栏。
+      if (canvas?.document) { blockReplacement(node, new CanvasWidget(canvas.document, canvas.from), true); return; }
       let firstLine = state.doc.lineAt(node.from).number;
       let lastLine = state.doc.lineAt(node.to).number;
       // 代码正文直接使用原编辑器行；进入编辑也不展开围栏，完整源码模式在入口统一跳过预览。

@@ -20,6 +20,8 @@
 |---|---|
 | 主入口 | src/lib/editor/index.ts::EditorController.insertCanvas |
 | 关键实现 | src/lib/editor/canvas.ts::CanvasEditor |
+| 关键实现 | src/lib/editor/canvas.ts::deleteCanvasBlock |
+| 关键实现 | src/lib/editor/canvas.ts::canvasEditing |
 | 关键实现 | src/lib/editor/canvas.ts::CanvasWidget |
 | 关键实现 | src/lib/canvas/model.ts::scanCanvasBlocks |
 | 关键实现 | src/lib/canvas/model.ts::serializeCanvasDocument |
@@ -35,7 +37,7 @@
 | S-01 | 正常 | 在标题、正文或列表容器后插入画布并直接打开；新画布和后续编辑进入当前文档的撤销历史 | src/lib/editor/canvas.test.ts::插入画布后即时打开\，卡片在光标内保持折叠\，源码显示完整文本\，插入一次撤销, src/lib/editor/canvas.test.ts::列表内插入保留容器\，归档可打开只读会话\，坏格式保持原文, src/lib/editor/canvas.test.ts::默认标题开头的光标可在标题后插入画布\，保留原标题与后续正文 |
 | S-02 | 约束 | 收起卡片以内容预览为主，标题弱化在左下角，右上按钮展开为全页；紧凑、适中、宽松分别占正文两行、六行、十二行；收起后恢复原阅读位置 | - |
 | S-03 | 正常 | 本机编辑即时显示；拖动中的中间帧不提交正文，结束交互后只提交最终场景 | src/lib/canvas/save-queue.test.ts::拖动时不提交中间帧\，松手后只提交最终场景 |
-| S-04 | 约束 | 快照以完整 JSON 保存，不包含工具、选区或阅读位置；历史多行 JSON 首次修改后保存为一行，源码模式保留可编辑原文 | src/lib/canvas/model.test.ts::空画布独立分配身份\，整个快照保留引擎字段并序列化为单行, src/lib/editor/canvas.test.ts::多行快照第一次保存归并成一行\，连续提交和关闭仍保留图片恢复引用 |
+| S-04 | 约束 | 快照以完整 JSON 保存，不包含工具、选区或阅读位置；历史多行 JSON 首次修改后保存为一行，源码模式保留可编辑原文 | src/lib/canvas/model.test.ts::空画布独立分配身份\，整个快照保留引擎字段并序列化为单行, src/lib/editor/canvas.test.ts::多行快照第一次保存归并成一行\，连续提交和关闭仍保留图片恢复引用, src/lib/editor/canvas.test.ts::画布不属于可编辑代码块\，源码模式保留原生文本编辑 |
 | S-05 | 异常 | 损坏或不支持的画布格式保持原文，不降级打开或写回 | src/lib/canvas/model.test.ts::画布持久化格式, src/lib/editor/canvas.test.ts::列表内插入保留容器\，归档可打开只读会话\，坏格式保持原文 |
 | S-06 | 并发 | 同文档复制出相同画布 ID 时，只更新打开的源文范围；范围前的编辑不改变提交目标 | src/lib/editor/canvas.test.ts::同 ID 的两个块只更新被打开的范围\，块前插入文字后仍命中原块 |
 | S-07 | 异常 | 外部改写、删除、整块替换或切换文档后拒绝旧会话提交；即使正文相同或撤销恢复也不复活旧会话 | src/lib/editor/canvas.test.ts::外部改写或删除后拒绝旧提交\，即使撤销回来也不能复活旧会话, src/lib/editor/canvas.test.ts::相同正文切换文档仍使会话失效\，旧 close 不干扰新文档, src/lib/editor/canvas.test.ts::删除原块后在同处粘贴相同快照\，也不把旧会话移交给新块 |
@@ -50,6 +52,7 @@
 | S-16 | 正常 | 设置中的画布预览三档即时生效并持久化，旧配置默认紧凑；重启和源码切换不改变正文 | src/lib/session/app-integration.test.ts::画布预览三档即时应用并持久化\，重启与源码切换不修改正文, src/lib/config-validation.test.ts::画布预览档位兼容旧配置并拒绝非法值 |
 | S-17 | 约束 | 预览呈现文字和真实连线路径；重复图片去重读取，卸载释放资源，过期异步读取不创建图片 URL | src/lib/canvas/thumbnail.test.ts::呈现真实文字与线条路径\，忽略已删除内容\，转义不可信文字, src/lib/canvas/thumbnail.test.ts::重复图片只读取一次\，卸载释放 URL\，读取完成前卸载不创建 URL |
 | S-18 | 正常 | 更多操作与右键插入菜单共用画布插入命令，插入后直接打开，一次撤销恢复原文 | src/lib/editor/canvas.test.ts::右键插入菜单复用画布命令并直接打开\，一次撤销恢复原文 |
+| S-19 | 正常 | 右键画布复用菜单里的删除命令整块移除，不新增专用项；画布后按 Backspace 或手机删除键、画布前按 Delete 都整块移除画布并整理段落分隔，一次撤销恢复原文；画布与相邻段落之间隔着空行时删除键只合并空行；卡片与下一段之间不留空行，光标不能停进闭围栏 | src/lib/editor/canvas.test.ts::画布后的 Backspace 整块删除\，一次撤销恢复原文, src/lib/editor/canvas.test.ts::画布前的 Delete 整块删除并保留前后段落, src/lib/editor/canvas.test.ts::画布与相邻段落之间隔着空行时\，删除键只合并空行而不删画布, src/lib/editor/canvas.test.ts::右键画布复用菜单里的删除项整块移除\，不新增专用项, src/lib/editor/canvas.test.ts::画布卡片不与下一段之间残留空行\，光标不能停进闭围栏 |
 
 ## F-CAN-002 共享图片附件
 

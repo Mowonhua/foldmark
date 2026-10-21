@@ -28,7 +28,7 @@ import { bracketCompletion, compositionBracketCompletion, matchingBrackets, pair
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
-import { CanvasEditor } from './canvas';
+import { CanvasEditor, canvasEditing } from './canvas';
 import type { EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
 import './editor.css';
@@ -79,7 +79,7 @@ export class EditorController {
     this.canvasEditor = new CanvasEditor(this.view, options.openCanvas);
     if (!options.nativeSelection) this.contextMenu = new EditorContextMenu(this.view, { clipboard: options.clipboard ?? clipboard,
       undo: () => this.undo(), redo: () => this.redo(), onStatus: options.onStatus,
-      canvas: options.openCanvas ? { canInsert: () => this.canvasEditor.canInsert(), insert: () => this.insertCanvas() } : undefined });
+      canvas: options.openCanvas ? { canInsert: () => this.canvasEditor.canInsert(), insert: () => this.insertCanvas(), remove: from => this.canvasEditor.remove(from) } : undefined });
     this.unsubscribeLocale = locale.subscribe(() => this.refreshLanguage());
     this.view.dom.addEventListener('keydown', this.historyKey, true);
     this.view.scrollDOM.addEventListener('wheel', this.cancelPositionRestore, { passive: true });
@@ -145,7 +145,7 @@ export class EditorController {
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), focusAt: from => this.focusAt(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
-      documentField, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
+      documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),

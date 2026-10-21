@@ -14,6 +14,10 @@ function editor(text: string, options: Partial<EditorOptions> = {}): EditorContr
   editors.push(instance); return instance;
 }
 const fence = (canvas: CanvasDocument) => `\`\`\`canvas\n${serializeCanvasDocument(canvas)}\n\`\`\``;
+/** 按键必须在内容区冒泡，删除守卫按真实键盘事件路径执行。 */
+function key(instance: EditorController, name: string): void {
+  instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+}
 afterEach(() => { for (const instance of editors.splice(0)) instance.destroy(); document.body.replaceChildren(); });
 
 describe('Markdown 内嵌画布', () => {
@@ -170,5 +174,88 @@ describe('Markdown 内嵌画布', () => {
     instance.setMode('todo'); instance.setText('```canvas\n{"version":2}\n```');
     expect(instance.view.dom.querySelector('.fm-canvas-card')).toBeNull();
     expect(instance.text).toBe('```canvas\n{"version":2}\n```');
+  });
+
+  it.each([false, true])('画布后的 Backspace 整块删除（原生选区 %s），一次撤销恢复原文', nativeSelection => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const instance = editor(source, { nativeSelection });
+    const block = scanCanvasBlocks(source)[0];
+    // 闭围栏行尾、其后空行及后文段首都紧邻画布，删除键必须整块移除而不是拆开快照。
+    for (const position of [block.to, block.to + 1, source.indexOf('后文')]) {
+      instance.view.dispatch({ selection: { anchor: position } });
+      key(instance, 'Backspace');
+      expect(scanCanvasBlocks(instance.text)).toHaveLength(0);
+      expect(instance.text).toBe('前文\n\n后文');
+      expect(instance.undo()).toBe(true);
+      expect(instance.text).toBe(source);
+    }
+  });
+
+  it('画布前的 Delete 整块删除并保留前后段落', () => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const instance = editor(source);
+    const block = scanCanvasBlocks(source)[0];
+    for (const position of [block.from - 1, block.from]) {
+      instance.view.dispatch({ selection: { anchor: position } });
+      key(instance, 'Delete');
+      expect(instance.text).toBe('前文\n\n后文');
+      expect(instance.undo()).toBe(true);
+    }
+  });
+
+  it('画布与相邻段落之间隔着空行时，删除键只合并空行而不删画布', () => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n\n后文`;
+    const after = editor(source);
+    // 隔着一个完整空行时删除键只作用于最近的一行，不能跨过空行删掉画布。
+    after.view.dispatch({ selection: { anchor: source.indexOf('后文') } });
+    key(after, 'Backspace');
+    expect(after.text).toBe(source.replace('\n\n\n后文', '\n\n后文'));
+    expect(scanCanvasBlocks(after.text)).toHaveLength(1);
+
+    const beforeSource = `前文\n\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const before = editor(beforeSource);
+    before.view.dispatch({ selection: { anchor: 2 } });
+    key(before, 'Delete');
+    expect(before.text).toBe(beforeSource.replace('前文\n\n\n', '前文\n\n'));
+    expect(scanCanvasBlocks(before.text)).toHaveLength(1);
+  });
+
+  it('右键画布复用菜单里的删除项整块移除，不新增专用项', () => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const opened = vi.fn();
+    const instance = editor(source, { openCanvas: opened });
+    const card = instance.view.dom.querySelector<HTMLElement>('.fm-canvas-card')!;
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 80, clientY: 40 }));
+    const actions = [...document.querySelectorAll<HTMLButtonElement>('[data-command]')];
+    expect(actions.filter(action => action.dataset.command === 'delete')).toHaveLength(1);
+    const action = document.querySelector<HTMLButtonElement>('[data-command="delete"]')!;
+    expect(action.getAttribute('aria-disabled')).toBe('false');
+    action.click();
+    expect(instance.text).toBe('前文\n\n后文');
+    expect(document.querySelector('.fm-context-menu')).toBeNull();
+  });
+
+  it('画布卡片不与下一段之间残留空行，光标不能停进闭围栏', () => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const instance = editor(source);
+    // 卡片整体替换要连闭围栏后的分隔一起吃掉，否则卡片和下一段之间会多出可点击的一行。
+    const direct = [...instance.view.contentDOM.children].filter(child => child.nodeName === 'DIV' && child.classList.contains('cm-line') && !child.textContent?.trim());
+    expect(direct).toHaveLength(0);
+    // 从后文上移必须越过闭围栏落到画布之前，不能停在围栏行尾再去改快照。
+    instance.view.dispatch({ selection: { anchor: source.indexOf('后文') } });
+    key(instance, 'ArrowUp');
+    expect(instance.view.state.selection.main.head).toBe(0);
+    expect(instance.text).toBe(source);
+  });
+
+  it('画布不属于可编辑代码块，源码模式保留原生文本编辑', () => {
+    const source = `前文\n\n${fence(createCanvasDocument())}\n\n后文`;
+    const instance = editor(source);
+    const block = scanCanvasBlocks(source)[0];
+    instance.setMode('source');
+    instance.view.dispatch({ selection: { anchor: block.to + 1 } });
+    key(instance, 'Backspace');
+    expect(instance.text).toContain('```canvas');
+    expect(instance.text).not.toBe(source);
   });
 });

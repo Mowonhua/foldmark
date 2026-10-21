@@ -63,7 +63,7 @@ export function withFencedBlockSeparator(state: EditorState, spec: TransactionSp
 /**
  * 函数职责：提供绘制与键盘行为共用的代码及公式边界。
  * 输入说明：状态已挂载 documentField；读取不改写源文。
- * 输出说明：返回按节点位置排序、随文档快照缓存的块集合。
+ * 输出说明：返回按节点位置排序、随文档快照缓存的块集合；闭合的 canvas 画布不属于代码块。
  * 实现思路：复用语法节点身份，按实际定界符与物理行计算正文及隐藏范围。
  */
 const blockCache = new WeakMap<DocumentModel, readonly FencedBlock[]>();
@@ -77,6 +77,9 @@ export function fencedBlocks(state: EditorState): readonly FencedBlock[] {
     if (ref.name !== 'FencedCode' && ref.name !== 'MathBlock') return;
     const { doc } = state;
     const first = doc.lineAt(ref.from), last = doc.lineAt(ref.to);
+    // 闭合的 canvas 围栏是原子画布快照：它没有可编辑的代码正文，删除与导航由画布扩展整块接管。
+    const info = ref.name === 'FencedCode' ? ref.node.getChild('CodeInfo') : null;
+    if (info && doc.sliceString(info.from, info.to).trim() === 'canvas' && ref.node.getChildren('CodeMark').length === 2) return false;
     const prefix = doc.sliceString(first.from, ref.from);
     const from = prefix.trim() ? ref.from : first.from;
     // 同行列表标记必须保留，但下一行只能复制容器缩进，不能再次生成列表标记。

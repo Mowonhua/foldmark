@@ -2,15 +2,15 @@
  * 文件职责：把原子画布快照连接到当前 Markdown 编辑器。
  * 定义范围：卡片控件、范围身份跟踪、会话提交与就地插入。
  */
-import { Transaction } from '@codemirror/state';
+import { Prec, Transaction, type Extension } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
-import { WidgetType, type EditorView, type ViewUpdate } from '@codemirror/view';
+import { keymap, WidgetType, type EditorView, type ViewUpdate } from '@codemirror/view';
 import type { CanvasDocument, CanvasSession } from '../canvas/types';
 import { createCanvasDocument, parseCanvasDocument, scanCanvasBlocks, serializeCanvasDocument } from '../canvas/model';
 import type { SourceReturn } from '../contracts';
-import { actionsFacet, documentField, modeFacet, resourcesFacet, sourceViewFacet } from './state';
+import { actionsFacet, documentField, mapSoftBreaks, modeFacet, resourcesFacet, setSoftBreaks, softBreaksField, sourceViewFacet } from './state';
 import { createCanvasThumbnail } from '../canvas/thumbnail';
-import { paragraphAt, paragraphLayout } from './paragraphs';
+import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
 import { captureSourcePosition, restoreSourcePosition } from './source-position';
 import { hiddenContentRanges } from './visibility';
 import { archiveSections } from '../markdown';
@@ -156,6 +156,9 @@ export class CanvasEditor {
     return state.readOnly || state.facet(modeFacet) === 'archive' || state.facet(sourceViewFacet) === 'archive';
   }
 
+  /** 菜单删除入口：只接受当前快照中已闭合的画布起点，禁止只读状态改写正文。 */
+  remove(from: number): boolean { return !this.readOnly() && deleteCanvasBlock(this.view, from); }
+
   /** 每次完整快照作为一次历史单元；先比较基线，再局部替换，禁止引擎覆盖外部正文。 */
   private commit(anchor: CanvasAnchor, next: CanvasDocument): boolean {
     if (this.active !== anchor || !anchor.valid || this.readOnly() || next.id !== anchor.document.id) return false;
@@ -201,3 +204,59 @@ export class CanvasWidget extends WidgetType {
   destroy(dom: HTMLElement): void { previews.get(dom)?.(); previews.delete(dom); }
   ignoreEvent(): boolean { return true; }
 }
+
+/**
+ * 函数职责：整块删除指定画布，并整理独立段落两侧的分隔。
+ * 输入说明：from 必须是当前快照中闭合 canvas 围栏的起点；隐藏分区内的画布不接管。
+ * 输出说明：删除成功返回 true 且一次撤销可恢复；列表同行标记等外围容器保持原样。
+ * 实现思路：独立段落复用段落序列化器，其余结构只移除画布自身范围。
+ */
+export function deleteCanvasBlock(view: EditorView, from: number): boolean {
+  const { state } = view;
+  if (view.composing || state.readOnly || state.facet(modeFacet) === 'source') return false;
+  const block = scanCanvasBlocks(state.doc.toString(), state.field(documentField).tree).find(block => block.from === from);
+  if (!block) return false;
+  if (hiddenContentRanges(state).some(range => block.from < range.to && block.to > range.from)) return false;
+  const layout = paragraphLayout(state), index = paragraphAt(layout, block.from);
+  const paragraph = layout.paragraphs[index];
+  const spec = paragraph?.from === block.from && paragraph.to === block.to
+    ? replaceParagraphs(state, index, index, [], 'before', 'delete')
+    : { changes: { from: block.from, to: block.to, insert: '' }, selection: { anchor: block.from }, userEvent: 'delete' };
+  // 块删除后它前面的续行标记已成为段落分隔，不能复活成空软行。
+  const breaks = state.field(softBreaksField).filter(position => position !== block.from - 1);
+  view.dispatch({ ...spec, effects: setSoftBreaks.of(mapSoftBreaks(breaks, state.changes(spec.changes))), annotations: isolateHistory.of('full') });
+  return true;
+}
+
+/**
+ * 函数职责：把画布两侧的删除键统一为整块删除。
+ * 输入说明：direction=-1 表示 Backspace，1 表示 Delete；要求单光标位于画布相邻的空白或段落起点。
+ * 输出说明：接管时返回 true；画布与光标之间存在完整空行或可见正文时不接管。
+ * 实现思路：只有边界到光标之间最多两个换行、且不含文字，才算紧邻；再远的删除交给普通段落合并，
+ * 否则隔着空行按删除会越过这行直接删掉画布。
+ */
+function deleteAdjacentCanvas(view: EditorView, direction: -1 | 1): boolean {
+  const { state } = view;
+  if (view.composing || state.readOnly || state.selection.ranges.length !== 1) return false;
+  const selection = state.selection.main;
+  if (!selection.empty) return false;
+  const adjacent = (from: number, to: number): boolean => /^\n{0,2}[ \t]*$/.test(state.doc.sliceString(from, to));
+  const blocks = scanCanvasBlocks(state.doc.toString(), state.field(documentField).tree);
+  const block = direction === -1
+    ? blocks.filter(block => block.to <= selection.head && adjacent(block.to, selection.head)).at(-1)
+    : blocks.find(block => block.from >= selection.head && adjacent(selection.head, block.from));
+  return !!block && deleteCanvasBlock(view, block.from);
+}
+
+/**
+ * 结构职责：画布块的高优先级删除守卫。
+ * 字段说明：与代码块删除同级优先级，注册顺序必须更早，否则围栏删除保护会先吞掉按键。
+ * 约束条件：源码模式保持原生文本编辑；逐字删除、非空选区和组合输入不接管。
+ */
+export const canvasEditing: Extension = Prec.highest(keymap.of([
+  { key: 'Backspace', run: view => deleteAdjacentCanvas(view, -1), shift: view => deleteAdjacentCanvas(view, -1) },
+  { key: 'Delete', run: view => deleteAdjacentCanvas(view, 1), shift: view => deleteAdjacentCanvas(view, 1) },
+  { key: 'Mod-Backspace', run: view => deleteAdjacentCanvas(view, -1) },
+  { key: 'Mod-Delete', run: view => deleteAdjacentCanvas(view, 1) },
+  { key: 'Ctrl-h', run: view => deleteAdjacentCanvas(view, -1) },
+]));
