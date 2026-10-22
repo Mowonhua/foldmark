@@ -2,7 +2,7 @@
  * 文件职责：维护与源文事务同步的语法投影和折叠状态。
  * 定义范围：编辑模式、列表模型、折叠位置及撤销映射扩展。
  */
-import { Facet, MapMode, StateEffect, StateField, type ChangeDesc, type ChangeSet, type EditorState } from '@codemirror/state';
+import { Facet, MapMode, StateEffect, StateField, type ChangeDesc, type ChangeSet, type ChangeSpec, type EditorState } from '@codemirror/state';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { invertedEffects } from '@codemirror/commands';
 import { Tree, type SyntaxNode } from '@lezer/common';
@@ -83,6 +83,18 @@ export const softBreaksField = StateField.define<readonly number[]>({
     return valid.length === value.length && valid.every((position, index) => position === value[index]) ? value : valid;
   },
 });
+
+/**
+ * 函数职责：结构编辑改写段落边界后重新生成段内续行身份。
+ * 输入说明：state 是事务前状态，changes 是本次替换描述，stale 判定某个续行位置已失效。
+ * 输出说明：存在失效身份时返回整份替换 effect，坐标已映射到事务完成后的文档；否则返回 null。
+ * 实现思路：保留的身份统一经共同映射器定位，避免同宽替换把身份转移到新写入的换行上。
+ */
+export function revalidateSoftBreaks(state: EditorState, changes: ChangeSpec, stale: (position: number) => boolean): StateEffect<readonly number[]> | null {
+  const breaks = state.field(softBreaksField, false);
+  if (!breaks?.length || !breaks.some(stale)) return null;
+  return setSoftBreaks.of(mapSoftBreaks(breaks.filter(position => !stale(position)), state.changes(changes)));
+}
 
 /** 文本编辑及显式身份变更一起撤销；反演值属于撤销事务完成后的起始文档坐标。 */
 export const softBreakHistory = invertedEffects.of(transaction => transaction.docChanged || transaction.effects.some(effect => effect.is(setSoftBreaks))

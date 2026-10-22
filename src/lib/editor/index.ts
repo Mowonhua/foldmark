@@ -11,7 +11,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { tags } from '@lezer/highlight';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { archiveSections, completedChildGroups, foldKey, getHiddenRanges, markdownExtensions, moveItemChanges, moveItemPosition, taskIsArchived, taskIsComplete, taskToggleChanges, type DocumentModel } from '../markdown';
-import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, headingAddFacet, modeFacet, resourcesFacet, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
+import { actionsFacet, documentField, expandedCompletedGroupsField, foldHistory, foldsField, headingAddFacet, modeFacet, resourcesFacet, revalidateSoftBreaks, setExpandedCompletedGroups, setFolds, sourceViewFacet, softBreaksField, softBreakHistory } from './state';
 import { previewField, previewComposition, headingAddHover } from './preview';
 import { archiveLayoutSpec } from './archive-layout';
 import { refreshSourceScope, sourceScopeExtension, sourceScopeField } from './source-scope';
@@ -391,11 +391,22 @@ export class EditorController {
     const hiddenRanges = state.facet(modeFacet) === 'source' ? state.field(sourceScopeField) : getHiddenRanges(this.model, 'todo');
     const hidden = hiddenRanges.find(range => position > range.from && position <= range.to);
     if (hidden) { position = hidden.from; indent = ''; }
+    // 落点不在行首时先换行，让新任务独占源码行。
     const prefix = !reuseLine && position && state.doc.sliceString(position - 1, position) !== '\n' ? '\n' : '';
+    const taskLineFrom = reuseLine ? state.doc.lineAt(position).from : position + prefix.length;
     const insert = `${prefix}${indent}- [ ] `;
     const followingBreaks = /^\n*/.exec(state.doc.sliceString(position, position + 2))![0].length;
     const suffix = position < state.doc.length ? '\n'.repeat(Math.max(0, 2 - followingBreaks)) : '';
-    this.view.dispatch({ changes: { from: position, insert: insert + suffix }, selection: { anchor: position + insert.length }, annotations: isolateHistory.of('full'), scrollIntoView: true });
+    // 新任务自成段落。落点若落在某段的软续行（段内换行）内，任务行会被读成上一段的内容，
+    // 渲染时多出一行；此时在任务行前补断行，把上一段与新任务分成两段。
+    const glued = taskLineFrom > 0 && !!state.field(softBreaksField, false)?.includes(taskLineFrom - 1);
+    const changes = glued && taskLineFrom !== position
+      ? [{ from: taskLineFrom, insert: '\n' }, { from: position, insert: insert + suffix }]
+      : { from: position, insert: `${glued ? '\n' : ''}${insert}${suffix}` };
+    // 任务行行首的换行不能再标记为上一段的软续行；否则该身份会残留到之后的段落编辑里，
+    // 把新分隔空行解码成软续行，渲染时多出一行。
+    const breaks = taskLineFrom > 0 ? revalidateSoftBreaks(state, changes, pos => pos === taskLineFrom - 1) : null;
+    this.view.dispatch({ changes, selection: { anchor: position + insert.length + (glued ? 1 : 0) }, annotations: isolateHistory.of('full'), effects: breaks ? [breaks] : undefined, scrollIntoView: true });
     this.view.focus();
   }
   undo(): boolean { return this.runHistory(undo); }

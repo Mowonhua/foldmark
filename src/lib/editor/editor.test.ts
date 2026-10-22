@@ -4,7 +4,7 @@ import { EditorView } from '@codemirror/view';
 import type { StateEffect, StateEffectType } from '@codemirror/state';
 import { EditorController, type EditorOptions } from './index';
 import { indentTask, taskEnter } from './commands';
-import { foldsField } from './state';
+import { foldsField, softBreaksField } from './state';
 
 // jsdom 无布局引擎；空矩形保持事务测试不依赖浏览器几何尺寸。
 Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
@@ -145,6 +145,20 @@ describe('唯一文档编辑事务', () => {
     expect(instance.state.selection.main.head).toBe(instance.text.length);
     expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
     instance.focusAt(0);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+  });
+  it('软续行内新建的子任务自成段落，与父任务间留空行且不多渲染一行', () => {
+    const instance = editor('- [ ] 父任务');
+    instance.focusAt(instance.text.length);
+    const enter = (shiftKey = false) => instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true, cancelable: true }));
+    enter(true);
+    expect(instance.text).toBe('- [ ] 父任务\n  ');
+    instance.insertTask();
+    expect(instance.text).toBe('- [ ] 父任务\n\n  - [ ] ');
+    expect(instance.state.field(softBreaksField)).toEqual([]);
+    expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
+    enter();
+    expect(instance.text).toBe('- [ ] 父任务\n\n  ');
     expect(instance.view.contentDOM.querySelectorAll('.cm-line')).toHaveLength(2);
   });
   it('完成移动正文到文末归档，撤销恢复任务标记和布局', () => {

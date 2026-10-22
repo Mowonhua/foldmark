@@ -146,6 +146,14 @@ describe('纯换行的编辑状态', () => {
     expect(value.doc.toString()).toBe(source);
     for (const lineBreak of paragraphLayout(value).lineBreaks) expect(paragraphAt(paragraphLayout(value), lineBreak.to)).toBeGreaterThanOrEqual(0);
   });
+  it('段落边界改写成分隔后，指向该换行的续行身份随之失效', () => {
+    const value = state('- [ ] 甲\n  - [ ] ').update({ effects: setSoftBreaks.of([7]) }).state;
+    expect(value.field(softBreaksField)).toEqual([7]);
+    const next = value.update(replaceParagraphs(value, 1, 1, ['  '], 2, 'input')).state;
+    expect(next.doc.toString()).toBe('- [ ] 甲\n\n  ');
+    expect(next.field(softBreaksField)).toEqual([]);
+    expect(contents(next)).toEqual(['- [ ] 甲', '  ']);
+  });
   it('相同源码的续行状态改变时不能复用旧分隔缓存', () => {
     const original = state('A\n\n\nB');
     expect(contents(original)).toEqual(['A', '', 'B']);

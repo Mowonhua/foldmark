@@ -4,7 +4,7 @@
  */
 import type { EditorState, TransactionSpec } from '@codemirror/state';
 import type { DocumentModel, ListItem } from '../markdown';
-import { documentField, softBreaksField } from './state';
+import { documentField, revalidateSoftBreaks, softBreaksField } from './state';
 
 /**
  * 结构职责：表示一个可见段落或保持原生编辑的语法块。
@@ -204,8 +204,13 @@ export function replaceParagraphs(state: EditorState, first: number, last: numbe
   let commonEnd = 0;
   while (commonEnd < original.length - commonStart && commonEnd < insert.length - commonStart
     && original[original.length - commonEnd - 1] === insert[insert.length - commonEnd - 1]) commonEnd++;
+  const changes = { from: from + commonStart, to: to - commonEnd, insert: insert.slice(commonStart, insert.length - commonEnd) };
+  // 替换范围两端的边界换行在序列化里改写成段落分隔，指向它们的段内续行身份同时失效。
+  // 保留这些身份会把分隔空行解码成上一段的软续行，渲染时多出一个空行。
+  const breaks = revalidateSoftBreaks(state, changes, position => position === from || position === to - 1);
   return {
-    changes: { from: from + commonStart, to: to - commonEnd, insert: insert.slice(commonStart, insert.length - commonEnd) },
+    changes,
     selection: { anchor }, userEvent, scrollIntoView: true,
+    ...(breaks ? { effects: [breaks] } : {}),
   };
 }
