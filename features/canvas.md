@@ -33,6 +33,7 @@
 | 关键实现 | src/lib/canvas/engine.ts::mountCanvasEngine |
 | 关键实现 | src/lib/canvas/save-queue.ts::CanvasSaveQueue |
 | 关键实现 | src/lib/canvas/thumbnail.ts::createCanvasThumbnail |
+| 关键实现 | src/App.svelte::pageText |
 
 ### 行为场景
 
@@ -59,6 +60,7 @@
 | S-19 | 正常 | 右键画布复用菜单里的删除命令整块移除，不新增专用项；画布后按 Backspace 或手机删除键、画布前按 Delete 都整块移除画布并整理段落分隔，一次撤销恢复原文；画布与相邻段落之间隔着空行时删除键只合并空行；卡片与下一段之间不留空行，光标不能停进闭围栏 | src/lib/editor/canvas.test.ts::画布后的 Backspace 整块删除\，一次撤销恢复原文, src/lib/editor/canvas.test.ts::画布前的 Delete 整块删除并保留前后段落, src/lib/editor/canvas.test.ts::画布与相邻段落之间隔着空行时\，删除键只合并空行而不删画布, src/lib/editor/canvas.test.ts::右键画布复用菜单里的删除项整块移除\，不新增专用项, src/lib/editor/canvas.test.ts::画布卡片不与下一段之间残留空行\，光标不能停进闭围栏 |
 | S-20 | 正常 | 按住画布卡片拖动与按住任务复选框拖动一致：显示标题预览和插入线，靠近编辑区边缘自动滚动，松手整块移动并按落点行首缩进；末尾落点停在隐藏归档之前；拖出编辑区、按 Esc 或归档只读时取消，一次撤销恢复原顺序 | src/lib/editor/canvas.test.ts::按住画布拖到可见内容末尾整块移动\，预览与插入线跟随并一次撤销, src/lib/editor/canvas.test.ts::画布拖入列表容器时按落点行首缩进\，一次撤销恢复原位置, src/lib/editor/canvas.test.ts::画布移到顶层缩进代码块前保持围栏不被当作代码缩进, src/lib/editor/canvas.test.ts::画布拖到待办末尾时停在隐藏归档之前\，不改写归档正文, src/lib/editor/canvas.test.ts::画布拖出编辑区或按 Esc 取消\，归档画布不能拖动 |
 | S-21 | 约束 | 手机展开全页画布时，标题栏位于系统状态栏下方，画布编辑区不进入系统导航栏 | scripts/test-mobile-browser.mjs::<module> |
+| S-22 | 约束 | 画布快照不计入状态栏当前页字数，收起与源码视图的统计一致 | src/lib/session/app-integration.test.ts::画布快照不计入当前页字数\，预览与源码一致 |
 
 ## F-CAN-002 共享图片附件
 

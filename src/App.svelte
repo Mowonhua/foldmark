@@ -39,7 +39,7 @@
   import CanvasPanel from './lib/canvas/CanvasPanel.svelte';
   import './lib/canvas/canvas.css';
   import { createCanvasAssetPort, nativeSaveCanvasFile } from './lib/canvas/assets';
-  import { canvasAssetsFromText } from './lib/canvas/model';
+  import { canvasAssetsFromText, scanCanvasBlocks } from './lib/canvas/model';
   import type { CanvasSession } from './lib/canvas/types';
 
   const { native, android, desktop } = platformCapabilities();
@@ -224,17 +224,41 @@
     void version;
     if (!active) return '';
     const state = active.state;
-    // 源码沿用编辑器冻结的分区边界，避免编辑复选框后统计提前跳到另一页；折叠不影响字数。
-    if (mode === 'source') return sourceVisibleRanges(state).map(range => state.doc.sliceString(range.from, range.to)).join('');
     const model = getDocumentModel(state);
-    let position = 0;
-    let text = '';
-    for (const hidden of getHiddenRanges(model, previewMode)) {
-      text += model.text.slice(position, hidden.from);
-      position = hidden.to;
-    }
-    return text + model.text.slice(position);
+    // 画布快照是引擎数据，界面只渲染卡片；源码与预览都按同一口径不计入写作字数。
+    const canvases = scanCanvasBlocks(model.text, model.tree).map(block => ({ from: block.from, to: block.to }));
+    // 源码沿用编辑器冻结的分区边界，避免编辑复选框后统计提前跳到另一页；折叠不影响字数。
+    const hidden = mode === 'source' ? complementRanges(sourceVisibleRanges(state), model.text.length) : getHiddenRanges(model, previewMode);
+    return textOutsideRanges(model.text, [...hidden, ...canvases]);
   });
+
+  /**
+   * 函数职责：从正文中剔除指定范围，得到计入字数的文字。
+   * 输入说明：ranges 为需排除的左闭右开原文坐标，允许乱序、重叠或越界。
+   * 输出说明：按原文顺序拼接剩余片段，不补分隔符；标点与空白由字数口径忽略。
+   */
+  function textOutsideRanges(text: string, ranges: readonly { from: number; to: number }[]): string {
+    let result = '';
+    let position = 0;
+    for (const range of [...ranges].sort((left, right) => left.from - right.from || left.to - right.to)) {
+      if (range.to <= position) continue;
+      if (range.from > position) result += text.slice(position, range.from);
+      position = range.to;
+    }
+    return result + text.slice(position);
+  }
+
+  /** 函数职责：求可见范围的补集，供源码视图与预览共用“排除隐藏正文”的统计口径。 */
+  function complementRanges(ranges: readonly { from: number; to: number }[], length: number): { from: number; to: number }[] {
+    const hidden: { from: number; to: number }[] = [];
+    let position = 0;
+    for (const range of ranges) {
+      if (position < range.from) hidden.push({ from: position, to: range.from });
+      position = Math.max(position, range.to);
+    }
+    if (position < length) hidden.push({ from: position, to: length });
+    return hidden;
+  }
   const characterCount = $derived(countWords(pageText));
   const counts = $derived.by(() => {
     void version;

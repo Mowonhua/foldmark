@@ -1367,6 +1367,21 @@ describe('App 真实编辑与文件闭环', () => {
     expect(status()).toBe('4 字');
   });
 
+  it('画布快照不计入当前页字数，预览与源码一致', async () => {
+    await start(['# 画布字数\n\n- [ ] 任务\n']);
+    const status = () => button('快捷键').textContent;
+    expect(status()).toBe('6 字');
+    button('更多操作').click(); await tick(); button('插入画布').click(); await tick();
+    await vi.waitFor(() => expect(canvasBoundary.edit).not.toBeNull());
+    canvasBoundary.edit!([{ id: 'rectangle', type: 'rectangle', x: 0, y: 0, width: 80, height: 40 }]);
+    button('收起画布').click();
+    await vi.waitFor(() => expect(document.querySelector('.fm-canvas-card')).not.toBeNull());
+    expect(status()).toBe('6 字');
+    button('查看源码').click(); await tick();
+    expect(documentInput().textContent).toContain('```canvas');
+    expect(status()).toBe('6 字');
+  });
+
   it.each(['todo', 'source'] as const)('%s 视图通过 Ctrl N 新增任务并支持撤销', async mode => {
     await start(['# 清单\n']);
     if (mode === 'source') { button('查看源码').click(); await tick(); }
