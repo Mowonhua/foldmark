@@ -40,7 +40,7 @@
 | S-10 | 正常 | 图标辅助栏保持可见，短通知在窄屏保持单行并留出操作空间 | scripts/test-mobile-browser.mjs::<module> |
 | S-11 | 正常 | 菜单、搜索及项目下拉在外部按下时关闭，内部操作保留；手机端关闭浮层的那次按下同时取消默认的焦点转移，浮层关闭与输入法唤起不同时发生；弹窗外触屏关闭后焦点同样不落回正文；手机不显示快捷键弹窗入口 | scripts/test-mobile-navigation.mjs::<module>, scripts/test-mobile-browser.mjs::<module>, src/lib/session/app-integration.test.ts::弹窗外部关闭 |
 | S-12 | 正常 | 视口左侧 50% 范围内右滑展开导航，侧栏左滑收起；纵向滚动和右半屏横滑不触发 | scripts/test-mobile-navigation.mjs::<module> |
-| S-13 | 正常 | 输入单个开符号（含全角与中文符号）补齐闭符号并把光标放在符号中心；桌面输入法在组合会话中提交单个符号或在补齐的闭符号前提交闭符号时同样补齐或跳过；输入法一次提交整对符号，包括组合会话中的提交，同样居中；输入法把编辑器写回的闭符号回发成新输入时保持居中，不把光标推到闭符号之后；英文单词内部的引号不补齐（避免影响撇号），汉字之后照常补齐；在一对符号内部再输入同一个开符号时补齐内层闭符号（`(` 得到 `(())`）；在补齐的闭符号前再输入闭符号会移过去而不是重复插入 | src/lib/editor/bracket-completion.test.ts::成对符号补全, src/lib/editor/bracket-completion.test.ts::手机补齐后输入法把闭符号回发回来时保持居中\，不重复插入, src/lib/editor/paired-symbols.test.ts::输入法成对符号光标居中 |
+| S-13 | 正常 | 输入单个开符号（含全角与中文符号）补齐闭符号并把光标放在符号中心；桌面输入法在组合会话中提交单个符号或在补齐的闭符号前提交闭符号时同样补齐或跳过；组合期间不改写正文，输入法提交结束后才补齐，提交后的按键立即生效（不会停留在组合态）；输入法一次提交整对符号，包括组合会话中的提交，同样居中；输入法把编辑器写回的闭符号回发成新输入时保持居中，不把光标推到闭符号之后；英文单词内部的引号不补齐（避免影响撇号），汉字之后照常补齐；在一对符号内部再输入同一个开符号时补齐内层闭符号（`(` 得到 `(())`）；在补齐的闭符号前再输入闭符号会移过去而不是重复插入 | src/lib/editor/bracket-completion.test.ts::成对符号补全, src/lib/editor/bracket-completion.test.ts::桌面输入法组合期间不补齐\，组合结束后才补出整对, src/lib/editor/bracket-completion.test.ts::手机补齐后输入法把闭符号回发回来时保持居中\，不重复插入, src/lib/editor/paired-symbols.test.ts::输入法成对符号光标居中, src/lib/editor/inline-input.test.ts::行内格式边界输入 |
 | S-14 | 正常 | 切换项目或灵感会话后不主动聚焦正文，软键盘只在用户点按正文后出现 | scripts/test-mobile-browser.mjs::<module> |
 | S-15 | 正常 | 更多菜单底边不超出窗口，条目超出剩余高度时只在菜单内部滚动，底部条目滚动后可见；菜单不重复列表项自身的完成整组、折叠与同级排序操作 | scripts/test-mobile-browser.mjs::<module>, src/lib/session/app-integration.test.ts::更多菜单只提供文档与项目操作\，不重复列表项自身的折叠和排序入口 |
 

@@ -35,29 +35,72 @@ export const bracketCompletion = Prec.high(EditorState.languageData.of(() => [{
   closeBrackets: { brackets: [...OPENINGS.keys()].filter(open => open !== '<'), before: [...PAIRABLE_BEFORE].join('') },
 }]));
 
+/** 组合会话中刚提交的单个符号；组合结束后据此决定补闭符号还是跳过重复的闭符号。 */
+const pendingSymbols = new WeakMap<EditorView, string>();
+
 /**
- * 函数职责：在桌面输入法的组合会话中补齐单个成对符号。
+ * 函数职责：在桌面输入法的组合会话中登记落在光标处的单个成对符号。
  * 输入说明：closeBrackets 在桌面组合期间主动跳过处理，中文输入法提交全角符号时不会触发补齐；
- *   这里只在组合期间接管，其余输入仍由 closeBrackets 按同一份配对表处理。
- * 输出说明：命中符号时派发与默认插入同类的组合事务，光标停在两符号之间。
- * 实现思路：insertBracket 生成的事务丢失组合标记，重建时沿用默认插入的 userEvent，
- *   让输入法写回、撤销合并和组合状态与普通输入保持一致。
+ *   这里只在组合期间登记，其余输入仍由 closeBrackets 按同一份配对表处理。
+ * 输出说明：命中符号时只登记、正文交给默认插入，补齐留给组合结束后的 compositionend 处理。
+ * 实现思路：组合期间任何正文改动都会与输入法写回 DOM 的组合文本竞争，浏览器随即重发组合事件，
+ *   编辑器收不到 compositionend 就会一直停在组合态，此后所有键盘操作（含回车新建任务）都被忽略；
+ *   因此这里不再当场补齐，等组合结束、正文落定之后再补。
+ *   候选字转换会把刚写入的符号整段替换掉（`(` 转成 `（`），替换同样以光标为终点，
+ *   所以只要求改动结束于光标；光标前到底留下了哪个符号，留到组合结束时核对。
  */
-export const compositionBracketCompletion = EditorView.inputHandler.of((view, from, to, text, insert) => {
-  if (!view.compositionStarted || view.state.readOnly) return false;
-  const { main } = view.state.selection;
-  if (text.length > 2 || text.length === 2 && codePointSize(codePointAt(text, 0)) === 1 || from !== main.from || to !== main.to) return false;
-  const transaction = insertBracket(view.state, text);
-  if (!transaction) return false;
-  view.dispatch(transaction.startState.update({
-    changes: transaction.changes,
-    selection: transaction.selection,
-    effects: transaction.effects,
-    scrollIntoView: true,
-    userEvent: insert().annotation(Transaction.userEvent),
-  }));
-  return true;
-});
+export const compositionBracketCompletion = [
+  EditorView.inputHandler.of((view, from, to, text) => {
+    if (!view.compositionStarted || view.state.readOnly) return false;
+    const { main } = view.state.selection;
+    if (text.length > 2 || text.length === 2 && codePointSize(codePointAt(text, 0)) === 1 || !main.empty || to !== main.to) return false;
+    if (OPENINGS.has(text) || CLOSINGS.has(text)) pendingSymbols.set(view, text);
+    else pendingSymbols.delete(view);
+    return false;
+  }),
+  // 新组合会话必然改写正文，上一次登记在组合结束后就不再可靠，先清掉再等本次提交。
+  EditorView.domEventHandlers({
+    compositionstart: (_event, view) => { pendingSymbols.delete(view); },
+    compositionend: (_event, view) => { completeComposingSymbol(view); },
+  }),
+];
+
+/**
+ * 函数职责：组合结束后，为该次提交的单个符号补齐闭符号，或跳过重复的闭符号。
+ * 输入说明：只处理本控制器登记过、组合确已结束的提交；光标必须仍紧跟在登记符号之后，否则视为提交后被改写。
+ * 输出说明：开符号补一枚闭符号并把光标留在两者之间；提交的闭符号正好落在刚补齐的闭符号之前时删掉提交的那一枚，
+ *   等价于键盘上「移过去而不重复插入」；其余情况不改正文。
+ * 实现思路：登记与落笔之间可能插入其他改动，落笔前重新核对正文位置，不符就放弃。
+ *   开符号的成对事务仍由 insertBracket 按同一份配对表计算，只取它的效果来登记成对状态，
+ *   让输入法补出的整对与键盘补齐一样可以一次 Backspace 删掉；文本改动按当前正文另建，不重放那笔事务的坐标。
+ */
+function completeComposingSymbol(view: EditorView): void {
+  const text = pendingSymbols.get(view);
+  pendingSymbols.delete(view);
+  if (text === undefined || view.compositionStarted || view.state.readOnly) return;
+  const state = view.state;
+  const { main } = state.selection;
+  const start = main.head - text.length;
+  if (!main.empty || start < 0 || state.sliceDoc(start, main.head) !== text) return;
+  const close = OPENINGS.get(text);
+  if (close !== undefined && close !== text) {
+    // 去掉已提交的符号，让 insertBracket 按「符号尚未写入」的正文判断右侧能否补齐并生成成对事务；
+    // 自配对引号走另一套词边界规则，这里不接管，避免打断撇号这类输入。
+    const pair = insertBracket(state.update({ changes: { from: start, to: main.head } }).state, text);
+    if (!pair) return;
+    view.dispatch(state.update({
+      changes: { from: main.head, insert: close },
+      selection: { anchor: main.head },
+      effects: pair.effects,
+      scrollIntoView: true,
+      userEvent: 'input.type',
+    }));
+    return;
+  }
+  // 闭符号：右边紧邻同一枚闭符号说明它是刚补齐的那一枚，删掉这次提交的重复符号，光标停在保留的闭符号之后。
+  if (!CLOSINGS.has(text) || state.sliceDoc(main.head, Math.min(main.head + text.length, state.doc.length)) !== text) return;
+  view.dispatch({ changes: { from: start, to: main.head }, selection: { anchor: main.head }, scrollIntoView: true, userEvent: 'input.type' });
+}
 
 /**
  * 成对高亮的符号表，开闭两两排列。

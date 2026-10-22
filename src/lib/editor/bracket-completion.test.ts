@@ -25,8 +25,8 @@ async function type(instance: EditorController, inserted: string): Promise<void>
   await new Promise(resolve => setTimeout(resolve, 20));
 }
 
-/** 模拟输入法组合会话中提交文本：input 事件先于 compositionend 到达，与中文输入法提交全角符号一致。 */
-async function typeComposing(instance: EditorController, inserted: string): Promise<void> {
+/** 模拟输入法在组合会话中写入文本但不结束组合：正文此时应当只有输入法写入的原样内容。 */
+async function writeComposing(instance: EditorController, inserted: string): Promise<void> {
   const at = instance.state.selection.main.head;
   const dom = instance.view.domAtPos(at);
   const node = dom.node as Text;
@@ -35,7 +35,26 @@ async function typeComposing(instance: EditorController, inserted: string): Prom
   document.getSelection()!.collapse(node, dom.offset + inserted.length);
   instance.view.contentDOM.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: inserted, bubbles: true }));
   await new Promise(resolve => setTimeout(resolve, 20));
+}
+
+/** 结束组合会话，模拟输入法提交；补齐等组合结束之后才做的动作在这一步完成。 */
+function endComposing(instance: EditorController, inserted: string): void {
   instance.view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: inserted }));
+}
+
+/** 模拟输入法组合会话中提交文本：input 事件先于 compositionend 到达，与中文输入法提交全角符号一致。 */
+async function typeComposing(instance: EditorController, inserted: string): Promise<void> {
+  await writeComposing(instance, inserted);
+  endComposing(instance, inserted);
+}
+
+/**
+ * 等过 CodeMirror 的组合结束按键窗口。
+ * 说明：CodeMirror 为 Safari 保留了「组合结束后 100ms 内忽略按键」的保护（输入法用回车确认候选字），
+ *   测试环境同样被识别成 Safari，所以组合提交后立即按键等于输入法的确认键，不等待就测不到用户的下一次按键。
+ */
+function afterComposition(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 120));
 }
 
 /** 断言文档末尾补出整对符号，且光标停在开符号之后。 */
@@ -77,6 +96,34 @@ describe('成对符号补全', () => {
     await typeComposing(instance, '）');
     expect(instance.text).toBe('- [ ] 任务（）');
     expect(instance.state.selection.main.head).toBe('- [ ] 任务（）'.length);
+  });
+
+  it('桌面输入法组合期间不补齐，组合结束后才补出整对', async () => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await writeComposing(instance, '（');
+    expect(instance.text).toBe('- [ ] 任务（');
+    endComposing(instance, '（');
+    expectCentered(instance, '（）');
+  });
+
+  it('输入法补出的整对与键盘补齐一样按 Backspace 一次删除', async () => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await typeComposing(instance, '（');
+    await afterComposition();
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true, cancelable: true }));
+    expect(instance.text).toBe('- [ ] 任务');
+  });
+
+  it('输入法提交全角括号后回车照常新建任务', async () => {
+    const instance = editor('- [ ] 任务');
+    instance.focusAt(instance.text.length);
+    await typeComposing(instance, '（');
+    instance.focusAt(instance.text.length);
+    await afterComposition();
+    instance.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(instance.text).toBe('- [ ] 任务（）\n\n- [ ] ');
   });
 
   it('引号在词边界补齐，在单词内部不补齐以避免影响撇号', async () => {
@@ -191,3 +238,4 @@ describe('成对符号补全', () => {
     expect(instance.text).toBe('- [ ] 任务');
   });
 });
+

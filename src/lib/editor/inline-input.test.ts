@@ -28,10 +28,12 @@ describe('行内格式边界输入', () => {
     content.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '（', isComposing: true, bubbles: true }));
     await new Promise(resolve => setTimeout(resolve, 30));
     const formatted = `- [ ] ${mark}示例任务段落${mark}`;
-    expect(editor.text).toBe(formatted + '（）');
-    expect(content.textContent).toContain(`${mark}示例任务段落${mark}（）`);
+    // 组合期间不改正文，输入法提交的符号原样留在正文里，补齐等组合结束后再做。
+    expect(editor.text).toBe(formatted + '（');
+    expect(content.textContent).toContain(`${mark}示例任务段落${mark}（`);
     expect(closing.isConnected).toBe(true);
     content.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '（' }));
+    expect(editor.text).toBe(formatted + '（）');
     expect(editor.view.composing).toBe(false);
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(content.textContent).not.toContain(`${mark}示例任务段落${mark}`);
