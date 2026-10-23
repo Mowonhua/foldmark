@@ -278,6 +278,21 @@ describe('Markdown 内嵌画布', () => {
     expect(instance.text).toBe(source);
   });
 
+  it('画布拖到最后一段下方的大段空白仍追加到末尾', () => {
+    const canvas = createCanvasDocument('末尾空白');
+    const source = `前文\n\n${fence(canvas)}\n\n- [ ] 甲\n- [ ] 乙`;
+    const instance = editor(source);
+    dragLayout(instance);
+    const card = instance.view.dom.querySelector<HTMLElement>('.fm-canvas-card')!;
+    // 正文底部留白远大于 30px；落点必须覆盖最后一段下方的空白，而不是要求指针停在文字下缘。
+    dragCanvas(instance, card, 320);
+    expect(document.querySelector<HTMLElement>('.fm-drop-line')!.hidden).toBe(false);
+    window.dispatchEvent(new MouseEvent('pointerup', { button: 0 }));
+    expect(instance.text).toBe(`前文\n\n- [ ] 甲\n- [ ] 乙\n\n${fence(canvas)}`);
+    expect(instance.undo()).toBe(true);
+    expect(instance.text).toBe(source);
+  });
+
   it('画布拖入列表容器时按落点行首缩进，一次撤销恢复原位置', () => {
     const canvas = createCanvasDocument('嵌套');
     const source = `- [ ] 父\n  - [ ] 子\n\n${fence(canvas)}`;

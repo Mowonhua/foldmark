@@ -35,6 +35,13 @@ export interface EditorOptions {
 }
 
 /**
+ * 结构职责：标识拖动会话的内容类型。
+ * 字段说明：item 表示列表条目连同子树，canvas 表示整块画布围栏。
+ * 约束条件：类型只决定候选落点与提交事务，指针状态机和视觉反馈由同一实现承载。
+ */
+export type DragKind = 'item' | 'canvas';
+
+/**
  * 接口职责：把预览控件意图交给唯一编辑器命令入口。
  * 调用方：预览装饰和指针拖动插件。
  * 实现要求：位置为当前源文偏移，拖动开始后正文变化必须取消提交。
@@ -46,8 +53,8 @@ export interface EditorActions {
   toggleCompletedGroup: (parentFrom: number) => void;
   moveItem: (from: number, direction: 'up' | 'down') => void;
   moveTo: (from: number, boundary: number | null) => void;
-  /** 把整块画布移动到可见段落边界或内容末尾；边界使用当前源文偏移。 */
-  moveCanvas: (from: number, boundary: number | null) => void;
+  /** 提交拖动落点；boundary 使用当前源文偏移，null 表示可见内容末尾，事务由拖动类型决定。 */
+  moveDrag: (kind: DragKind, from: number, boundary: number | null) => void;
   /** 外部导航定位：展开折叠目标并居中滚动。 */
   focusAt: (from: number) => void;
   /** 点击已可见的预览控件时只放置光标，不滚动、不改变折叠或渲染窗口。 */

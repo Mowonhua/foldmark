@@ -7,13 +7,39 @@ import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { getHiddenRanges } from '../markdown';
 import { actionsFacet, documentField, modeFacet, resourcesFacet } from './state';
+import type { DragKind } from './types';
 import { paragraphAt, paragraphLayout, replaceParagraphs } from './paragraphs';
 import { hiddenContentRanges } from './visibility';
 import { fencedBlocks } from './fenced-blocks';
 
+/**
+ * 结构职责：表示拖动过程中的一个候选插入位置。
+ * 字段说明：before 为目标内容起点，null 表示追加到可见内容末尾；y 为插入线的视口坐标。
+ * 约束条件：before 必须对应当前文档快照中的可见内容或追加边界。
+ */
+interface DropBoundary { before: number | null; y: number }
+
+/** 落点吸附距离：指针离插入线超过一行左右时不再显示落点。 */
+const DROP_RADIUS = 30;
+
+/**
+ * 函数职责：从候选落点中选出指针最终提交的位置。
+ * 输入说明：boundaries 为当前可见候选；y 为指针视口坐标；tail 为末尾追加落点，越过它时仍复用该落点。
+ * 输出说明：返回候选落点或 undefined；不修改候选和文档。
+ * 实现思路：先处理末尾留白，再取纵向最近项并按吸附距离过滤，避免正文底部留白要求指针精确停在文字下缘。
+ */
+function dropBoundary(boundaries: readonly DropBoundary[], y: number, tail?: DropBoundary): DropBoundary | undefined {
+  if (tail && y > tail.y) return tail;
+  let nearest: DropBoundary | undefined;
+  for (const boundary of boundaries) {
+    if (!nearest || Math.abs(boundary.y - y) < Math.abs(nearest.y - y)) nearest = boundary;
+  }
+  return nearest && Math.abs(nearest.y - y) <= DROP_RADIUS ? nearest : undefined;
+}
+
 /** 画布卡片与列表标记共用拖动阈值、预览、插入线和自动滚动，落点语义由 kind 决定。 */
 interface DragSession {
-  kind: 'item' | 'canvas';
+  kind: DragKind;
   from: number; pointerId: number; startX: number; startY: number; x: number; y: number;
   handle: HTMLElement; started: boolean; boundary: number | null | undefined;
   preview: HTMLElement | null; line: HTMLElement | null;
@@ -255,7 +281,7 @@ class MarkerGestures {
     session.line.style.width = `${Math.min(rect.width - 48, this.view.contentDOM.getBoundingClientRect().width)}px`;
   }
   /** 列表项落点只位于同父级可见项之间；顶层项可跨列表进入其他章节。 */
-  private itemBoundary(session: DragSession): { before: number | null; y: number } | undefined {
+  private itemBoundary(session: DragSession): DropBoundary | undefined {
     const model = this.view.state.field(documentField);
     const source = model.items.find(item => item.from === session.from);
     if (!source) return undefined;
@@ -264,7 +290,7 @@ class MarkerGestures {
       !hidden.some(range => item.from >= range.from && item.from < range.to);
     // 同父级候选不限于源列表：顶层任务因此可以拖过标题、段落到其他章节。
     const candidates = model.items.filter(item => item.parentFrom === source.parentFrom);
-    const boundaries: { before: number | null; y: number }[] = [];
+    const boundaries: DropBoundary[] = [];
     for (const item of candidates) {
       if (!visible(item)) continue;
       const coords = this.view.coordsAtPos(item.from);
@@ -283,16 +309,18 @@ class MarkerGestures {
       const next = group[group.indexOf(lastVisible) + 1];
       boundaries.push({ before: next ? next.from : listFrom === source.listFrom ? null : lastVisible.moveTo, y: coords.bottom + 2 });
     }
-    const nearest = boundaries.sort((a, b) => Math.abs(a.y - session.y) - Math.abs(b.y - session.y))[0];
-    if (!nearest || Math.abs(nearest.y - session.y) > 30 || nearest.before === source.from) return undefined;
+    // 最低落点即最后一个同级容器的追加点；正文底部留白仍落到该容器末尾。
+    const tail = boundaries.reduce<DropBoundary | undefined>((lowest, boundary) => !lowest || boundary.y > lowest.y ? boundary : lowest, undefined);
+    const nearest = dropBoundary(boundaries, session.y, tail);
+    if (!nearest || nearest.before === source.from) return undefined;
     return nearest;
   }
   /** 画布落点覆盖全部可见段落；源段落自身不产生落点，隐藏内容与零高度空段落不参与。 */
-  private canvasBoundary(session: DragSession): { before: number | null; y: number } | undefined {
+  private canvasBoundary(session: DragSession): DropBoundary | undefined {
     const { state } = this.view;
     const hidden = hiddenContentRanges(state);
     const visible = (position: number): boolean => !hidden.some(range => position >= range.from && position < range.to);
-    const boundaries: { before: number | null; y: number }[] = [];
+    const boundaries: DropBoundary[] = [];
     let last: { from: number; to: number } | undefined;
     for (const paragraph of paragraphLayout(state).paragraphs) {
       if (paragraph.kind === 'empty' || !visible(paragraph.from)) continue;
@@ -302,12 +330,11 @@ class MarkerGestures {
       }
       last = paragraph;
     }
-    // 源画布已是最后一段时，追加落点与去掉自身后的位置相同，不再显示无意义的插入线。
+    // 源画布已是最后一段时不提供末尾落点；否则最后一段下方的空白仍属于同一追加位置。
     const end = last && last.from !== session.from ? this.view.coordsAtPos(last.to) : null;
-    if (end) boundaries.push({ before: null, y: end.bottom + 2 });
-    const nearest = boundaries.sort((a, b) => Math.abs(a.y - session.y) - Math.abs(b.y - session.y))[0];
-    if (!nearest || Math.abs(nearest.y - session.y) > 30) return undefined;
-    return nearest;
+    const tail = end ? { before: null, y: end.bottom + 2 } : undefined;
+    if (tail) boundaries.push(tail);
+    return dropBoundary(boundaries, session.y, tail);
   }
   private scroll = (): void => {
     const session = this.session;
@@ -326,10 +353,7 @@ class MarkerGestures {
     const click = session.kind === 'item' && !session.started && event.clientX >= handleRect.left && event.clientX <= handleRect.right && event.clientY >= handleRect.top && event.clientY <= handleRect.bottom;
     const boundary = session.boundary;
     this.cancel();
-    if (session.started && boundary !== undefined) {
-      if (session.kind === 'canvas') actions.moveCanvas(session.from, boundary);
-      else actions.moveTo(session.from, boundary);
-    }
+    if (session.started && boundary !== undefined) actions.moveDrag(session.kind, session.from, boundary);
     if (click && session.handle.getAttribute('role') === 'checkbox') {
       this.lastClick = { time: performance.now(), x: event.clientX, y: event.clientY, marker: session.handle };
       actions.toggleTask(session.from);
