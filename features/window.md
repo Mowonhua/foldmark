@@ -14,6 +14,7 @@
 |---|---|
 | 主入口 | src-tauri/src/lib.rs::run |
 | 关键实现 | src-tauri/src/window_material.rs::disable_transitions |
+| 关键实现 | src-tauri/src/window_material.rs::apply_material |
 | 关键实现 | src-tauri/src/window_material.rs::set_window_material |
 
 ### 行为场景
@@ -24,3 +25,4 @@
 | S-02 | 约束 | 关闭 DWM 过渡不改变整窗透明配置或系统 Acrylic 材质 | - |
 | S-03 | 异常 | 主窗口缺失、句柄获取失败或 DWM 设置失败时，启动返回错误 | - |
 | S-04 | 正常 | 从最小化恢复时，首个可见窗口画面应具有 Acrylic 背景 | - |
+| S-05 | 兼容 | 系统早于 Windows 11 22H2 时，Acrylic 请求使用同等透明的系统 Blur，窗口仍透明且失焦策略保留；支持系统背景属性的版本继续使用 Acrylic | src-tauri/src/window_material.rs::tests::acrylic_effect_degrades_to_blur_before_system_backdrop |

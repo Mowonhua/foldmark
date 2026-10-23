@@ -4142,6 +4142,7 @@ dependencies = [
  "url",
  "window-vibrancy 0.6.0",
  "windows-sys 0.61.2",
+ "windows-version",
 ]
 
 [[package]]

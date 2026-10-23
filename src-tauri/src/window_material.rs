@@ -297,6 +297,33 @@ pub async fn set_window_material(
         .ok_or_else(|| "窗口材质变更未返回结果。".to_owned())?
 }
 
+/// 结构职责：区分 Acrylic 在两类 Windows 上的原生实现。
+/// 字段说明：Blur 保留透明模糊但不使用旧版 Acrylic；SystemBackdrop 使用系统的背景材质属性。
+/// 约束条件：只由系统版本决定，不依赖主题身份或用户偏好。
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AcrylicEffect {
+    Blur,
+    SystemBackdrop,
+}
+
+/// Windows 11 22H2 起提供系统背景属性；更早的系统只能使用逐帧采样的旧版 Acrylic。
+#[cfg(target_os = "windows")]
+const SYSTEM_BACKDROP_MIN_BUILD: u32 = 22523;
+
+/// 函数职责：按系统 build 选择 Acrylic 的原生实现。
+/// 输入说明：build 为当前系统的构建号。
+/// 输出说明：支持系统背景属性时返回 SystemBackdrop，否则返回 Blur。
+/// 实现思路：旧版 Acrylic 在 Windows 10 上拖动和缩放时逐帧采样，明显迟滞且松手后仍在补帧，改用同等透明的系统 Blur 规避；Windows 11 不受影响。
+#[cfg(target_os = "windows")]
+fn acrylic_effect(build: u32) -> AcrylicEffect {
+    if build >= SYSTEM_BACKDROP_MIN_BUILD {
+        AcrylicEffect::SystemBackdrop
+    } else {
+        AcrylicEffect::Blur
+    }
+}
+
 /// 函数职责：在主线程同步窗口明暗，清除前一材质并应用目标材质。
 /// 输入说明：window 必须是调用命令所属窗口，theme 保留用户的明暗偏好，None 表示跟随系统；keep_transparent_on_blur 为 Acrylic 的失焦策略；调用方必须保证主线程执行。
 /// 输出说明：不支持目标材质返回 false；原生调用失败时清除效果并返回错误。
@@ -315,21 +342,27 @@ fn apply_material(
     #[cfg(target_os = "windows")]
     {
         clear_material(window)?;
+        let effect = acrylic_effect(windows_version::OsVersion::current().build);
         let result = match material {
             WindowMaterial::Opaque | WindowMaterial::Transparent => return Ok(true),
             WindowMaterial::Blur => window_vibrancy::apply_blur(window, None),
-            WindowMaterial::Acrylic => window_vibrancy::apply_acrylic(window, None),
+            // Windows 10 的旧版 Acrylic 在移动或缩放时逐帧重采样桌面，改用系统 Blur 保留透明模糊并消除拖动迟滞。
+            WindowMaterial::Acrylic => match effect {
+                AcrylicEffect::Blur => window_vibrancy::apply_blur(window, None),
+                AcrylicEffect::SystemBackdrop => window_vibrancy::apply_acrylic(window, None),
+            },
         };
         match result {
             Ok(()) => {
                 if matches!(material, WindowMaterial::Acrylic) {
-                    // 背景刷新用于避免最小化恢复时透出上一次的系统背景样本；
+                    // 背景刷新只服务于系统背景属性；旧版 Blur 没有需要重建的背景样本。
                     // 失焦透明是独立策略，只在偏好开启时安装。
                     let result = window
                         .hwnd()
                         .map_err(|error| format!("无法获取窗口材质句柄：{error}"))
                         .and_then(|hwnd| {
-                            set_refresh_backdrop(hwnd.0, true)?;
+                            let system_backdrop = effect == AcrylicEffect::SystemBackdrop;
+                            set_refresh_backdrop(hwnd.0, system_backdrop)?;
                             if keep_transparent_on_blur {
                                 set_keep_transparency_on_blur(hwnd.0, true)?;
                             }
@@ -517,6 +550,16 @@ mod tests {
                 &mut reference,
             )
         }) != 0
+    }
+
+    #[test]
+    fn acrylic_effect_degrades_to_blur_before_system_backdrop() {
+        // Windows 10 各版本只能使用旧版 Acrylic；Windows 11 21H2 也早于系统背景属性。
+        assert_eq!(acrylic_effect(19045), AcrylicEffect::Blur);
+        assert_eq!(acrylic_effect(22000), AcrylicEffect::Blur);
+        // 22H2 起使用系统背景属性，拖动和缩放不再受旧版采样影响。
+        assert_eq!(acrylic_effect(22523), AcrylicEffect::SystemBackdrop);
+        assert_eq!(acrylic_effect(22631), AcrylicEffect::SystemBackdrop);
     }
 
     #[test]
