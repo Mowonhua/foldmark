@@ -101,6 +101,29 @@ it('手机等待电脑确认期间一秒复查配对，确认后立即连接', a
     expect(pair).toHaveBeenCalledTimes(3); expect(f.controller.status).toBe('已同步');
   } finally { vi.useRealTimers(); }
 });
+it('扫码返回时正在进行的同步不能推迟配对请求，配对在本轮结束后立即发出', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    f.transport.status = async () => ({ paired: false, listening: true });
+    await f.controller.start();
+    // 从扫码页回到前台会先触发一次同步；扫码结果随后到达时本轮仍在运行。
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const status = vi.fn(async () => { await blocked; return { paired: false, listening: true }; });
+    f.transport.status = status;
+    const running = f.controller.sync();
+    await vi.advanceTimersByTimeAsync(0);
+    const pair = vi.fn(async () => false);
+    f.transport.pair = pair;
+    const offer: PairingOffer = { version: 1, address: '192.168.1.2:1234', certificate: [], token: 'a'.repeat(64), expires: 0 };
+    await f.controller.pair(offer);
+    expect(pair).not.toHaveBeenCalled();
+    release(); await running;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pair).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
 it('传输等待期间的新输入不能被旧版本确认清除', async () => {
   const f = fixture(); await f.controller.start(); await f.engine.enable('local', 'project');
   f.transport.exchange = async value => { f.controller.markDirty('local'); return value; };

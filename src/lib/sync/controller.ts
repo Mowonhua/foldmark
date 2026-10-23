@@ -69,7 +69,9 @@ export class SyncController {
     this.idleRounds = active ? 0 : this.idleRounds + 1;
     // 手机已发出配对请求时电脑可能已允许连接，一秒复查一次；离线失败仍按退避重试。
     const awaiting = !this.desktop && !document.hidden && this.awaitingApproval;
-    const delay = awaiting ? 1000 : active ? (this.dirty ? 400 : followUp ? 0 : 15000) : Math.min(15000, 5000 * 1.5 ** this.idleRounds);
+    // 扫码返回时可见性恢复的同步可能仍在运行，配对请求会被 busy 挡下并记入 resyncRequested；
+    // 本轮结束后必须立即执行，不能按空闲退避等待下一次轮询。已配对时的输入仍按防抖处理。
+    const delay = awaiting ? 1000 : active ? (this.dirty ? 400 : followUp ? 0 : 15000) : this.resyncRequested ? 0 : Math.min(15000, 5000 * 1.5 ** this.idleRounds);
     this.timer = setTimeout(() => { void this.sync(); }, delay);
   }
   private visibility = (): void => {
