@@ -65,7 +65,7 @@ describe('正文右键菜单', () => {
     vi.spyOn(editor.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 20, bottom: 40 });
     editor.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
     editor.view.contentDOM.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 150 }));
-    expect(editor.text).toBe('- [ ] A\n\n\n\n# 归档\n\n- [x] hidden');
+    expect(editor.text).toBe('- [ ] A\n\n\n# 归档\n\n- [x] hidden');
     expect(editor.state.selection.main.head).toBe(9);
     expect(document.querySelector('.fm-context-menu [data-submenu="insert"]')).not.toBeNull();
   });

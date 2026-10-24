@@ -82,13 +82,14 @@ function clipToCodeRows(marker: RectangleMarker, rows: CodeRowBounds[]): Rectang
 export const codeSelection = [
   // 背景层无法改变文字颜色；标记跟随选区更新，使实色主题也能提供可读的反色选区。
   EditorView.decorations.compute(['selection'], state => Decoration.set(
-    state.selection.ranges.filter(range => !range.empty).map(range => Decoration.mark({ class: 'fm-selected' }).range(range.from, range.to)),
+    // 全文替换映射可能产生端点倒置的瞬时选区；倒置范围没有可绘制内容，不能交给标记装饰。
+    state.selection.ranges.filter(range => range.from < range.to).map(range => Decoration.mark({ class: 'fm-selected' }).range(range.from, range.to)),
   )),
   layer({
     above: false,
     class: 'fm-selectionLayer',
     markers(view) {
-      const ranges = view.state.selection.ranges.filter(range => !range.empty);
+      const ranges = view.state.selection.ranges.filter(range => range.from < range.to);
       if (!ranges.length) return [];
       const scroll = view.scrollDOM.getBoundingClientRect();
       // RectangleMarker 使用滚动内容坐标；DOM 边框须转换到同一坐标系，并保留缩放比例。

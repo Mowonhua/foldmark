@@ -4,7 +4,7 @@
  */
 import { locale, translate } from '../i18n';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import { EditorSelection } from '@codemirror/state';
+import { EditorSelection, type TransactionSpec } from '@codemirror/state';
 import { getHiddenRanges } from '../markdown';
 import { actionsFacet, documentField, modeFacet, resourcesFacet } from './state';
 import type { DragKind } from './types';
@@ -206,12 +206,16 @@ class MarkerGestures {
 
   /**
    * 视图底部可能是归档前的分隔行，而不是文件末尾；按可见段落确定编辑出口。
-   * 只接管正文宽度内、最后可见段落下方的容器或空白行，重复点击复用已有空段落。
+   * 容器留白和末尾边界空行共用同一落点：最后可见段落是空行时直接复用，
+   * 否则只补一个空段落。因此点击 A+1 与 A+N 行结果一致，也不会重复增加空行。
    */
   private focusBelowContent(event: MouseEvent, line: Element | null, prepareDrag = true): boolean {
     const { state } = this.view, target = event.target as Element;
-    if (line ? line.textContent?.trim() || line.querySelector('[data-list-marker]')
-      : target !== this.view.contentDOM && target !== this.view.scrollDOM) return false;
+    if (line) {
+      if (line.textContent?.trim() || line.querySelector('[data-list-marker]')) return false;
+      // 有段落归属的空行由空段落分支处理，其中包含单尾换行的分隔补齐。
+      if (line.getAttribute('data-empty-paragraph-from') !== null) return false;
+    } else if (target !== this.view.contentDOM && target !== this.view.scrollDOM) return false;
     const layout = paragraphLayout(state), hidden = hiddenContentRanges(state);
     let index = layout.paragraphs.length - 1;
     while (index >= 0 && hidden.some(range => layout.paragraphs[index].from >= range.from
@@ -221,14 +225,35 @@ class MarkerGestures {
     const closedBlock = paragraph?.kind === 'literal' ? fencedBlocks(state).find(block => block.from === paragraph.from && block.to === paragraph.to && block.closed) : undefined;
     if (!paragraph || paragraph.kind === 'literal' && !closedBlock || paragraph.item && paragraph.item.to > paragraph.to
       || layout.lineBreaks.some(br => br.to === paragraph.to)) return false;
-    const bounds = this.view.coordsAtPos(paragraph.to) ?? (closedBlock ? this.view.coordsAtPos(closedBlock.bodyTo) : null);
-    const content = this.view.contentDOM.getBoundingClientRect();
-    if (!bounds || event.clientY < bounds.bottom || event.clientX < content.left || event.clientX > content.right) return false;
+    if (line) {
+      // 命中的真实行必须位于最后可见段落之后；段落内部的空行仍交给行内定位。
+      if (this.view.posAtDOM(line, 0) < paragraph.to) return false;
+    } else {
+      const bounds = this.view.coordsAtPos(paragraph.to) ?? (closedBlock ? this.view.coordsAtPos(closedBlock.bodyTo) : null);
+      const content = this.view.contentDOM.getBoundingClientRect();
+      if (!bounds || event.clientY < bounds.bottom || event.clientX < content.left || event.clientX > content.right) return false;
+    }
+    // 最后一行已是空行时复用，点击位置再往下也不再新建第二行空段落。
+    const reuse = paragraph.kind === 'empty';
     const raw = state.doc.sliceString(paragraph.from, paragraph.to);
-    // 新建采用空范围插入，仅维护末段之后的分隔，保留前面紧凑列表的原始间距。
-    const spec = paragraph.kind === 'empty'
-      ? replaceParagraphs(state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input')
-      : replaceParagraphs(state, index + 1, index, [''], 0, 'input');
+    const previous = layout.paragraphs[index - 1];
+    const separatorFix = reuse && previous && paragraph.from === previous.to + 1;
+    let spec: TransactionSpec;
+    if (reuse) {
+      spec = separatorFix ? replaceParagraphs(state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input')
+        : { selection: { anchor: paragraph.contentFrom } };
+    } else {
+      const boundary = hidden.find(range => range.from >= paragraph.to && range.to === state.doc.length);
+      if (boundary) {
+        // 隐藏块收尾时只补出构成“分隔空行 + 可编辑空段落”所需的最少换行。
+        const blank = state.doc.sliceString(paragraph.to, boundary.from).replace(/[^\n]/g, '').length;
+        const insert = Math.max(1, 3 - blank);
+        spec = { changes: { from: boundary.from, insert: '\n'.repeat(insert) }, selection: { anchor: boundary.from + insert - 1 }, userEvent: 'input', scrollIntoView: true };
+      } else {
+        // 新建采用空范围插入，仅维护末段之后的分隔，保留前面紧凑列表的原始间距。
+        spec = replaceParagraphs(state, index + 1, index, [''], 0, 'input');
+      }
+    }
     // 序列化只允许维护可见边界，不能借底部点击改写归档或把光标放入隐藏内容。
     const planned = state.update({ ...spec, filter: false });
     let touchesHidden = false;
@@ -239,10 +264,15 @@ class MarkerGestures {
     this.cancel();
     if (planned.docChanged) this.view.dispatch(spec);
     const position = planned.docChanged ? this.view.state.selection.main.head : planned.newSelection.main.head;
-    if (prepareDrag) this.prepareParagraphSelection(event, position);
+    if (line) {
+      // 原生 mousedown 会用鼠标坐标重算光标并覆盖上面的落点，只拦截紧随本次按下的一次。
+      this.view.contentDOM.addEventListener('mousedown', this.suppressNextMouseDown, { capture: true, once: true });
+      this.view.state.facet(actionsFacet).focusAt(position);
+    } else if (prepareDrag) this.prepareParagraphSelection(event, position);
     else this.view.state.facet(actionsFacet).focusAt(position);
     return true;
   }
+  private suppressNextMouseDown = (event: MouseEvent): void => { event.preventDefault(); };
   private move = (event: PointerEvent): void => {
     if (this.touchStart && Math.hypot(event.clientX - this.touchStart.x, event.clientY - this.touchStart.y) > 8) this.touchStart = null;
     const session = this.session;

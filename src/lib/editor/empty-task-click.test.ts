@@ -43,7 +43,7 @@ it('从已创建空行本身起拖可选择前文，不重复创建段落', () =
 it.each([
   ['正文', '正文\n\n'],
   ['正文\n\n', '正文\n\n'],
-  ['正文\n\n# 归档\n\n- [x] 完成\n', '正文\n\n\n\n# 归档\n\n- [x] 完成\n'],
+  ['正文\n\n# 归档\n\n- [x] 完成\n', '正文\n\n\n# 归档\n\n- [x] 完成\n'],
 ].flatMap(([text, expected]) => (['contentDOM', 'scrollDOM'] as const).map(target => ({ text, expected, target }))))('从底部空白按下创建或复用空段落后继续向前拖选：%j', ({ text, expected, target }) => {
   editor(text);
   vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
@@ -64,7 +64,7 @@ it.each([
 
 it.each([
   ['- [ ] 任务', '- [ ] 任务\n\n'],
-  ['- [ ] 任务\n\n# 归档\n\n- [x] 完成\n', '- [ ] 任务\n\n\n\n# 归档\n\n- [x] 完成\n'],
+  ['- [ ] 任务\n\n# 归档\n\n- [x] 完成\n', '- [ ] 任务\n\n\n# 归档\n\n- [x] 完成\n'],
 ])('点击可见列表下方创建带分隔的空段落：%j', (text, expected) => {
   editor(text);
   vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
@@ -72,12 +72,63 @@ it.each([
   const click = () => instance.view.contentDOM.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
   click();
   expect(instance.text).toBe(expected);
-  expect(instance.state.selection.main.head).toBe('- [ ] 任务\n\n'.length);
+  expect(instance.state.selection.main.head).toBe(expected.includes('# 归档') ? expected.indexOf('# 归档') - 1 : expected.length);
   click();
   expect(instance.text).toBe(expected);
   instance.view.dispatch(instance.state.replaceSelection('正文'));
-  expect(instance.text).toBe(expected.replace('- [ ] 任务\n\n', '- [ ] 任务\n\n正文'));
+  // 空段落输入正文后，布局整理会保留活动正文与归档标题之间的分隔空行。
+  expect(instance.text).toBe(expected.replace('- [ ] 任务\n\n', '- [ ] 任务\n\n正文').replace('\n# 归档', '\n\n# 归档'));
   expect(hiddenContentRanges(instance.state).some(range => instance.state.selection.main.head > range.from && instance.state.selection.main.head < range.to)).toBe(false);
+});
+
+it('点击归档前的无归属空行补出可编辑空段落，光标与输入落在同一行', () => {
+  const text = '- [ ] 任务\n\n11\n\n# 归档\n\n- [x] 完成';
+  editor(text);
+  const lines = instance.view.contentDOM.querySelectorAll('.cm-line');
+  const emptyLine = lines[lines.length - 1];
+  expect(emptyLine.textContent?.trim()).toBeFalsy();
+  expect(emptyLine.getAttribute('data-empty-paragraph-from')).toBeNull();
+  emptyLine.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  // 边界空行没有段落归属，点击后必须补出真实的空段落，光标才能画在输入将要落下的位置。
+  const paragraph = paragraphLayout(instance.state).paragraphs.find(entry => entry.from === instance.state.selection.main.head);
+  expect(paragraph?.kind).toBe('empty');
+  expect(instance.state.selection.main.head).toBeLessThan(instance.text.indexOf('# 归档'));
+  instance.view.dispatch(instance.state.replaceSelection('Z'));
+  expect(instance.text.indexOf('Z')).toBeLessThan(instance.text.indexOf('# 归档'));
+  expect(instance.view.contentDOM.textContent).toContain('Z');
+  expect(instance.view.contentDOM.textContent).not.toContain('完成');
+});
+
+it('点击末尾边界行与更下方留白得到相同结果', () => {
+  const text = '- [ ] 任务\n\n11\n\n# 归档\n\n- [x] 完成';
+  const read = () => ({ text: instance.text, head: instance.state.selection.main.head });
+  editor(text);
+  vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
+  instance.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
+  const lines = instance.view.contentDOM.querySelectorAll('.cm-line');
+  lines[lines.length - 1].dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  const viaLine = read();
+
+  editor(text);
+  vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
+  instance.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
+  instance.view.contentDOM.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  const viaPadding = read();
+
+  expect(viaLine).toEqual(viaPadding);
+  // 已经补出空段落后，再次点击更下方只复用同一行。
+  const stable = instance.text;
+  instance.view.contentDOM.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  expect(instance.text).toBe(stable);
+});
+
+it('最后一行已是空行时点击下方不新增额外空行', () => {
+  const text = '- [ ] 任务\n\n\n# 归档\n\n- [x] 完成';
+  editor(text);
+  vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
+  instance.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
+  for (let count = 0; count < 3; count++) instance.view.contentDOM.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  expect(instance.text).toBe(text);
 });
 
 it('底部新增空段落不改写前面紧凑任务间距', () => {

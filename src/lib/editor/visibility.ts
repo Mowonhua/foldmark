@@ -153,6 +153,13 @@ export function visibleSelection(state: EditorState): EditorSelection | null {
       if (range.from === 0 && position < range.to) return range.to;
       if (range.to === state.doc.length && position > range.from) return visibleBoundary(state, range, -1);
     }
+    // 整行隐藏区间的行首与文件末尾边界不是可输入位置：行首写入会落进首条隐藏行，
+    // 文末终点写入会追加到隐藏正文末尾，两者在预览中都不可见。
+    // 折叠区间起点位于可见行内部，仍保持原位置。
+    if (range && state.facet(modeFacet) !== 'source' && range.kind !== 'fold'
+      && (position === range.from || (position === range.to && range.to === state.doc.length))) {
+      return visibleBoundary(state, range, -1);
+    }
     return range && position > range.from && position < range.to ? visibleBoundary(state,range,direction) : position;
   };
   const selection = EditorSelection.create(state.selection.ranges.map(range => {

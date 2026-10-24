@@ -80,6 +80,24 @@ describe('隐藏正文的导航与删除', () => {
     instance.view.dispatch({ changes: { from: cursor, insert: '继续输入' } });
     expect(instance.text).toBe('末尾继续输入\n\n# 归档\n');
   });
+  it.each([
+    ['隐藏区间起点', (text: string) => text.indexOf('# 归档')],
+    ['文末终点', (text: string) => text.length],
+  ])('末尾隐藏归档的行边界不接收输入：%s', (_name, boundary) => {
+    const source = '- [ ] 任务\n\n\n# 归档\n\n- [x] 完成项';
+    const instance = editor(source);
+    const archiveFrom = source.indexOf('# 归档');
+    instance.view.dispatch({ selection: { anchor: boundary(source) } });
+    // 边界收敛到归档前最后一个可见行末尾，输入落在可见正文而不是隐藏章节。
+    expect(instance.state.selection.main.head).toBe(archiveFrom - 1);
+    instance.view.dispatch(instance.state.replaceSelection('新'));
+    // 布局整理可能在活动正文与归档之间补足空行，但输入必须留在可见侧且归档原样保留。
+    expect(instance.text.indexOf('新')).toBeLessThan(instance.text.indexOf('# 归档'));
+    expect(instance.text.slice(instance.text.indexOf('# 归档'))).toBe('# 归档\n\n- [x] 完成项');
+    expect(instance.view.contentDOM.textContent).toContain('新');
+    expect(instance.view.contentDOM.textContent).not.toContain('完成项');
+  });
+
   it('折叠后左右箭头跳过整段隐藏正文，不进入后代', () => {
     const instance = editor('- [ ] 父任务\n  长正文\n  - [ ] 子任务\n- [ ] 下一项');
     const parent = instance.model.items[0];
