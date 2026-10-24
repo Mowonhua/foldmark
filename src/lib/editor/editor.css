@@ -1,6 +1,7 @@
 .cm-editor { height: 100%; color: var(--text); font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); font-size: var(--editor-font-size, 16px); background: transparent; }
 .cm-editor.cm-focused { outline: none; }
-.cm-editor .cm-scroller { overflow: auto; font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); line-height: 1.8; }
+/* 始终预留滚动条槽位：文档长短变化时正文宽度与居中位置保持不动，避免出现滚动条时整页横向跳动。 */
+.cm-editor .cm-scroller { overflow: auto; scrollbar-gutter: stable; font-family: var(--editor-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); line-height: 1.8; }
 .cm-editor .cm-content { width: min(100%, var(--editor-width, 820px)); max-width: var(--editor-width, 820px); margin: 0 auto; padding: 36px 38px 160px; box-sizing: border-box; flex-shrink: 1; caret-color: var(--accent); }
 .cm-line { padding: 0 2px; }
 .cm-cursor { border-left-color: var(--accent); }
