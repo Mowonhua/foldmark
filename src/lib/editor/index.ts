@@ -28,6 +28,7 @@ import { bracketCompletion, compositionBracketCompletion, matchingBrackets, pair
 import { clipboard } from '../clipboard';
 import { EditorContextMenu } from './context-menu';
 import { previewWindowField, previewWindowPlugin, setPreviewWindow } from './viewport';
+import { revealViewport } from './reveal';
 import { CanvasEditor, canvasEditing, moveCanvasBlock } from './canvas';
 import type { DragKind, EditorOptions, ProjectView, ViewMode } from './types';
 import 'katex/dist/katex.min.css';
@@ -146,7 +147,7 @@ export class EditorController {
       this.headingAdd.of(headingAddFacet.of(this.headingAddEnabled)),
       resourcesFacet.of(this.options),
       actionsFacet.of({ toggleTask: (from, group) => this.toggleTask(from, group), toggleFold: from => this.toggleFold(from), toggleCompletedGroup: from => this.toggleCompletedGroup(from), moveItem: (from, direction) => this.moveItem(from, direction), moveTo: (from, boundary) => this.moveTo(from, boundary), moveDrag: (kind, from, boundary) => this.moveDrag(kind, from, boundary), focusAt: from => this.focusAt(from), placeCaret: from => this.placeCaret(from), insertTaskAt: position => this.insertTaskAt(position), openCanvas: from => { this.canvasEditor.open(from); } }),
-      documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, contentVisibility, previewField, previewComposition, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
+      documentField, canvasEditing, foldsField, expandedCompletedGroupsField, foldHistory, softBreaksField, softBreakHistory, draftFencedBlocksField, draftFencedBlockHistory, sourceScopeExtension, sourceReturnField, sourcePositionHistory, previewWindowField, revealViewport, contentVisibility, previewField, previewComposition, previewWindowPlugin, headingAddHover, markerGestures, foldMotion, syncArrivalExtension,
       keymap.of([...taskKeymap, ...closeBracketsKeymap, ...markdownKeymap, ...historyKeymap, ...defaultKeymap]),
       EditorView.lineWrapping,
       this.language.of(this.languageExtensions()),
@@ -335,7 +336,10 @@ export class EditorController {
     this.view.dispatch({ selection: { anchor: Math.max(0, Math.min(ui.cursor, this.state.doc.length)) }, effects: [this.mode.reconfigure(this.modeExtensions(ui.mode, ui.sourceView ?? (ui.mode === 'archive' ? 'archive' : 'todo'))), setFolds.of(folded), setExpandedCompletedGroups.of(expandedGroups), setSourceReturn.of(ui.mode === 'source' ? sourceReturn : null)], annotations: Transaction.addToHistory.of(false) });
     if (restoreScroll) this.view.scrollDOM.scrollTop = ui.scrollTop;
   }
-  /** 搜索、大纲等外部跳转：展开目标并居中滚动，保证定位后能立即看到上下文。 */
+  /**
+   * 搜索、大纲及空内容点击的唯一居中定位入口：展开目标后从当前视口平滑滚动到居中位置。
+   * 其他正文内点击使用 placeCaret，避免可见控件再次推动页面。
+   */
   focusAt(pos: number): void {
     this.positionGeneration++;
     const anchor = Math.max(0, Math.min(pos, this.state.doc.length));

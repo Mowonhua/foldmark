@@ -55,7 +55,7 @@ export interface EditorActions {
   moveTo: (from: number, boundary: number | null) => void;
   /** 提交拖动落点；boundary 使用当前源文偏移，null 表示可见内容末尾，事务由拖动类型决定。 */
   moveDrag: (kind: DragKind, from: number, boundary: number | null) => void;
-  /** 外部导航定位：展开折叠目标并居中滚动。 */
+  /** 外部导航定位：展开折叠目标并平滑居中滚动。 */
   focusAt: (from: number) => void;
   /** 点击已可见的预览控件时只放置光标，不滚动、不改变折叠或渲染窗口。 */
   placeCaret: (from: number) => void;

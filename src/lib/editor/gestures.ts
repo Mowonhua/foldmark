@@ -186,7 +186,8 @@ class MarkerGestures {
         const previous = layout.paragraphs[index - 1];
         if (previous && paragraph.from === previous.to + 1) {
           const raw = this.view.state.doc.sliceString(paragraph.from, paragraph.to);
-          this.view.dispatch(replaceParagraphs(this.view.state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input'));
+          // 分隔补齐由随后的 focusAt 统一居中；事务不能先行触发另一笔滚动。
+          this.view.dispatch({ ...replaceParagraphs(this.view.state, index, index, [raw], paragraph.contentFrom - paragraph.from, 'input'), scrollIntoView: false });
           this.prepareParagraphSelection(event, this.view.state.selection.main.head);
           return;
         }
@@ -248,12 +249,14 @@ class MarkerGestures {
         // 隐藏块收尾时只补出构成“分隔空行 + 可编辑空段落”所需的最少换行。
         const blank = state.doc.sliceString(paragraph.to, boundary.from).replace(/[^\n]/g, '').length;
         const insert = Math.max(1, 3 - blank);
-        spec = { changes: { from: boundary.from, insert: '\n'.repeat(insert) }, selection: { anchor: boundary.from + insert - 1 }, userEvent: 'input', scrollIntoView: true };
+        spec = { changes: { from: boundary.from, insert: '\n'.repeat(insert) }, selection: { anchor: boundary.from + insert - 1 }, userEvent: 'input' };
       } else {
         // 新建采用空范围插入，仅维护末段之后的分隔，保留前面紧凑列表的原始间距。
         spec = replaceParagraphs(state, index + 1, index, [''], 0, 'input');
       }
     }
+    // 点击路径在末尾统一走 focusAt 居中滚动，这里不再叠加最近的即时滚动。
+    spec = { ...spec, scrollIntoView: false };
     // 序列化只允许维护可见边界，不能借底部点击改写归档或把光标放入隐藏内容。
     const planned = state.update({ ...spec, filter: false });
     let touchesHidden = false;

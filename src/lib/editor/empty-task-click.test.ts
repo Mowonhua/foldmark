@@ -1,5 +1,6 @@
 /** 文件职责：验证空任务正文定位和末尾空段落的分隔补齐，不接管任务控件手势。 */
 import { afterEach, expect, it, vi } from 'vitest';
+import type { TransactionSpec } from '@codemirror/state';
 import { EditorController } from './index';
 import { paragraphLayout } from './paragraphs';
 import { hiddenContentRanges } from './visibility';
@@ -245,4 +246,37 @@ it('有正文的任务不接管原生文字定位', () => {
   const event = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 300 });
   instance.view.contentDOM.querySelector('.cm-line')!.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);
+});
+
+/** 点击路径可能先补齐正文，再调用 focusAt；两者都请求滚动会让视口先跳一次再动画。 */
+function scrollRequests(dispatch: ReturnType<typeof vi.spyOn>): { nearest: number; centers: number } {
+  const calls = dispatch.mock.calls.map(([spec]) => spec as TransactionSpec);
+  return {
+    nearest: calls.filter(spec => spec.scrollIntoView === true).length,
+    centers: calls.flatMap(spec => spec.effects ? Array.isArray(spec.effects) ? spec.effects : [spec.effects] : [])
+      .filter(effect => (effect.value as { y?: string } | null)?.y === 'center').length,
+  };
+}
+
+it('点击空任务只发起一次居中导航滚动', () => {
+  const text = '- [ ] \n\n- [ ] 后'; editor(text);
+  const item = instance.model.tasks[0];
+  const marker = instance.view.dom.querySelector<HTMLElement>(`[data-list-marker="${item.from}"]`)!;
+  marker.getBoundingClientRect = () => new DOMRect(10, 10, 17, 20);
+  instance.focusAt(text.length);
+  const dispatch = vi.spyOn(instance.view, 'dispatch');
+  marker.closest('.cm-line')!.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 300, clientY: 20, bubbles: true, cancelable: true }));
+  expect(scrollRequests(dispatch)).toEqual({ nearest: 0, centers: 1 });
+  expect(instance.state.selection.main.head).toBe(item.contentFrom);
+  expect(instance.text).toBe(text);
+});
+
+it('点击底部留白补齐段落时只发起一次居中导航滚动', () => {
+  editor('- [ ] 任务\n\n# 归档\n\n- [x] 完成\n');
+  vi.spyOn(instance.view, 'coordsAtPos').mockReturnValue({ left: 10, right: 10, top: 30, bottom: 50 });
+  instance.view.contentDOM.getBoundingClientRect = () => new DOMRect(10, 0, 400, 300);
+  const dispatch = vi.spyOn(instance.view, 'dispatch');
+  instance.view.contentDOM.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 100, clientY: 150, bubbles: true, cancelable: true }));
+  expect(dispatch.mock.calls.some(([spec]) => !!(spec as TransactionSpec).changes)).toBe(true);
+  expect(scrollRequests(dispatch)).toEqual({ nearest: 0, centers: 1 });
 });
